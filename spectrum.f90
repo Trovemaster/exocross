@@ -10,8 +10,9 @@ module spectrum
   !
   integer(ik),parameter   :: nfiles_max =1000, max_items = 1000
   !
-  integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=3
+  integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=3,ioffset = 10
   real(rk)      :: temp=298.0,partfunc=0,freql=-small_,freqr= 20000.0,thresh=1.0d-90,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
+  real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44
   real(rk)      :: enermax = 1e6
   !
   character(len=cl) :: specttype,enrfilename,intfilename(nfiles_max),proftype="DOPPL",output="output"
@@ -32,6 +33,8 @@ module spectrum
   subroutine ReadInput
     !
     use  input
+    !
+    implicit none
     !
     logical :: eof
     character(len=cl) :: w,v
@@ -93,7 +96,7 @@ module spectrum
           !
           if (mod(npoints,2)==0) npoints = npoints + 1
           !
-        case ("ABSORPTION","EMISSION")
+        case ("ABSORPTION","EMISSION","LIFETIME")
           !
           specttype = trim(w)
           !
@@ -257,18 +260,32 @@ module spectrum
           !
           call readf(enermax)
           !
-       case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0','LOREN','LORENTZIAN','LORENTZ','MAX')
+       case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0','LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','HITRAN')
           !
           proftype = trim(w)
+          !
+          if (trim(w(1:5))=="LOREN") ioffset = 500
+          if (trim(w(1:5))=="VOIGT") ioffset = 500
           !
        case ("HWHM","HALFWIDTH")
           !
           call readf(halfwidth)
           !
-       case ("MASSES","MASS")
+       case ("IOFFSET")
           !
-          call readf(m1)
-          call readf(m2)
+          call readi(ioffset)
+          !
+       case ("MASS")
+          !
+          call readf(meanmass)
+          !
+       case ("VOIGT_GAMMA")
+          !
+          call readf(voigt_gamma)
+          !
+       case ("VOIGT_N")
+          !
+          call readf(voigt_N)
           !
       case default
         !
@@ -287,13 +304,13 @@ module spectrum
    use  input
    !
    integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,j,ilog,ib,ie,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,kitem,l
-   real(rk)    :: beta,ln2,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2
+   real(rk)    :: beta,ln2,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,alpha
    character(len=cl) :: ioname
    character(wl) :: string_tmp
    !
-   real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:)
-   integer(ik),allocatable :: gtot(:),indecies(:)
+   real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:)
+   integer(ik),allocatable :: gtot(:),indices(:)
    character(len=20),allocatable :: quantum_numbers(:,:)
    !
    character(len=9) :: npoints_fmt  !text variable containing formats for reads/writes
@@ -365,16 +382,28 @@ module spectrum
    !
    if (verbose>=3) print*,"nlevel =",nlevels
    !
-   allocate(energies(iline),Jrot(iline),gtot(iline),indecies(nlevels),stat=info)
+   allocate(energies(iline),Jrot(iline),gtot(iline),indices(nlevels),stat=info)
    call ArrayStart('energies',info,size(energies),kind(energies))
    call ArrayStart('Jrot',info,size(Jrot),kind(Jrot))
    call ArrayStart('gtot',info,size(gtot),kind(gtot))
    !
+   if (trim(specttype)=='LIFETIME') THEN 
+     !
+     ! allocate the matrix for the sum of the A-coeffs 
+     !
+     allocate(Asum(iline),stat=info)
+     call ArrayStart('Asum',info,size(Asum),kind(Asum))
+     !
+     Asum = -1.0_rk
+     !
+     write(my_fmt,'(a,a4,a,a4,a)')  '(1x,i11,1x,f12.4,1x,f5.1,1x,es16.8,5x)'
+     !
+   endif
    !
    allocate(quantum_numbers(maxitems,iline),stat=info)
    quantum_numbers = ""
    !
-   indecies = 0
+   indices = 0
    !
    energies = 0
    Jrot = 0
@@ -432,7 +461,7 @@ module spectrum
         !
       endif 
       !
-      indecies(itemp) = i
+      indices(itemp) = i
       !
       j = 2*int(jrot(i))+1
       energy = energies(i)
@@ -524,7 +553,7 @@ module spectrum
    !
    select case (trim(proftype(1:5)))
        !
-   case ('GAUSS','DOPPL','LOREN','GAUS0','DOPP0')
+   case ('GAUSS','DOPPL','LOREN','GAUS0','DOPP0','VOIGT')
        !
        if (verbose>=2) then
           !
@@ -585,8 +614,8 @@ module spectrum
            !
            if (indexf>nlevels.or.indexi>nlevels) cycle
            !
-           ilevelf = indecies(indexf)
-           ileveli = indecies(indexi)
+           ilevelf = indices(indexf)
+           ileveli = indices(indexi)
            !
            if (ilevelf==0.or.ileveli==0) cycle
            !
@@ -628,6 +657,16 @@ module spectrum
              !
              abscoef=emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-beta*energyf)*tranfreq/(partfunc)
              !
+            case ('LIFETIME')
+             !
+             if (Asum(ilevelf)<0) Asum(ilevelf) = 0 
+             !
+             Asum(ilevelf) = Asum(ilevelf) + acoef
+             !
+             !print*,ilevelf,indexf,indexi,acoef
+             !
+             cycle 
+             !
            end select
            !
         endif
@@ -637,8 +676,13 @@ module spectrum
           halfwidth=dpwcoef*tranfreq
         endif 
         !
+        !   half width for Doppler profiling
+        if (proftype(1:5)=='VOIGT') then
+          halfwidth0=dpwcoef*tranfreq
+        endif 
+        !
         !   if transition frequency is out of selected range
-        if (tranfreq>freqr+500.0*halfwidth.or.tranfreq<freql-500.0*halfwidth) cycle
+        if (tranfreq>freqr+ioffset*halfwidth.or.tranfreq<freql-ioffset*halfwidth) cycle
         !
         x0 = sqrt(ln2)/halfwidth*dfreq*0.5_rk
         !
@@ -692,8 +736,8 @@ module spectrum
            cycle
         end if
         !
-        ib =  max(nint( ( tranfreq-halfwidth*10.0-freql)/dfreq )+1,1)
-        ie =  min(nint( ( tranfreq+halfwidth*10.0-freql)/dfreq )+1,npoints)
+        ib =  max(nint( ( tranfreq-halfwidth*ioffset-freql)/dfreq )+1,1)
+        ie =  min(nint( ( tranfreq+halfwidth*ioffset-freql)/dfreq )+1,npoints)
         !
         select case (trim(proftype(1:5)))
             !
@@ -734,8 +778,8 @@ module spectrum
             !
         case ('LOREN')
             !
-            ib =  max(nint( ( tranfreq-halfwidth*500.0-freql)/dfreq )+1,1)
-            ie =  min(nint( ( tranfreq+halfwidth*500.0-freql)/dfreq )+1,npoints)
+            ib =  max(nint( ( tranfreq-halfwidth*ioffset-freql)/dfreq )+1,1)
+            ie =  min(nint( ( tranfreq+halfwidth*ioffset-freql)/dfreq )+1,npoints)
             !
             !abscoef=abscoef*sqrt(ln2/pi)/halfwidth
             !
@@ -757,6 +801,20 @@ module spectrum
             enddo
             !$omp end parallel do 
             !
+        case ('VOIGT')
+            !
+            ib =  max(nint( ( tranfreq-halfwidth*ioffset-freql)/dfreq )+1,1)
+            ie =  min(nint( ( tranfreq+halfwidth*ioffset-freql)/dfreq )+1,npoints)
+            !
+            !$omp parallel do private(ipoint,tranfreq_i) shared(intens) schedule(dynamic)
+            do ipoint=ib,ie
+               !
+               tranfreq_i = freq(ipoint)
+               !
+               intens(ipoint)=intens(ipoint)+voigt_humlicek(tranfreq_i,tranfreq,halfwidth,halfwidth0)*abscoef
+               !
+            enddo
+            !$omp end parallel do             !
         case ('MAX');
           !
           ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
@@ -791,7 +849,36 @@ module spectrum
    !
    call IOstop(trim(ioname))
    !
-   if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR'/)) ) then 
+   if (trim(specttype)=='LIFETIME') THEN 
+     !
+     write(ioname, '(a)') 'Life times'
+     call IOstart(trim(ioname),tunit)
+     !
+     open(unit=tunit,file=trim(output)//".life",action='write',status='replace')
+     !
+     do ilevelf = 1,iline
+       !
+       ! write to .life-file
+       !
+       write(tunit,my_fmt,advance="no") indices(ilevelf),energies(ilevelf),jrot(ilevelf),1.0_rk/Asum(ilevelf) 
+       !
+       do kitem = 1,maxitems 
+         !
+         l = len(trim(quantum_numbers(kitem,ilevelf)))
+         !
+         b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
+         !
+         write(tunit,b_fmt,advance="no"), trim(quantum_numbers(kitem,ilevelf))
+         !
+       enddo
+       !
+       write(tunit,"(a1)",advance="yes") " "
+       !
+     enddo
+     !
+     close(tunit,status='keep')   
+     !
+   elseif (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI'/)) ) then 
      !
      write(ioname, '(a)') 'Cross sections or intensities'
      call IOstart(trim(ioname),tunit)
@@ -842,7 +929,78 @@ module spectrum
    !
   end subroutine intensity
   !
-end module spectrum
+
+  function voigt_humlicek(nu,nu0,alpha,gamma) result(f)
+   !
+   real(rk),intent(in) :: nu,nu0,alpha,gamma
+   real(rk) :: f,sigma,x,y
+
+   real(rk),parameter ::  RT2LN2 = 1.1774100225154747_rk     ! sqrt(2ln2)
+   real(rk),parameter ::  RTPI   = 1.7724538509055159_rk     ! sqrt(pi)
+   real(rk),parameter ::  RT2PI  = 2.5066282746310002_rk     ! sqrt(2pi)
+   real(rk),parameter ::  RT2    = 1.4142135623730951_rk     ! sqrt(pi)
+   !
+   sigma = alpha / RT2LN2
+   x = (nu0 - nu) / sigma / RT2
+   y = gamma / sigma / RT2
+   !
+   f = humlic(x, y) / sigma / RT2PI
+   !
+  end function voigt_humlicek
+  !
+  function humlic(x,y) result (f)
+    real(rk),intent(in) :: x,y
+    real(rk) :: f 
+    complex(rk) :: t,humlic1,u
+    real(rk) :: s
+    !
+    T = cmplx(y,-x)
+    S = abs(x) + y
+    !
+    if (S >= 15) then
+        ! Region I
+        humlic1 = T*0.5641896_rk/(0.5_rk+T*T)
+        !fprintf(stdout, "I") 
+        !
+        f = real(humlic1,rk)
+        return
+    endif
+    ! 
+    if (S >= 5.5) then 
+        ! Region II
+        U = T * T;
+        humlic1 = T * (1.410474_rk + U*0.5641896_rk)/(0.75_rk + U*(3.0_rk+U))
+        !
+        !fprintf(stdout, "II");
+        !
+        f = real(humlic1,rk)
+        return
+        !
+    endif
+    !
+    if (y >= 0.195_rk * abs(x) - 0.176_rk) then
+        ! Region III
+        humlic1 = (16.4955_rk+T*(20.20933_rk+T*(11.96482_rk &
+                +T*(3.778987_rk+T*.5642236_rk)))) / (16.4955_rk+T*(38.82363_rk &
+                +T*(39.27121_rk+T*(21.69274_rk+T*(6.699398_rk+T)))))
+        !fprintf(stdout, "III");
+        f = real(humlic1,rk)
+        return
+        !
+    endif
+    !
+    ! Region IV
+    U = T * T
+    humlic1 = exp(U)-T*(36183.31_rk-U*(3321.9905_rk-U*(1540.787_rk-U*(219.0313_rk-U* &
+       (35.76683_rk-U*(1.320522_rk-U*.56419_rk))))))/(32066.6_rk-U*(24322.84_rk-U* &
+       (9022.228_rk-U*(2186.181_rk-U*(364.2191_rk-U*(61.57037_rk-U*(1.841439_rk-U)))))))
+    !fprintf(stdout, "IV");
+    !
+    f = real(humlic1,rk)
+    !
+    end function humlic
+    !
+  end module spectrum
 
 
 
