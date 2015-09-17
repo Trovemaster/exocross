@@ -25,7 +25,7 @@ module spectrum
   !
   type(selectT) :: upper,lower
   !
-  logical :: partfunc_do = .true., filter = .false.
+  logical :: partfunc_do = .true., filter = .false., histogram = .false.
   !
   contains
   !
@@ -148,6 +148,10 @@ module spectrum
              !
           endif
           !
+        case ("HISTOGRAM")
+          !
+          histogram = .true.
+          !
         case ("SELECT","FILTER")
           !
           filter  = .true.
@@ -253,7 +257,7 @@ module spectrum
           !
           call readf(enermax)
           !
-       case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK')
+       case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0','LOREN','LORENTZIAN','LORENTZ','MAX')
           !
           proftype = trim(w)
           !
@@ -274,7 +278,7 @@ module spectrum
       !
     enddo
     !
-    write(out,"('...done!'/)")
+    !write(out,"('...done!'/)")
     !
   end subroutine ReadInput
   !
@@ -283,7 +287,7 @@ module spectrum
    use  input
    !
    integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,j,ilog,ib,ie,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,kitem,l
-   real(rk)    :: beta,ln2,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq0,tranfreq,abscoef,dfreq_,xp,xm,de,lor,b,lor2
+   real(rk)    :: beta,ln2,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,alpha
    character(len=cl) :: ioname
    character(wl) :: string_tmp
@@ -348,6 +352,8 @@ module spectrum
       !
       !10  exit
    end do
+   !
+   if (verbose>=3) write(out,"('Max number of energy records = ',i9)") maxitems
    !
    open(unit=enunit,file=trim(enrfilename),action='read',status='old')
    !
@@ -418,7 +424,8 @@ module spectrum
         !
         if (lower%i<1.or.lower%i>nitems-4.or.upper%i<1.or.upper%i>nitems-4) then
           !
-          write(out,"('wrong filter indices, upper or lower: ',2i)") upper%i,lower%i
+          write(out,"('wrong filter indices, upper or lower: ',2i)") upper%i+4,lower%i+4
+          print*,quantum_numbers(:,i)
           stop 'wrong filter indices, upper or lower'
           !
         endif
@@ -517,7 +524,7 @@ module spectrum
    !
    select case (trim(proftype(1:5)))
        !
-   case ('GAUSS','DOPPL','LOREN')
+   case ('GAUSS','DOPPL','LOREN','GAUS0','DOPP0')
        !
        if (verbose>=2) then
           !
@@ -563,39 +570,67 @@ module spectrum
      !
      open(unit=tunit,file=trim(intfilename(i)),action='read',status='old')
      do
-        !   read new line from intensities file
         !
-        !read(tunit,*,end=20) ilevelf,ileveli,acoef
-        !
-        read(tunit,*,end=20) indexf,indexi,acoef
-        !
-        if (indexf>nlevels.or.indexi>nlevels) cycle
-        !
-        ilevelf = indecies(indexf)
-        ileveli = indecies(indexi)
-        !
-        if (ilevelf==0.or.ileveli==0) cycle
-        !
-        energyf = energies(ilevelf)
-        energyi = energies(ileveli)
-        !
-        if (energyf-energyi<0) then 
-          write(6,"(4i12,2x,3es16.8)"),ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
-          stop 'wrong order of indices'
-        endif 
-        !
-        if (filter) then
-          !
-          if (upper%mask/=trim(quantum_numbers(upper%i,ilevelf)).or.lower%mask/=trim(quantum_numbers(lower%i,ileveli))) cycle
-          !
+        if (histogram) then 
+           !
+           ! using pre-computed integrated intensities for a given T and bin
+           !
+           read(tunit,*,end=20) tranfreq,abscoef
+           !
+        else
+           !
+           !   read new line from intensities file
+           !
+           read(tunit,*,end=20) indexf,indexi,acoef
+           !
+           if (indexf>nlevels.or.indexi>nlevels) cycle
+           !
+           ilevelf = indecies(indexf)
+           ileveli = indecies(indexi)
+           !
+           if (ilevelf==0.or.ileveli==0) cycle
+           !
+           energyf = energies(ilevelf)
+           energyi = energies(ileveli)
+           !
+           if (energyf-energyi<-1e-3) then 
+             write(out,"(4i12,2x,3es16.8)"),ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
+             stop 'wrong order of indices'
+           endif 
+           !
+           if (filter) then
+             !
+             if (upper%mask/=trim(quantum_numbers(upper%i,ilevelf)).or.lower%mask/=trim(quantum_numbers(lower%i,ileveli))) cycle
+             !
+           endif
+           !
+           jf = jrot(ilevelf)
+           ji = jrot(ileveli)
+           !
+           tranfreq = energyf-energyi
+           !
+           if (tranfreq<small_) cycle
+           !
+           select case (trim(specttype))
+             !
+           case default
+             !
+             print('(a,2x,a)'),'Illegal key:',trim(specttype)
+             stop 'Illegal specttype-key'
+             !
+           case ('ABSORPTION')
+             !
+             abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+             !
+           case ('emission','EMISSION','EMISS','emiss')
+             !
+             ! emission coefficient [Ergs/mol/Sr]
+             !
+             abscoef=emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-beta*energyf)*tranfreq/(partfunc)
+             !
+           end select
+           !
         endif
-        !
-        jf = jrot(ilevelf)
-        ji = jrot(ileveli)
-        !
-        tranfreq = energyf-energyi
-        !
-        tranfreq0 = tranfreq
         !
         !   half width for Doppler profiling
         if (proftype(1:5)=='DOPPL') then
@@ -603,30 +638,9 @@ module spectrum
         endif 
         !
         !   if transition frequency is out of selected range
-        if (tranfreq0>freqr+10.0*halfwidth.or.tranfreq0<freql-10.0*halfwidth) cycle
+        if (tranfreq>freqr+500.0*halfwidth.or.tranfreq<freql-500.0*halfwidth) cycle
         !
         x0 = sqrt(ln2)/halfwidth*dfreq*0.5_rk
-        !
-        if (tranfreq0<small_) cycle
-        !
-        select case (trim(specttype))
-          !
-        case default
-          !
-          print('(a,2x,a)'),'Illegal key:',trim(specttype)
-          stop 'Illegal specttype-key'
-          !
-        case ('ABSORPTION')
-          !
-          abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
-          !
-        case ('emission','EMISSION','EMISS','emiss')
-          !
-          ! emission coefficient [Ergs/mol/Sr]
-          !
-          abscoef=emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-beta*energyf)*tranfreq/(partfunc)
-          !
-        end select
         !
         intband = intband + abscoef
         !
@@ -678,33 +692,35 @@ module spectrum
            cycle
         end if
         !
-        ib =  max(nint( ( tranfreq0-halfwidth*10.0-freql)/dfreq )+1,1)
-        ie =  min(nint( ( tranfreq0+halfwidth*10.0-freql)/dfreq )+1,npoints)
+        ib =  max(nint( ( tranfreq-halfwidth*10.0-freql)/dfreq )+1,1)
+        ie =  min(nint( ( tranfreq+halfwidth*10.0-freql)/dfreq )+1,npoints)
         !
         select case (trim(proftype(1:5)))
             !
-        case ('GAUSS0','DOPPL0')
+        case ('GAUS0','DOPP0')
             !
             alpha = -ln2/halfwidth**2
+            !
+            abscoef=abscoef*sqrt(ln2/pi)/halfwidth
             !
             !$omp parallel do private(ipoint,dfreq_,de) shared(intens) schedule(dynamic)
             do ipoint=ib,ie
                !
-               dfreq_=freq(ipoint)-tranfreq0
+               dfreq_=freq(ipoint)-tranfreq
                !
-               de = exp(-alpha*dfreq_)
+               de = exp(alpha*dfreq_**2)
                !
                intens(ipoint)=intens(ipoint)+abscoef*de
                !
             enddo
-            !$omp end parallel do 
+            !$omp end parallel do
             !
         case ('GAUSS','DOPPL')
             !
             !$omp parallel do private(ipoint,dfreq_,xp,xm,de) shared(intens) schedule(dynamic)
             do ipoint=ib,ie
                !
-               dfreq_=freq(ipoint)-tranfreq0
+               dfreq_=freq(ipoint)-tranfreq
                !
                xp = sqrt(ln2)/halfwidth*(dfreq_)+x0
                xm = sqrt(ln2)/halfwidth*(dfreq_)-x0
@@ -718,49 +734,50 @@ module spectrum
             !
         case ('LOREN')
             !
-            ib =  max(nint( ( tranfreq0-halfwidth*200.0-freql)/dfreq )+1,1)
-            ie =  min(nint( ( tranfreq0+halfwidth*200.0-freql)/dfreq )+1,npoints)
+            ib =  max(nint( ( tranfreq-halfwidth*500.0-freql)/dfreq )+1,1)
+            ie =  min(nint( ( tranfreq+halfwidth*500.0-freql)/dfreq )+1,npoints)
             !
             !abscoef=abscoef*sqrt(ln2/pi)/halfwidth
             !
             lor = halfwidth/dfreq
-            b = 0.25*pi*lor*( 4.0_rk+lor**2**2 )/( 2.0_rk+lor**2 )
+            b = 0.25_rk*pi*lor*( 4.0_rk+lor**2**2 )/( 2.0_rk+lor**2 )
             !
             b = 1.0_rk
             !
             lor = 0.5_rk/pi*halfwidth*abscoef*b
             lor2 = 0.25_rk*halfwidth**2
             !
-            !$omp parallel do private(ipoint,dfreq_,xp,xm,de) shared(intens) schedule(dynamic)
+            !$omp parallel do private(ipoint,dfreq_2) shared(intens) schedule(dynamic)
             do ipoint=ib,ie
                !
-               dfreq_=freq(ipoint)-tranfreq0
+               dfreq_2=(freq(ipoint)-tranfreq)**2+lor2
                !
-               intens(ipoint)=intens(ipoint)+lor/( dfreq_**2+ lor2 )
+               intens(ipoint)=intens(ipoint)+lor/dfreq_2
                !
             enddo
             !$omp end parallel do 
             !
+        case ('MAX');
+          !
+          ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
+          !
+          intens(ipoint)=max(intens(ipoint),abscoef)
+          !
         case ('RECT','BOX');
           !
-          !$omp parallel do private(ipoint,dfreq_) shared(intens) schedule(dynamic)
+          !$omp parallel do private(ipoint) shared(intens) schedule(dynamic)
           do ipoint=ib,ie
-             dfreq_=freq(ipoint)-tranfreq0
-             !if (abs(dfreq_)>halfwidth*10.0) cycle
-             intens(ipoint)=max(intens(ipoint),abscoef)
-          enddo
-          !$omp end parallel do
-          !
-        case ('BIN');
-          !
-          !$omp parallel do private(ipoint,dfreq_) shared(intens) schedule(dynamic)
-          do ipoint=ib,ie
-             dfreq_=freq(ipoint)-tranfreq0
              !
              intens(ipoint)=intens(ipoint)+abscoef/dfreq
              !
           enddo
           !$omp end parallel do
+          !
+        case ('BIN');
+          !
+          ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
+          !
+          intens(ipoint)=intens(ipoint)+abscoef
           !
         end select
         !
@@ -774,7 +791,7 @@ module spectrum
    !
    call IOstop(trim(ioname))
    !
-   if (proftype(1:5)=='DOPPL'.or.proftype(1:5)=='GAUSS'.or.proftype(1:4)=='RECT'.or.proftype(1:3)=='BIN'.or.proftype(1:3)=='BOX') then 
+   if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR'/)) ) then 
      !
      write(ioname, '(a)') 'Cross sections or intensities'
      call IOstart(trim(ioname),tunit)
@@ -789,7 +806,7 @@ module spectrum
      !
    else
      !
-     if (verbose>=2) print('("Total intensity = ",es16.8)'), intband
+     if (verbose>=2) print('("Total intensity = ",es16.8,f18.4)'), intband,temp
      !
    endif
    !
