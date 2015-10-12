@@ -12,10 +12,10 @@ module spectrum
   !
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=3,ioffset = 10
   real(rk)      :: temp=298.0,partfunc=0,freql=-small_,freqr= 20000.0,thresh=1.0d-90,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
-  real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44
-  real(rk)      :: enermax = 1e6
+  real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = -25.0
+  real(rk)      :: enermax = 1e6, abscoef_thresh = 1.0d-50
   !
-  character(len=cl) :: specttype,enrfilename,intfilename(nfiles_max),proftype="DOPPL",output="output"
+  character(len=cl) :: specttype="absorption",enrfilename,intfilename(nfiles_max),proftype="DOPPL",output="output"
   character(4) a_fmt
   character(9) b_fmt
   !
@@ -260,12 +260,13 @@ module spectrum
           !
           call readf(enermax)
           !
-       case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0','LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','HITRAN')
+       case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0','LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','HITRAN','PSEUDO')
           !
           proftype = trim(w)
           !
           if (trim(w(1:5))=="LOREN") ioffset = 500
           if (trim(w(1:5))=="VOIGT") ioffset = 500
+          if (trim(w(1:5))=="PSEUDO") ioffset = 500
           !
        case ("HWHM","HALFWIDTH")
           !
@@ -274,6 +275,10 @@ module spectrum
        case ("IOFFSET")
           !
           call readi(ioffset)
+          !
+       case ("OFFSET")
+          !
+          call readf(offset)
           !
        case ("MASS")
           !
@@ -303,9 +308,9 @@ module spectrum
    !
    use  input
    !
-   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,j,ilog,ib,ie,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,kitem,l
+   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,j,ilog,ib,ie,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,kitem,l,nlines
    real(rk)    :: beta,ln2,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0
-   real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,alpha
+   real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,alpha,bnorm,f,eta1,eta2,intens1,intens2
    character(len=cl) :: ioname
    character(wl) :: string_tmp
    !
@@ -355,9 +360,14 @@ module spectrum
       !
       call read_line(eof,enunit) ; if (eof) exit
       !
-      call readi(itemp)
+      if (nitems<4) then 
+        call report ("In .states less than  than 4 columns, mixed up with .trans?"//trim(w),.true.)
+      endif 
       !
-      !read(enunit,*,end=10) itemp
+      call readi(itemp)
+      call readf(energy)
+      !
+      if (energy>enermax) cycle
       !
       iline = iline + 1
       !
@@ -370,6 +380,8 @@ module spectrum
       !10  exit
    end do
    !
+   nlines = iline
+   !
    if (verbose>=3) write(out,"('Max number of energy records = ',i9)") maxitems
    !
    open(unit=enunit,file=trim(enrfilename),action='read',status='old')
@@ -380,27 +392,32 @@ module spectrum
    !
    maxitems = maxitems-4
    !
-   if (verbose>=3) print*,"nlevel =",nlevels
+   if (verbose>=3) print*,"nlevels: (total)",nlevels," (selected)",nlines
    !
-   allocate(energies(iline),Jrot(iline),gtot(iline),indices(nlevels),stat=info)
+   allocate(energies(nlines),Jrot(nlines),gtot(nlines),indices(nlevels),stat=info)
    call ArrayStart('energies',info,size(energies),kind(energies))
    call ArrayStart('Jrot',info,size(Jrot),kind(Jrot))
    call ArrayStart('gtot',info,size(gtot),kind(gtot))
+   call ArrayStart('indices',info,size(indices),kind(indices))
    !
    if (trim(specttype)=='LIFETIME') THEN 
      !
      ! allocate the matrix for the sum of the A-coeffs 
      !
-     allocate(Asum(iline),stat=info)
+     allocate(Asum(nlines),stat=info)
      call ArrayStart('Asum',info,size(Asum),kind(Asum))
      !
      Asum = -1.0_rk
      !
-     write(my_fmt,'(a,a4,a,a4,a)')  '(1x,i11,1x,f12.4,1x,f5.1,1x,es16.8,5x)'
+     write(my_fmt,'(a)')  '(1x,i11,1x,f12.4,1x,f5.1,1x,es16.8,5x)'
      !
    endif
    !
    allocate(quantum_numbers(maxitems,iline),stat=info)
+   call ArrayStart('quantum_numbers',info,size(quantum_numbers),kind(quantum_numbers))
+   !
+   if (verbose>=3) call MemoryReport
+   !
    quantum_numbers = ""
    !
    indices = 0
@@ -439,7 +456,15 @@ module spectrum
       i = i + 1
       !
       call readi(itemp)
-      call readf(energies(i))
+      call readf(energy)
+      !
+      if (energy>enermax) then
+        i = i - 1
+        cycle
+      endif
+      !
+      energies(i) = energy
+      !
       call readi(gtot(i))
       call readf(jrot(i))
       !
@@ -461,7 +486,7 @@ module spectrum
         !
       endif 
       !
-      indices(itemp) = i
+      indices(i) = itemp
       !
       j = 2*int(jrot(i))+1
       energy = energies(i)
@@ -553,7 +578,7 @@ module spectrum
    !
    select case (trim(proftype(1:5)))
        !
-   case ('GAUSS','DOPPL','LOREN','GAUS0','DOPP0','VOIGT')
+   case ('GAUSS','DOPPL','LOREN','GAUS0','DOPP0','VOIGT','PSEUD')
        !
        if (verbose>=2) then
           !
@@ -622,9 +647,12 @@ module spectrum
            energyf = energies(ilevelf)
            energyi = energies(ileveli)
            !
-           if (energyf-energyi<-1e-3) then 
+           if (energyf-energyi<-1e1) then 
              write(out,"(4i12,2x,3es16.8)"),ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
              stop 'wrong order of indices'
+             cycle
+           elseif (energyf-energyi<-small_) then
+             cycle
            endif 
            !
            if (filter) then
@@ -673,18 +701,25 @@ module spectrum
         !
         !   half width for Doppler profiling
         if (proftype(1:5)=='DOPPL') then
+          !
+          if (tranfreq<small_) cycle
+          !
           halfwidth=dpwcoef*tranfreq
-        endif 
+        endif
+        !
+        if (offset<0) offset = ioffset*halfwidth
+        !
+        x0 = sqrt(ln2)/halfwidth*dfreq*0.5_rk
         !
         !   half width for Doppler profiling
-        if (proftype(1:5)=='VOIGT') then
+        if (proftype(1:5)=='VOIGT'.or.proftype(1:5)=='PSEUD') then
+          if (tranfreq<small_) cycle
           halfwidth0=dpwcoef*tranfreq
+          x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
         endif 
         !
         !   if transition frequency is out of selected range
-        if (tranfreq>freqr+ioffset*halfwidth.or.tranfreq<freql-ioffset*halfwidth) cycle
-        !
-        x0 = sqrt(ln2)/halfwidth*dfreq*0.5_rk
+        if (tranfreq>freqr+offset.or.tranfreq<freql-offset) cycle
         !
         intband = intband + abscoef
         !
@@ -736,8 +771,10 @@ module spectrum
            cycle
         end if
         !
-        ib =  max(nint( ( tranfreq-halfwidth*ioffset-freql)/dfreq )+1,1)
-        ie =  min(nint( ( tranfreq+halfwidth*ioffset-freql)/dfreq )+1,npoints)
+        if (abscoef<abscoef_thresh) cycle
+        !
+        ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
+        ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
         !
         select case (trim(proftype(1:5)))
             !
@@ -778,33 +815,110 @@ module spectrum
             !
         case ('LOREN')
             !
-            ib =  max(nint( ( tranfreq-halfwidth*ioffset-freql)/dfreq )+1,1)
-            ie =  min(nint( ( tranfreq+halfwidth*ioffset-freql)/dfreq )+1,npoints)
+            ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
+            ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
             !
             !abscoef=abscoef*sqrt(ln2/pi)/halfwidth
             !
-            lor = halfwidth/dfreq
-            b = 0.25_rk*pi*lor*( 4.0_rk+lor**2**2 )/( 2.0_rk+lor**2 )
+            !lor = halfwidth/dfreq
+            !b = 0.25_rk*pi*lor*( 4.0_rk+lor**2**2 )/( 2.0_rk+lor**2 )
             !
-            b = 1.0_rk
+            !b = 1.0_rk
             !
-            lor = 0.5_rk/pi*halfwidth*abscoef*b
-            lor2 = 0.25_rk*halfwidth**2
+            !lor = 0.5_rk/pi*halfwidth*abscoef*b
+            !lor2 = 0.25_rk*halfwidth**2
             !
-            !$omp parallel do private(ipoint,dfreq_2) shared(intens) schedule(dynamic)
+            dfreq_=freq(ib)-tranfreq
+            !
+            xm = atan( (freq(ib)-tranfreq)/halfwidth )
+            xp = atan( (freq(ie)-tranfreq)/halfwidth )
+            !
+            b = 1.0_rk/(xp-xm)
+            !
+            !$omp parallel do private(ipoint,dfreq_,xp,xm,de) shared(intens) schedule(dynamic)
             do ipoint=ib,ie
                !
-               dfreq_2=(freq(ipoint)-tranfreq)**2+lor2
+               dfreq_=freq(ipoint)-tranfreq
                !
-               intens(ipoint)=intens(ipoint)+lor/dfreq_2
+               xp = atan((dfreq_+dfreq)/halfwidth)
+               xm = atan(dfreq_/halfwidth)
+               !
+               de = (xp)-(xm)
+               !
+               intens(ipoint)=intens(ipoint)+abscoef*de/dfreq*b
+               !
+               !dfreq_2=(freq(ipoint)-tranfreq)**2+lor2
+               !
+               !intens(ipoint)=intens(ipoint)+lor/dfreq_2
+               !
+            enddo
+            !$omp end parallel do 
+            !
+        case ('PSEUD')
+            !
+            ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
+            ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+            !
+            !abscoef=abscoef*sqrt(ln2/pi)/halfwidth
+            !
+            !
+            dfreq_=freq(ib)-tranfreq
+            !
+            xm = atan( (freq(ib)-tranfreq)/halfwidth )
+            xp = atan( (freq(ie)-tranfreq)/halfwidth )
+            !
+            bnorm = 1.0_rk/(xp-xm)
+            !
+            f = ( halfwidth0**5 + 2.69269_rk*halfwidth0**4*halfwidth+2.42843_rk*halfwidth0**3*halfwidth**2+4.47163_rk*halfwidth0**2*halfwidth**3+0.07842_rk*halfwidth0*halfwidth**4+halfwidth**5)**0.2_rk
+            !
+            eta1 = 1.36603_rk*(halfwidth/f)-0.47719_rk*(halfwidth/f)**2+0.11116_rk*(halfwidth/f)**3
+            !
+            eta2 = 1.0_rk - eta1
+            !
+            !$omp parallel do private(ipoint,dfreq_,xp,xm,de,intens1,intens2) shared(intens) schedule(dynamic)
+            do ipoint=ib,ie
+               !
+               dfreq_=freq(ipoint)-tranfreq
+               !
+               xp = atan((dfreq_+dfreq)/halfwidth)
+               xm = atan(dfreq_/halfwidth)
+               !
+               de = (xp)-(xm)
+               !
+               intens1 = de/dfreq*bnorm
+               !
+               xp = sqrt(ln2)/halfwidth0*(dfreq_)+x0
+               xm = sqrt(ln2)/halfwidth0*(dfreq_)-x0
+               !
+               de = erf(xp)-erf(xm)
+               !
+               intens2 = 0.5_rk/dfreq*de
+               !
+               intens(ipoint)=intens(ipoint)+abscoef*(intens1*eta1+intens2*eta2)
                !
             enddo
             !$omp end parallel do 
             !
         case ('VOIGT')
             !
-            ib =  max(nint( ( tranfreq-halfwidth*ioffset-freql)/dfreq )+1,1)
-            ie =  min(nint( ( tranfreq+halfwidth*ioffset-freql)/dfreq )+1,npoints)
+            ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
+            ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+            !
+            ! bnorm is due to to truncation of the wings, see Sharp and Burrows 2007 
+            !
+            bnorm = 2.0_rk-2.0_rk/pi * atan(2.0_rk*offset/halfwidth)
+            !
+            if (halfwidth<0.5_rk*dfreq**2) then
+              !
+              dfreq_2 = halfwidth/dfreq
+              !
+              bnorm = pi*0.25_rk*dfreq_2*(4.0_rk+dfreq_2**2)/(2.0_rk+dfreq_2**2)
+              !
+              tranfreq = min(max(nint( ( tranfreq)/dfreq )+1,1),npoints)
+              !
+            endif
+            !
+            !abscoef = abscoef*bnorm
             !
             !$omp parallel do private(ipoint,tranfreq_i) shared(intens) schedule(dynamic)
             do ipoint=ib,ie
@@ -814,7 +928,8 @@ module spectrum
                intens(ipoint)=intens(ipoint)+voigt_humlicek(tranfreq_i,tranfreq,halfwidth,halfwidth0)*abscoef
                !
             enddo
-            !$omp end parallel do             !
+            !$omp end parallel do      
+            !
         case ('MAX');
           !
           ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
@@ -878,7 +993,7 @@ module spectrum
      !
      close(tunit,status='keep')   
      !
-   elseif (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI'/)) ) then 
+   elseif (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE'/)) ) then 
      !
      write(ioname, '(a)') 'Cross sections or intensities'
      call IOstart(trim(ioname),tunit)
@@ -899,7 +1014,7 @@ module spectrum
    !
    !call IOStop(trim(ioname))
    !
-   if (verbose>=2) then 
+   if (verbose>=2.and.any(Nintens(:)/=0) ) then 
       !
       write(ioname, '(a)') 'Intensity distribution...'
       call IOstart(trim(ioname),tunit)
