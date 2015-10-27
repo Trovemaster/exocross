@@ -268,6 +268,7 @@ module spectrum
           if (trim(w(1:5))=="LOREN") ioffset = 500
           if (trim(w(1:5))=="VOIGT") ioffset = 500
           if (trim(w(1:3))=="PSE") ioffset = 500
+          offset = 25.0_rk
           !
        case ("HWHM","HALFWIDTH")
           !
@@ -310,7 +311,7 @@ module spectrum
    use  input
    !
    integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,j,ilog,ib,ie,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,kitem,l,nlines
-   real(rk)    :: beta,ln2,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0
+   real(rk)    :: beta,ln2,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0,dnu_half
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,alpha,bnorm,f,eta1,eta2,intens1,intens2,Va0,gammaV,a,wg,d
    character(len=cl) :: ioname
    character(wl) :: string_tmp
@@ -589,6 +590,7 @@ module spectrum
           write(out,"(10x,'Temperature = ',f18.7)") temp
           write(out,"(10x,'Partition function = ',f17.4)") partfunc
           write(out,"(10x,'Spectrum type = ',a/)") trim(specttype)
+          if (offset<0) write(out,"(10x,'Line truncated at ',f9.2/)") offset
           !
        endif
        !
@@ -706,6 +708,7 @@ module spectrum
           if (tranfreq<small_) cycle
           !
           halfwidth=dpwcoef*tranfreq
+          !
         endif
         !
         if (offset<0) offset = ioffset*halfwidth
@@ -836,13 +839,15 @@ module spectrum
             !
             b = 1.0_rk/(xp-xm)
             !
+            dnu_half = dfreq*0.5_rk
+            !
             !$omp parallel do private(ipoint,dfreq_,xp,xm,de) shared(intens) schedule(dynamic)
             do ipoint=ib,ie
                !
                dfreq_=freq(ipoint)-tranfreq
                !
-               xp = atan((dfreq_+dfreq)/halfwidth)
-               xm = atan(dfreq_/halfwidth)
+               xp = atan((dfreq_+dnu_half)/halfwidth)
+               xm = atan((dfreq_-dnu_half)/halfwidth)
                !
                de = (xp)-(xm)
                !
@@ -876,13 +881,15 @@ module spectrum
             !
             eta2 = 1.0_rk - eta1
             !
+            dnu_half = dfreq*0.5_rk
+            !
             !$omp parallel do private(ipoint,dfreq_,xp,xm,de,intens1,intens2) shared(intens) schedule(dynamic)
             do ipoint=ib,ie
                !
                dfreq_=freq(ipoint)-tranfreq
                !
-               xp = atan((dfreq_+dfreq)/halfwidth)
-               xm = atan(dfreq_/halfwidth)
+               xp = atan((dfreq_+dnu_half)/halfwidth)
+               xm = atan((dfreq_-dnu_half)/halfwidth)
                !
                de = (xp)-(xm)
                !
@@ -926,13 +933,15 @@ module spectrum
             !
             eta2 = 1.0_rk - eta1
             !
+            dnu_half = dfreq*0.5_rk
+            !
             !$omp parallel do private(ipoint,dfreq_,xp,xm,de,intens1,intens2) shared(intens) schedule(dynamic)
             do ipoint=ib,ie
                !
                dfreq_=freq(ipoint)-tranfreq
                !
-               xp = atan((dfreq_+dfreq)/halfwidth)
-               xm = atan(dfreq_/halfwidth)
+               xp = atan((dfreq_+dnu_half)/halfwidth)
+               xm = atan((dfreq_-dnu_half)/halfwidth)
                !
                de = (xp)-(xm)
                !
@@ -970,6 +979,8 @@ module spectrum
             !
             eta2 = 1.0_rk-eta1
             !
+            dnu_half = dfreq*0.5_rk
+            !
             !eta2 = 0.32460_rk-0.61825_rk*d+0.17681_rk*d**2+0.12109_rk*d**3
             !
             !$omp parallel do private(ipoint,dfreq_,xp,xm,de,intens1,intens2) shared(intens) schedule(dynamic)
@@ -977,8 +988,8 @@ module spectrum
                !
                dfreq_=freq(ipoint)-tranfreq
                !
-               xp = atan((dfreq_+dfreq)/halfwidth)
-               xm = atan(dfreq_/halfwidth)
+               xp = atan((dfreq_+dnu_half)/halfwidth)
+               xm = atan((dfreq_-dnu_half)/halfwidth)
                !
                de = (xp)-(xm)
                !
