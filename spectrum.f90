@@ -8,11 +8,11 @@ module spectrum
   private
   public intensity,readinput,verbose
   !
-  integer(ik),parameter   :: nfiles_max =1000, max_items = 1000
+  integer(ik),parameter   :: nfiles_max =1000, max_items = 1000, nspecies_max = 10
   !
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=3,ioffset = 10
   real(rk)      :: temp=298.0,partfunc=0,freql=-small_,freqr= 20000.0,thresh=1.0d-90,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
-  real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = -25.0
+  real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = -25.0, pressure = 1.0_rk 
   real(rk)      :: enermax = 1e6, abscoef_thresh = 1.0d-50
   !
   character(len=cl) :: specttype="absorption",enrfilename,intfilename(nfiles_max),proftype="DOPPL",output="output"
@@ -24,7 +24,19 @@ module spectrum
     character(len=cl) :: mask
   end type selectT
   !
+  type speciesT ! broadener
+    real(rk)       :: N = 0.5_rk      ! Voigt parameter N
+    real(rk)       :: gamma = 0.05_rk ! Voigt parameter gamma
+    real(rk)       :: ratio = 0.9_rk  ! Voigt parameter gamma
+    real(rk)       :: T0    = 298_rk  ! Reference T, K
+    real(rk)       :: P0    = 1.0_rk  ! Reference P, bar
+    character(len=cl) :: name         ! Broadener 
+  end type speciesT
+  !
   type(selectT) :: upper,lower
+  !
+  integer(ik)    :: Nspecies = 0
+  type(speciesT) :: species(nspecies_max)
   !
   logical :: partfunc_do = .true., filter = .false., histogram = .false.
   !
@@ -76,6 +88,10 @@ module spectrum
         case ("TEMPERATURE","TEMP")
           !
           call readf(temp)
+          !
+        case ("PRESSURE")
+          !
+          call readf(pressure)
           !
         case ("PF","QSTAT")
           !
@@ -248,7 +264,7 @@ module spectrum
          !
          if (trim(w)/="".and.trim(w)/="END") then
             !
-            call report ("Unrecognized unit name in GRID "//trim(w),.true.)
+            call report ("Unrecognized unit name in tranisions "//trim(w),.true.)
             !
          endif
           !
@@ -286,13 +302,69 @@ module spectrum
           !
           call readf(meanmass)
           !
-       case ("VOIGT_GAMMA")
+       case("SPECIES","BROADENER")
           !
-          call readf(voigt_gamma)
+          i = 0
           !
-       case ("VOIGT_N")
+          call read_line(eof) ; if (eof) exit
           !
-          call readf(voigt_N)
+          call readu(w)
+          !
+          do while (trim(w)/="".and.trim(w)/="END")
+            !
+            i = i + 1
+            !
+            if (i>nspecies_max) call report ("Too many species, increase nspecies_max"//trim(w),.true.)
+            !
+            species(i)%name = trim(w)
+            !
+            do while (trim(w)/="".and.item<Nitems)
+              !
+              call readu(w)
+              !
+              select case(w)
+                !
+              case("GAMMA","GAMMA0")
+                !
+                call readf(species(i)%gamma)
+                !
+              case ("N")
+                !
+                call readf(species(i)%N)
+                !
+              case ("RATIO")
+                !
+                call readf(species(i)%ratio)
+                !
+              case ("P0")
+                !
+                call readf(species(i)%P0)
+                !
+              case ("T0")
+                !
+                call readf(species(i)%T0)
+                !
+              case default 
+                !
+                call report ("Unrecognized unit name in sub-SPECIES "//trim(w),.true.)
+                !
+              end select 
+                !
+            enddo
+            !
+            call read_line(eof) ; if (eof) exit
+            !
+            call readu(w)
+            !
+            !if (trim(w)/="".and.trim(w)/="END") then
+            !  !
+            !  call report ("Unrecognized unit name in SPECIES "//trim(w),.true.)
+            !  !
+            !endif
+            !
+          enddo
+          !
+          nspecies = i
           !
       case default
         !
@@ -301,6 +373,19 @@ module spectrum
       end select 
       !
     enddo
+    !
+    !   half width for Doppler profiling
+    if (proftype(1:5)=='VOIGT'.or.proftype(1:3)=='PSE'.or.proftype(1:3)=='LOR'.and.Nspecies>0) then
+      !
+      halfwidth = 0 
+      !
+      do i=1,Nspecies
+        !
+        halfwidth =  halfwidth + species(i)%ratio*species(i)%gamma*(species(i)%T0/Temp)**species(i)%N*pressure/species(i)%P0
+        !
+      enddo
+      !
+    endif 
     !
     !write(out,"('...done!'/)")
     !
@@ -591,6 +676,13 @@ module spectrum
           write(out,"(10x,'Partition function = ',f17.4)") partfunc
           write(out,"(10x,'Spectrum type = ',a/)") trim(specttype)
           if (offset<0) write(out,"(10x,'Line truncated at ',f9.2/)") offset
+          if (Nspecies>0) then 
+             write(out,"(10x,'Pressure = ',e18.7)") pressure
+             write(out,"(10x,'Voigt parameters:  gamma       n         T0            P0')")
+             do i =1,Nspecies
+               write(out,"(21x,a,4f12.4)") trim(species(i)%name),species(i)%gamma,species(i)%n,species(i)%t0,species(i)%p0
+             enddo 
+          endif
           !
        endif
        !
@@ -1110,7 +1202,7 @@ module spectrum
      !
      write(tunit,'(2(1x,es16.8))'),(freq(ipoint),intens(ipoint),ipoint=1,npoints)
      !
-     if (verbose>=2) print('("Total intensity  (sum):",es16.8," (int):",es16.8)'), intband,sum(intens)*dfreq
+     if (verbose>=2) print('(/"Total intensity  (sum):",es16.8," (int):",es16.8)'), intband,sum(intens)*dfreq
      !
      close(tunit,status='keep')
      !
