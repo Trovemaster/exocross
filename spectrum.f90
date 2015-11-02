@@ -8,12 +8,14 @@ module spectrum
   private
   public intensity,readinput,verbose
   !
-  integer(ik),parameter   :: nfiles_max =1000, max_items = 1000, nspecies_max = 10
+  integer(ik),parameter   :: nfiles_max =1000, max_items = 1000, nspecies_max = 10, nquadmax = 100
   !
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=3,ioffset = 10
   real(rk)      :: temp=298.0,partfunc=0,freql=-small_,freqr= 20000.0,thresh=1.0d-90,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
   real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = -25.0, pressure = 1.0_rk 
   real(rk)      :: enermax = 1e6, abscoef_thresh = 1.0d-50
+  integer(ik)   :: nquad = 20      ! Number of quadrature points 
+
   !
   character(len=cl) :: specttype="absorption",enrfilename,intfilename(nfiles_max),proftype="DOPPL",output="output"
   character(4) a_fmt
@@ -30,7 +32,7 @@ module spectrum
     real(rk)       :: ratio = 0.9_rk  ! Voigt parameter gamma
     real(rk)       :: T0    = 298_rk  ! Reference T, K
     real(rk)       :: P0    = 1.0_rk  ! Reference P, bar
-    character(len=cl) :: name         ! Broadener 
+    character(len=cl) :: name         ! Broadener number of quadrature points 
   end type speciesT
   !
   type(selectT) :: upper,lower
@@ -92,6 +94,12 @@ module spectrum
         case ("PRESSURE")
           !
           call readf(pressure)
+          !
+        case ("NQUADRATURE","NQUAD")
+          !
+          call readi(nquad)
+          !
+          if (nquad>nquadmax) call report ("nquad is > nquadmax, which then should be icreased ",.true.)
           !
         case ("PF","QSTAT")
           !
@@ -277,12 +285,12 @@ module spectrum
           call readf(enermax)
           !
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
-            'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','HITRAN','PSEUDO','PSE-ROCCO','PSE-LIU')
+            'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','HITRAN','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD')
           !
           proftype = trim(w)
           !
           if (trim(w(1:5))=="LOREN") ioffset = 500
-          if (trim(w(1:5))=="VOIGT") ioffset = 500
+          if (trim(w(1:))=="VOI") ioffset = 500
           if (trim(w(1:3))=="PSE") ioffset = 500
           offset = 25.0_rk
           !
@@ -375,7 +383,7 @@ module spectrum
     enddo
     !
     !   half width for Doppler profiling
-    if (proftype(1:5)=='VOIGT'.or.proftype(1:3)=='PSE'.or.proftype(1:3)=='LOR'.and.Nspecies>0) then
+    if (proftype(1:3)=='VOI'.or.proftype(1:3)=='PSE'.or.proftype(1:3)=='LOR'.and.Nspecies>0) then
       !
       halfwidth = 0 
       !
@@ -395,13 +403,15 @@ module spectrum
    !
    use  input
    !
-   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,j,ilog,ib,ie,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,kitem,l,nlines
-   real(rk)    :: beta,ln2,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0,dnu_half
-   real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,alpha,bnorm,f,eta1,eta2,intens1,intens2,Va0,gammaV,a,wg,d
+   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,j,ilog,ib,ie,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,kitem,l,nlines,iquad
+   real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0,dnu_half
+   real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,bnorm,f,eta1,eta2,intens1,intens2,Va0,gammaV,a,wg,d
+   real(rk)    :: sigma,alpha,gamma,y,x1,x2,voigt_,dx2,xi,L1,L2
    character(len=cl) :: ioname
    character(wl) :: string_tmp
+   real(rk) :: Lorentz(nquadmax)
    !
-   real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:)
+   real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
    integer(ik),allocatable :: gtot(:),indices(:)
    character(len=20),allocatable :: quantum_numbers(:,:)
    !
@@ -412,6 +422,7 @@ module spectrum
    character(len=cl) :: w
    !
    ln2=log(2.0_rk)
+   ln22 = ln2*2.0_rk
    beta=c2/temp
    cmcoef=1.0_rk/(8.0_rk*pi*vellgt)
    emcoef=1.0_rk*planck*vellgt/(4.0_rk*pi)
@@ -497,6 +508,20 @@ module spectrum
      Asum = -1.0_rk
      !
      write(my_fmt,'(a)')  '(1x,i11,1x,f12.4,1x,f5.1,1x,es16.8,5x)'
+     !
+   endif
+   !
+   ! prepare the quadratures (Gauss-Hermite)
+   !
+   if (trim(proftype(1:5))=='VOI-Q') then 
+     write(out,"(/'Number of quadrature poitns (Gauss-Hermite) = ',i7/)") nquad
+     !
+     allocate(weight(nquad),abciss(nquad),bnormq(nquad),stat=info)
+     call ArrayStart('weight-abciss',info,size(weight),kind(weight))
+     call ArrayStart('weight-abciss',info,size(abciss),kind(abciss))
+     call ArrayStart('weight-abciss',info,size(bnormq),kind(bnormq))
+     !
+     call gauher(abciss,weight,nquad)
      !
    endif
    !
@@ -665,7 +690,7 @@ module spectrum
    !
    select case (trim(proftype(1:5)))
        !
-   case ('GAUSS','DOPPL','LOREN','GAUS0','DOPP0','VOIGT','PSEUD','PSE-R','PSE-L')
+   case ('GAUSS','DOPPL','LOREN','GAUS0','DOPP0','VOIGT','PSEUD','PSE-R','PSE-L','VOI-Q')
        !
        if (verbose>=2) then
           !
@@ -808,7 +833,7 @@ module spectrum
         x0 = sqrt(ln2)/halfwidth*dfreq*0.5_rk
         !
         !   half width for Doppler profiling
-        if (proftype(1:5)=='VOIGT'.or.proftype(1:3)=='PSE') then
+        if (proftype(1:3)=='VOI'.or.proftype(1:3)=='PSE') then
           if (tranfreq<small_) cycle
           halfwidth0=dpwcoef*tranfreq
           x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
@@ -1097,7 +1122,60 @@ module spectrum
                intens(ipoint)=intens(ipoint)+abscoef*(intens1*eta1+intens2*eta2)
                !
             enddo
-            !$omp end parallel do               
+            !$omp end parallel do             
+            !
+        case ('VOI-Q') ! VOIGT-QUADRATURES
+            !
+            alpha = halfwidth0
+            gamma = halfwidth
+            !
+            sigma = alpha/ln22
+            !
+            y = gamma/sigma
+            !
+            dx2 = dfreq*0.5_rk/sigma
+            !
+            do iquad=1,nquad
+               !
+               xi = abciss(iquad)
+               !
+               x1 = (freq(ib)-tranfreq)/sigma-xi
+               x2 = (freq(ie)-tranfreq)/sigma-xi
+               !
+               L1 = atan( x1/y )
+               L2 = atan( x2/y )
+               !
+               bnormq(iquad) = 1.0_rk/(L2-L1)*pi
+               !
+            enddo
+            !
+            Lorentz = 0
+            !
+            !$omp parallel do private(ipoint,xp,iquad,xi,x1,x2,L1,L2,Lorentz,voigt_) shared(intens) schedule(dynamic)
+            do ipoint=ib,ie
+               !
+               xp = (freq(ipoint)-tranfreq)/sigma
+               !
+               do iquad=1,nquad
+                  !
+                  xi = abciss(iquad)
+                  !
+                  x1 = xp-dx2-xi
+                  x2 = xp+dx2-xi
+                  !
+                  L1 = atan( x1/y )
+                  L2 = atan( x2/y )
+                  !
+                  Lorentz(iquad) = (L2-L1)/pi
+                  !
+               enddo
+               !
+               voigt_ = sum(Lorentz(1:nquad)*weight(1:nquad)*bnormq(1:nquad))/dfreq
+               !
+               intens(ipoint)=intens(ipoint)+abscoef*voigt_
+               !
+            enddo
+            !$omp end parallel do
             !
         case ('VOIGT')
             !
@@ -1125,6 +1203,7 @@ module spectrum
                !
                tranfreq_i = freq(ipoint)
                !
+               !intens(ipoint)=intens(ipoint)+voigt_faddeeva(tranfreq_i,tranfreq,halfwidth0,halfwidth)*abscoef
                intens(ipoint)=intens(ipoint)+voigt_humlicek(tranfreq_i,tranfreq,halfwidth0,halfwidth)*abscoef
                !
             enddo
@@ -1245,6 +1324,42 @@ module spectrum
   end subroutine intensity
   !
 
+  function voigt_faddeeva(nu,nu0,alpha,gamma) result(f)
+   !
+   real(rk),intent(in) :: nu,nu0,alpha,gamma
+   real(rk) :: f,sigma,x,y
+   integer(ik),parameter :: n=10
+   real(rk) :: r(n),weight(n),ln2
+
+   real(rk),parameter ::  RT2LN2 = 1.1774100225154747_rk     ! sqrt(2ln2)
+   real(rk),parameter ::  RTPI   = 1.7724538509055159_rk     ! sqrt(pi)
+   real(rk),parameter ::  RT2PI  = 2.5066282746310002_rk     ! sqrt(2pi)
+   real(rk),parameter ::  RT2    = 1.4142135623730951_rk     ! sqrt(2)
+   complex(rk) :: w,z
+   !
+   ln2=log(2.0_rk)
+   !complex(rk) :: w_of_z
+   !
+   sigma = alpha / RT2LN2
+   x = (nu0 - nu)*sqrt(2.0_rk*ln2)/alpha
+   y = gamma / alpha*sqrt(2.0_rk*ln2)
+   !
+   call gauher(r,weight,n)
+   !
+   !r = r*alpha/RT2LN2
+   !
+   f = sum(weight(:)/( ( x-r(:) )**2+y**2   ))
+   !
+   f = f*gamma*2.0_rk*ln2/ alpha**2/pi/RTPI
+   !
+   f = sum(weight(:))/RTPI
+   !
+   !w = w_of_z(z)
+   !
+   !w = exp(-z**2)*(1.0_rk-erfc(z))
+   !
+  end function voigt_faddeeva
+
   function voigt_humlicek(nu,nu0,alpha,gamma) result(f)
    !
    real(rk),intent(in) :: nu,nu0,alpha,gamma
@@ -1262,6 +1377,7 @@ module spectrum
    f = humlic(x, y) / sigma / RT2PI
    !
   end function voigt_humlicek
+
   !
   function humlic(x,y) result (f)
     real(rk),intent(in) :: x,y
@@ -1315,7 +1431,141 @@ module spectrum
     !
     end function humlic
     !
+    subroutine gauher(x,w,n)
+       !
+       ! modified for w = exp(-x^2/2)/sqrt(2 pi)
+       !
+       integer(ik) :: n,MAXIT
+       real(rk) :: w(n),x(n)
+       real(rk) ::  EPS,PIM4
+       parameter (EPS=3.D-16,PIM4=.75112554446494248285870300477622_rk,MAXIT=40)
+       integer(ik) :: i,its,j,m
+       real(rk) ::p1,p2,p3,pp,z,z1
+
+       !
+       !if (n==20) then 
+       !  !
+       !     x(1:20)  = &
+       !       (/-7.619048541679757_rk,-6.510590157013656_rk,-5.578738805893203_rk,&
+       !       -4.734581334046057_rk,-3.943967350657318_rk,-3.18901481655339_rk,&
+       !       -2.458663611172367_rk,-1.745247320814127_rk,-1.042945348802751_rk,&
+       !       -0.346964157081356_rk, 0.346964157081356_rk, 1.042945348802751_rk,&
+       !        1.745247320814127_rk, 2.458663611172367_rk, 3.18901481655339_rk,&
+       !        3.943967350657316_rk, 4.734581334046057_rk, 5.578738805893202_rk,&
+       !        6.510590157013653_rk, 7.619048541679757_rk/)
+       !   w(1:20) =  (/0.000000000000126_rk, 0.000000000248206_rk, 0.000000061274903_rk,&
+       !        0.00000440212109_rk, 0.000128826279962_rk, 0.00183010313108_rk,&
+       !        0.013997837447101_rk, 0.061506372063977_rk, 0.161739333984_rk,&
+       !        0.260793063449555_rk, 0.260793063449555_rk, 0.161739333984_rk,&
+       !        0.061506372063977_rk, 0.013997837447101_rk, 0.00183010313108_rk,&
+       !        0.000128826279962_rk, 0.00000440212109_rk, 0.000000061274903_rk,&
+       !        0.000000000248206_rk, 0.000000000000126_rk/)
+       !   return
+       !  !
+       !endif 
+
+       m=(n+1)/2
+       do i=1,m
+         !
+         if(i.eq.1)then
+           z=sqrt(float(2*n+1))-1.85575*(2*n+1)**(-.16667)
+         else if(i.eq.2)then
+           z=z-1.14*n**.426/z
+         else if (i.eq.3)then
+           z=1.86*z-.86*x(1)
+         else if (i.eq.4)then
+           z=1.91*z-.91*x(2)
+         else
+           z=2.*z-x(i-2)
+         endif
+         do its=1,MAXIT
+           p1=PIM4
+           p2=0.0_rk
+           do j=1,n
+             p3=p2
+             p2=p1
+             p1=z*sqrt(2.0_rk/j)*p2-sqrt(real(j-1,ark)/real(j,ark))*p3
+           enddo
+           pp=sqrt(2.0_rk*n)*p2
+           z1=z
+           z=z1-p1/pp
+           if(abs(z-z1).le.EPS) exit
+           !
+         enddo
+         if (its==MAXIT) stop 'too many iterations in gauher'
+         x(i)=z
+         x(n+1-i)=-z
+         w(i)=2.0_rk/(pp*pp)
+         w(n+1-i)=w(i)
+       enddo
+       !
+       w = w / sqrt(pi)
+       x = x*sqrt(2.0_rk)
+       !
+       return
+    end subroutine gauher
+    !C  (C) Copr. 1986-92 Numerical Recipes Software 
+
+  subroutine gauher_ark(xr,wr,n)
+    !
+    real(rk) :: xr(n),wr(n)
+    !
+    integer(ik) :: n,MAXIT
+    real(ark) :: w(n),x(n)
+    real(ark) ::  EPS,PIM4
+    parameter (EPS=3.D-21,PIM4=.75112554446494248285870300477622_ark,MAXIT=40)
+    integer(ik) :: i,its,j,m
+    real(ark) ::p1,p2,p3,pp,z,z1
+      !
+      m=(n+1)/2
+      do i=1,m
+        !
+        if(i.eq.1)then
+          z=sqrt(float(2*n+1))-1.85575*(2*n+1)**(-.16667)
+        else if(i.eq.2)then
+          z=z-1.14*n**.426/z
+        else if (i.eq.3)then
+          z=1.86*z-.86*x(1)
+        else if (i.eq.4)then
+          z=1.91*z-.91*x(2)
+        else
+          z=2.*z-x(i-2)
+        endif
+        do its=1,MAXIT
+          p1=PIM4
+          p2=0.0_ark
+          do j=1,n
+            p3=p2
+            p2=p1
+            p1=z*sqrt(2.0_ark/j)*p2-sqrt(real(j-1,ark)/real(j,ark))*p3
+          enddo
+          pp=sqrt(2.0_ark*n)*p2
+          z1=z
+          z=z1-p1/pp
+          if(abs(z-z1).le.EPS) exit
+          !
+        enddo
+        if (its==MAXIT) stop 'too many iterations in gauher'
+        x(i)=z
+        x(n+1-i)=-z
+        w(i)=2.0_ark/(pp*pp)
+        w(n+1-i)=w(i)
+      enddo
+      !
+      xr = real(x,rk)*sqrt(2.0_rk)
+      !
+      wr = real(w,rk) / sqrt(pi)
+      !
+      return
+  end subroutine gauher_ark
+  !C  (C) Copr. 1986-92 Numerical Recipes Software 
+
+
+    !
   end module spectrum
+
+
+
 
 
 
