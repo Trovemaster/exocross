@@ -598,7 +598,7 @@ module spectrum
         !
       endif 
       !
-      indices(i) = itemp
+      indices(itemp) = i
       !
       j = 2*int(jrot(i))+1
       energy = energies(i)
