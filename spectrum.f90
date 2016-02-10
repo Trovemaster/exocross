@@ -8,7 +8,7 @@ module spectrum
   private
   public intensity,readinput,verbose
   !
-  integer(ik),parameter   :: nfiles_max =1000, max_items = 1000, nspecies_max = 10, nquadmax = 100
+  integer(ik),parameter   :: nfiles_max =1000, max_items = 1000, nspecies_max = 10, nquadmax = 100, filtermax = 100
   !
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=3,ioffset = 10
   real(rk)      :: temp=298.0,partfunc=0,freql=-small_,freqr= 20000.0,thresh=1.0d-90,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
@@ -22,8 +22,8 @@ module spectrum
   character(9) b_fmt
   !
   type selectT
-    integer(ik)  :: i
-    character(len=cl) :: mask
+    integer(ik)  :: i = 0
+    character(len=cl) :: mask = ""
   end type selectT
   !
   type speciesT ! broadener
@@ -35,9 +35,9 @@ module spectrum
     character(len=cl) :: name         ! Broadener number of quadrature points 
   end type speciesT
   !
-  type(selectT) :: upper,lower
+  type(selectT) :: upper(filtermax),lower(filtermax)
   !
-  integer(ik)    :: Nspecies = 0
+  integer(ik)    :: Nspecies = 0, Nfilters = 0
   type(speciesT) :: species(nspecies_max)
   !
   logical :: partfunc_do = .true., filter = .false., histogram = .false.
@@ -53,7 +53,7 @@ module spectrum
     logical :: eof
     character(len=cl) :: w,v
     real(rk)      :: m1,m2
-    integer(ik)   :: i
+    integer(ik)   :: i,ifilter
     ! -----------------------------------------------------------
     !
     write(out,"('Read the input')")
@@ -65,11 +65,6 @@ module spectrum
     !
     write(a_fmt,'(I3)') nchar
     write(a_fmt,'("a",a3)') adjustl(a_fmt)
-    !
-    lower%i = 0
-    upper%i = 0
-    lower%mask = ""
-    upper%mask = ""
     !
     write(my_fmt,'(a,a4,a,a4,a)')  '(1x,2es16.8,1x,f5.1,1x,f12.4," <- ",f5.1,1x,f12.4,5x)'
     !
@@ -184,32 +179,46 @@ module spectrum
           filter  = .true.
           !
           call read_line(eof) ; if (eof) exit
+          !call readu(w)
+          !
+          ifilter = 0 
+          !
           call readu(w)
           !
           do while (trim(w)/="".and.trim(w)/="END")
             !
-            select case(w)
+            ifilter = ifilter + 1
             !
-            case('LOWER')
+            do while (trim(w)/="".and.item<Nitems)
               !
-              call readi(lower%i) ; lower%i = lower%i - 4
-              call reada(lower%mask)
+              select case(w)
               !
-            case('UPPER')
+              case('LOWER')
+                !
+                call readi(lower(ifilter)%i) ; lower(ifilter)%i = lower(ifilter)%i - 4
+                call reada(lower(ifilter)%mask)
+                !
+              case('UPPER')
+                !
+                call readi(upper(ifilter)%i) ; upper(ifilter)%i = upper(ifilter)%i - 4
+                call reada(upper(ifilter)%mask)
+                !
+              case default
+                !
+                call report ("Unrecognized unit name "//trim(w),.true.)
+                !
+              end select
               !
-              call readi(upper%i) ; upper%i = upper%i - 4
-              call reada(upper%mask)
+              call readu(w)
               !
-            case default
-              !
-              call report ("Unrecognized unit name "//trim(w),.true.)
-              !
-            end select
+            enddo
             !
             call read_line(eof) ; if (eof) exit
             call readu(w)
             !
           enddo
+          !
+          Nfilters = ifilter
           !
           if (trim(w)/="".and.trim(w)/="END") then
              !
@@ -403,7 +412,7 @@ module spectrum
    !
    use  input
    !
-   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,j,ilog,ib,ie,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,kitem,l,nlines,iquad
+   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,j,ilog,ib,ie,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,kitem,l,nlines,iquad,ifilter
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0,dnu_half
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,bnorm,f,eta1,eta2,intens1,intens2,Va0,gammaV,a,wg,d
    real(rk)    :: sigma,alpha,gamma,y,x1,x2,voigt_,dx2,xi,L1,L2
@@ -588,13 +597,17 @@ module spectrum
       !
       if (filter.and.i==1) then
         !
-        if (lower%i<1.or.lower%i>nitems-4.or.upper%i<1.or.upper%i>nitems-4) then
+        do ifilter = 1,Nfilters
           !
-          write(out,"('wrong filter indices, upper or lower: ',2i)") upper%i+4,lower%i+4
-          print*,quantum_numbers(:,i)
-          stop 'wrong filter indices, upper or lower'
+          if (lower(ifilter)%i<1.or.lower(ifilter)%i>nitems-4.or.upper(ifilter)%i<1.or.upper(ifilter)%i>nitems-4) then
+            !
+            write(out,"('wrong filter indices, upper or lower: ',2i)") upper(ifilter)%i+4,lower(ifilter)%i+4
+            print*,quantum_numbers(:,i)
+            stop 'wrong filter indices, upper or lower'
+            !
+          endif
           !
-        endif
+        enddo
         !
       endif 
       !
@@ -743,7 +756,7 @@ module spectrum
    do i = 1,nfiles
      !
      open(unit=tunit,file=trim(intfilename(i)),action='read',status='old')
-     do
+     loop_tran: do
         !
         if (histogram) then 
            !
@@ -777,7 +790,11 @@ module spectrum
            !
            if (filter) then
              !
-             if (upper%mask/=trim(quantum_numbers(upper%i,ilevelf)).or.lower%mask/=trim(quantum_numbers(lower%i,ileveli))) cycle
+             do ifilter = 1,Nfilters
+               !
+               if (upper(ifilter)%mask/=trim(quantum_numbers(upper(ifilter)%i,ilevelf)).or.lower(ifilter)%mask/=trim(quantum_numbers(lower(ifilter)%i,ileveli))) cycle loop_tran
+               !
+             enddo
              !
            endif
            !
@@ -1235,7 +1252,7 @@ module spectrum
         !
         cycle
      20  exit
-     enddo
+     enddo loop_tran
      !
      close(tunit)
      !
