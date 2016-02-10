@@ -760,7 +760,7 @@ module spectrum
         !
         if (histogram) then 
            !
-           ! using pre-computed integrated intensities for a given T and bin
+           ! using pre-computed integrated intensities for a given Temperature and bin
            !
            read(tunit,*,end=20) tranfreq,abscoef
            !
