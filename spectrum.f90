@@ -10,14 +10,14 @@ module spectrum
   !
   integer(ik),parameter   :: nfiles_max =1000, max_items = 1000, nspecies_max = 10, nquadmax = 100, filtermax = 100
   !
-  integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=3,ioffset = 10
-  real(rk)      :: temp=298.0,partfunc=0,freql=-small_,freqr= 20000.0,thresh=1.0d-90,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
+  integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=3,ioffset = 10,iso=1
+  real(rk)      :: temp=298.0,partfunc=-1.0,freql=-small_,freqr= 20000.0,thresh=1.0d-90,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
   real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = -25.0, pressure = 1.0_rk 
   real(rk)      :: enermax = 1e6, abscoef_thresh = 1.0d-50
   integer(ik)   :: nquad = 20      ! Number of quadrature points 
 
   !
-  character(len=cl) :: specttype="absorption",enrfilename,intfilename(nfiles_max),proftype="DOPPL",output="output"
+  character(len=cl) :: specttype="absorption",enrfilename="none",intfilename(nfiles_max),proftype="DOPPL",output="output"
   character(4) a_fmt
   character(9) b_fmt
   !
@@ -27,12 +27,18 @@ module spectrum
   end type selectT
   !
   type speciesT ! broadener
+    !
     real(rk)       :: N = 0.5_rk      ! Voigt parameter N
     real(rk)       :: gamma = 0.05_rk ! Voigt parameter gamma
-    real(rk)       :: ratio = 0.9_rk  ! Voigt parameter gamma
+    real(rk)       :: ratio = 0.9_rk  ! Ratio
     real(rk)       :: T0    = 298_rk  ! Reference T, K
     real(rk)       :: P0    = 1.0_rk  ! Reference P, bar
     character(len=cl) :: name         ! Broadener number of quadrature points 
+    character(len=cl) :: filename=""  ! File name with QN-dependent broadening parameters 
+    character(len=cl) :: model="const"  ! Broadening model
+    real(rk),pointer  :: gammaQN(:,:) ! Voigt parameter gamma as a function of QN
+    real(rk),pointer  :: nQN(:,:)     ! Voigt parameter n as a function of QN
+    !
   end type speciesT
   !
   type(selectT) :: upper(filtermax),lower(filtermax)
@@ -40,7 +46,7 @@ module spectrum
   integer(ik)    :: Nspecies = 0, Nfilters = 0
   type(speciesT) :: species(nspecies_max)
   !
-  logical :: partfunc_do = .true., filter = .false., histogram = .false.
+  logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran = .false.
   !
   contains
   !
@@ -119,6 +125,14 @@ module spectrum
           !
           specttype = trim(w)
           !
+       case ("MEM","MEMORY")
+         !
+         call readf(memory_limit)
+          !
+        case ("ISO","ISOTOPE")
+          !
+          call readi(iso)  
+          !
         case ("VERBOSE")
           !
           call readi(verbose)
@@ -173,6 +187,10 @@ module spectrum
         case ("HISTOGRAM")
           !
           histogram = .true.
+          !
+        case ("HITRAN")
+          !
+          hitran = .true.
           !
         case ("SELECT","FILTER")
           !
@@ -294,7 +312,7 @@ module spectrum
           call readf(enermax)
           !
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
-            'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','HITRAN','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD')
+            'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD')
           !
           proftype = trim(w)
           !
@@ -361,6 +379,17 @@ module spectrum
                 !
                 call readf(species(i)%T0)
                 !
+              case ("FILENAME","FILE")
+                !
+                call reada(w)
+                !
+                species(i)%filename = trim(w)
+                call upcase(w)
+                !
+              case ("MODEL")
+                !
+                call readu(species(i)%model)
+                !
               case default 
                 !
                 call report ("Unrecognized unit name in sub-SPECIES "//trim(w),.true.)
@@ -372,12 +401,6 @@ module spectrum
             call read_line(eof) ; if (eof) exit
             !
             call readu(w)
-            !
-            !if (trim(w)/="".and.trim(w)/="END") then
-            !  !
-            !  call report ("Unrecognized unit name in SPECIES "//trim(w),.true.)
-            !  !
-            !endif
             !
           enddo
           !
@@ -412,10 +435,12 @@ module spectrum
    !
    use  input
    !
-   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,j,ilog,ib,ie,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,kitem,l,nlines,iquad,ifilter
+   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,j,ilog,ib,ie,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,kitem,l,nlines,iquad,ifilter
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0,dnu_half
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,bnorm,f,eta1,eta2,intens1,intens2,Va0,gammaV,a,wg,d
    real(rk)    :: sigma,alpha,gamma,y,x1,x2,voigt_,dx2,xi,L1,L2
+   integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,ispecies
+   real(rk)    :: gamma_,n_
    character(len=cl) :: ioname
    character(wl) :: string_tmp
    real(rk) :: Lorentz(nquadmax)
@@ -429,6 +454,10 @@ module spectrum
    !
    logical :: eof
    character(len=cl) :: w
+   !
+   integer(ik) :: imol
+   real(rk)    :: gf,gi
+   character(55) ch_q
    !
    ln2=log(2.0_rk)
    ln22 = ln2*2.0_rk
@@ -452,73 +481,239 @@ module spectrum
    !
    forall(ipoint=1:npoints) freq(ipoint)=freql+real(ipoint-1,rk)*dfreq
    !
-   !count number of lines (levels) in the Energy files
+   ! open and count number of lines (levels) in the Energy files
    !
-   write(ioname, '(a)') 'Energy file'
-   call IOstart(trim(ioname),enunit)
-   open(unit=enunit,file=trim(enrfilename),action='read',status='old')
-   i = 0
-   iline = 0
-   maxitems = 5
-   !
-   call input_options(echo_lines=.false.,error_flag=1)
-   !
-   do
+   if (trim(enrfilename)/="none".and..not.hitran) then
       !
-      call read_line(eof,enunit) ; if (eof) exit
+      write(ioname, '(a)') 'Energy file'
+      call IOstart(trim(ioname),enunit)
+      open(unit=enunit,file=trim(enrfilename),action='read',status='old')
+      i = 0
+      iline = 0
+      maxitems = 5
       !
-      if (nitems<4) then 
-        call report ("In .states less than  than 4 columns, mixed up with .trans?"//trim(w),.true.)
-      endif 
+      call input_options(echo_lines=.false.,error_flag=1)
       !
-      call readi(itemp)
-      call readf(energy)
+      do
+         !
+         call read_line(eof,enunit) ; if (eof) exit
+         !
+         if (nitems<4) then 
+           call report ("In .states less than  than 4 columns, mixed up with .trans?"//trim(w),.true.)
+         endif 
+         !
+         call readi(itemp)
+         call readf(energy)
+         !
+         if (energy>enermax) cycle
+         !
+         iline = iline + 1
+         !
+         i = max(i,itemp)
+         !
+         maxitems = max(nitems,maxitems)
+         !
+         !cycle
+         !
+         !10  exit
+      end do
       !
-      if (energy>enermax) cycle
+      nlines = iline
       !
-      iline = iline + 1
+      if (verbose>=3) write(out,"('Max number of energy records = ',i9)") maxitems
       !
-      i = max(i,itemp)
+      open(unit=enunit,file=trim(enrfilename),action='read',status='old')
       !
-      maxitems = max(nitems,maxitems)
+      rewind(enunit)
       !
-      !cycle
+      nlevels = i
       !
-      !10  exit
-   end do
-   !
-   nlines = iline
-   !
-   if (verbose>=3) write(out,"('Max number of energy records = ',i9)") maxitems
-   !
-   open(unit=enunit,file=trim(enrfilename),action='read',status='old')
-   !
-   rewind(enunit)
-   !
-   nlevels = i
-   !
-   maxitems = maxitems-4
-   !
-   if (verbose>=3) print*,"nlevels: (total)",nlevels," (selected)",nlines
-   !
-   allocate(energies(nlines),Jrot(nlines),gtot(nlines),indices(nlevels),stat=info)
-   call ArrayStart('energies',info,size(energies),kind(energies))
-   call ArrayStart('Jrot',info,size(Jrot),kind(Jrot))
-   call ArrayStart('gtot',info,size(gtot),kind(gtot))
-   call ArrayStart('indices',info,size(indices),kind(indices))
-   !
-   if (trim(specttype)=='LIFETIME') THEN 
-     !
-     ! allocate the matrix for the sum of the A-coeffs 
-     !
-     allocate(Asum(nlines),stat=info)
-     call ArrayStart('Asum',info,size(Asum),kind(Asum))
-     !
-     Asum = -1.0_rk
-     !
-     write(my_fmt,'(a)')  '(1x,i11,1x,f12.4,1x,f5.1,1x,es16.8,5x)'
-     !
-   endif
+      maxitems = maxitems-4
+      !
+      if (verbose>=3) print*,"nlevels: (total)",nlevels," (selected)",nlines
+      !
+      allocate(energies(nlines),Jrot(nlines),gtot(nlines),indices(nlevels),stat=info)
+      call ArrayStart('energies',info,size(energies),kind(energies))
+      call ArrayStart('Jrot',info,size(Jrot),kind(Jrot))
+      call ArrayStart('gtot',info,size(gtot),kind(gtot))
+      call ArrayStart('indices',info,size(indices),kind(indices))
+      !
+      if (trim(specttype)=='LIFETIME') THEN 
+        !
+        ! allocate the matrix for the sum of the A-coeffs 
+        !
+        allocate(Asum(nlines),stat=info)
+        call ArrayStart('Asum',info,size(Asum),kind(Asum))
+        !
+        Asum = -1.0_rk
+        !
+        write(my_fmt,'(a)')  '(1x,i11,1x,f12.4,1x,f5.1,1x,es16.8,5x)'
+        !
+      endif
+      !
+      allocate(quantum_numbers(maxitems,iline),stat=info)
+      call ArrayStart('quantum_numbers',info,size(quantum_numbers),kind(quantum_numbers))
+      !
+      if (verbose>=3) call MemoryReport
+      !
+      quantum_numbers = ""
+      !
+      indices = 0
+      !
+      energies = 0
+      Jrot = 0
+      gtot = 0
+      !
+      ! In case of specttype = partfunc the partition function will be computed for a series of temperatures. 
+      ! npoints stands for the number of temperature steps, and the frequency limits as temperature limits
+      !
+      if (specttype(1:4)=='PART') then
+        !
+        if (trim(enrfilename)=="none") then 
+           !
+           write(out,"('PARTITION FUNCTION ERROR: no energy file is specified')") 
+           stop "no energy file is specified"
+           !
+        endif
+        !
+        dtemp=maxtemp/real(npoints,rk)
+        !
+        if (ipartf<0.or.ipartf>3) stop "illegal partfunc component, can be only 0,1,2,3"
+        !
+        if (verbose>=1) print("('0,1,2,3 stand for PF, 1st and 2d moments and Cp:')")
+        !
+        if (verbose>=1) print('("!",5x,a4,( 1x,'//npoints_fmt//'( 5x,"T=",f8.2,5x) ) )'),'  J ',(i*dtemp,i=1,npoints)
+        !
+        allocate(pf(0:3,npoints),stat=info)
+        call ArrayStart('pf',info,size(pf),kind(pf))
+        !
+        pf = 0 
+        !
+      endif
+      j0 = 0
+      i = 0
+      !
+      ! start reading the energies 
+      !
+      do
+         !
+         call read_line(eof,enunit) ; if (eof) exit
+         i = i + 1
+         !
+         call readi(itemp)
+         call readf(energy)
+         !
+         if (energy>enermax) then
+           i = i - 1
+           cycle
+         endif
+         !
+         energies(i) = energy
+         !
+         call readi(gtot(i))
+         call readf(jrot(i))
+         !
+         do kitem = 5,nitems
+            !
+            call reada(quantum_numbers(kitem-4,i))
+            !
+         enddo
+         !
+         if (filter.and.i==1) then
+           !
+           do ifilter = 1,Nfilters
+             !
+             if (lower(ifilter)%i<1.or.lower(ifilter)%i>nitems-4.or.upper(ifilter)%i<1.or.upper(ifilter)%i>nitems-4) then
+               !
+               write(out,"('wrong filter indices, upper or lower: ',2i)") upper(ifilter)%i+4,lower(ifilter)%i+4
+               print*,quantum_numbers(:,i)
+               stop 'wrong filter indices, upper or lower'
+               !
+             endif
+             !
+           enddo
+           !
+         endif 
+         !
+         indices(itemp) = i
+         !
+         j = 2*int(jrot(i))+1
+         energy = energies(i)
+         !
+         if (partfunc_do) then
+           if (j/=j0) then 
+              !
+              if (specttype(1:4)=='PART') then 
+                if (verbose>=1.and.npoints<1000) print('("!",f8.1,3(1x,'//npoints_fmt//'es20.8))'),jrot(i),pf(ipartf,1:npoints)
+              else 
+                if (verbose>=4) print('("|",f8.1,1x,es16.8)'),jrot(i),partfunc
+              endif
+              !
+           endif
+           !
+           partfunc=partfunc+gtot(i)*exp(-beta*energy)
+           !
+           j0 = j
+           !
+          endif
+          !
+          if (specttype(1:4)=='PART') then
+            !
+            do itemp = 1,npoints
+              !
+              if (energy>enermax) cycle
+              !
+              temp0 = real(itemp,rk)*dtemp
+              !
+              beta0 = planck*vellgt/(boltz*temp0)
+              !
+              pf(0,itemp) = pf(0,itemp) + gtot(i)*exp(-beta0*energy)
+              pf(1,itemp) = pf(1,itemp) + gtot(i)*exp(-beta0*energy)*(beta0*energy)
+              pf(2,itemp) = pf(2,itemp) + gtot(i)*exp(-beta0*energy)*(beta0*energy)**2
+              !
+              pf(3,itemp) = ( pf(2,itemp)/pf(0,itemp)-(pf(1,itemp)/pf(0,itemp))**2 )
+              !
+            enddo
+            !
+          endif
+          !
+      end do
+      close(enunit)
+      !
+      ! print out the computed part. function objects and finish
+      !
+      if (specttype(1:4)=='PART') then
+        !
+        j0rk = real(j0-1)*0.5_rk
+        !
+        if (verbose>=0) print('("!",f8.1,3(1x,'//npoints_fmt//'es20.8/))'),j0rk,pf(ipartf,1:npoints)
+        !
+        if (verbose>=0) print('("!0",8x,'//npoints_fmt//'es20.8)'),pf(0,1:npoints)
+        if (verbose>=0) print('("!1",8x,'//npoints_fmt//'es20.8)'),pf(1,1:npoints)
+        if (verbose>=0) print('("!2",8x,'//npoints_fmt//'es20.8)'),pf(2,1:npoints)
+        if (verbose>=0) print('("!3",8x,'//npoints_fmt//'es20.8)'),pf(3,1:npoints)
+        !
+        if (verbose>=3) print('(/a,1x,es16.8/)'),'! partition function value is',partfunc
+        !
+        if (verbose>=0) then 
+          print('(a)'),"Partition function"
+          do itemp = 1,npoints
+            temp0 = real(itemp,rk)*dtemp
+            print('(f12.2,1x,es20.8)'),temp0,pf(0,itemp)
+          enddo
+        endif 
+        !
+        stop
+        !
+      else
+        !
+        if (verbose>=4) print('("|",f9.1,1x,es16.8)'),real(j0-1)*0.5,partfunc
+        !
+      endif
+      !
+   endif  ! end of processing the states files 
+   !   
+   if (verbose>=2.or.(partfunc_do.and.verbose>0)) print('(1x,a,1x,es16.8/)'),'! partition function value is',partfunc
    !
    ! prepare the quadratures (Gauss-Hermite)
    !
@@ -534,161 +729,100 @@ module spectrum
      !
    endif
    !
-   allocate(quantum_numbers(maxitems,iline),stat=info)
-   call ArrayStart('quantum_numbers',info,size(quantum_numbers),kind(quantum_numbers))
+   ! open and read broenning files
    !
-   if (verbose>=3) call MemoryReport
-   !
-   quantum_numbers = ""
-   !
-   indices = 0
-   !
-   energies = 0
-   Jrot = 0
-   gtot = 0
-   !
-   ! In case of specttype = partfunc the partition function will be computed for a series of temperatures. 
-   ! npoints stands for the number of temperature steps, and the frequency limits as temperature limits
-   !
-   if (specttype(1:4)=='PART') then
+   do i =1,Nspecies
      !
-     dtemp=maxtemp/real(npoints,rk)
-     !
-     if (ipartf<0.or.ipartf>3) stop "illegal partfunc component, can be only 0,1,2,3"
-     !
-     if (verbose>=1) print("('0,1,2,3 stand for PF, 1st and 2d moments and Cp:')")
-     !
-     if (verbose>=1) print('("!",5x,a4,( 1x,'//npoints_fmt//'( 5x,"T=",f8.2,5x) ) )'),'  J ',(i*dtemp,i=1,npoints)
-     !
-     allocate(pf(0:3,npoints),stat=info)
-     call ArrayStart('pf',info,size(pf),kind(pf))
-     !
-     pf = 0 
-     !
-   endif
-   j0 = 0
-   i = 0
-   !
-   ! start reading the energies 
-   !
-   do
-      !
-      call read_line(eof,enunit) ; if (eof) exit
-      i = i + 1
-      !
-      call readi(itemp)
-      call readf(energy)
-      !
-      if (energy>enermax) then
-        i = i - 1
-        cycle
-      endif
-      !
-      energies(i) = energy
-      !
-      call readi(gtot(i))
-      call readf(jrot(i))
-      !
-      do kitem = 5,nitems
-         !
-         call reada(quantum_numbers(kitem-4,i))
-         !
-      enddo
-      !
-      if (filter.and.i==1) then
-        !
-        do ifilter = 1,Nfilters
-          !
-          if (lower(ifilter)%i<1.or.lower(ifilter)%i>nitems-4.or.upper(ifilter)%i<1.or.upper(ifilter)%i>nitems-4) then
-            !
-            write(out,"('wrong filter indices, upper or lower: ',2i)") upper(ifilter)%i+4,lower(ifilter)%i+4
-            print*,quantum_numbers(:,i)
-            stop 'wrong filter indices, upper or lower'
-            !
-          endif
-          !
-        enddo
-        !
-      endif 
-      !
-      indices(itemp) = i
-      !
-      j = 2*int(jrot(i))+1
-      energy = energies(i)
-      !
-      if (partfunc_do) then
-        if (j/=j0) then 
-           !
-           if (specttype(1:4)=='PART') then 
-             if (verbose>=1.and.npoints<1000) print('("!",f8.1,3(1x,'//npoints_fmt//'es20.8))'),jrot(i),pf(ipartf,1:npoints)
-           else 
-             if (verbose>=4) print('("|",f8.1,1x,es16.8)'),jrot(i),partfunc
-           endif
-           !
-        endif
-        !
-        partfunc=partfunc+gtot(i)*exp(-beta*energy)
-        !
-        j0 = j
-        !
-       endif
+     if ( trim(species(i)%filename)/="" ) then
        !
-       if (specttype(1:4)=='PART') then
-         !
-         do itemp = 1,npoints
-           !
-           if (energy>enermax) cycle
-           !
-           temp0 = real(itemp,rk)*dtemp
-           !
-           beta0 = planck*vellgt/(boltz*temp0)
-           !
-           pf(0,itemp) = pf(0,itemp) + gtot(i)*exp(-beta0*energy)
-           pf(1,itemp) = pf(1,itemp) + gtot(i)*exp(-beta0*energy)*(beta0*energy)
-           pf(2,itemp) = pf(2,itemp) + gtot(i)*exp(-beta0*energy)*(beta0*energy)**2
-           !
-           pf(3,itemp) = ( pf(2,itemp)/pf(0,itemp)-(pf(1,itemp)/pf(0,itemp))**2 )
-           !
-         enddo
-         !
-       endif
+       write(ioname, '(a)') 'brodenning file'
        !
-   end do
-   close(enunit)
-   !
-   ! print out the computed part. function objects and finish
-   !
-   if (specttype(1:4)=='PART') then
-     !
-     j0rk = real(j0-1)*0.5_rk
-     !
-     if (verbose>=0) print('("!",f8.1,3(1x,'//npoints_fmt//'es20.8/))'),j0rk,pf(ipartf,1:npoints)
-     !
-     if (verbose>=0) print('("!0",8x,'//npoints_fmt//'es20.8)'),pf(0,1:npoints)
-     if (verbose>=0) print('("!1",8x,'//npoints_fmt//'es20.8)'),pf(1,1:npoints)
-     if (verbose>=0) print('("!2",8x,'//npoints_fmt//'es20.8)'),pf(2,1:npoints)
-     if (verbose>=0) print('("!3",8x,'//npoints_fmt//'es20.8)'),pf(3,1:npoints)
-     !
-     if (verbose>=3) print('(/a,1x,es16.8/)'),'! partition function value is',partfunc
-     !
-     if (verbose>=0) then 
-       print('(a)'),"Partition function"
-       do itemp = 1,npoints
-         temp0 = real(itemp,rk)*dtemp
-         print('(f12.2,1x,es20.8)'),temp0,pf(0,itemp)
+       call IOstart(trim(ioname),bunit)
+       open(unit=bunit,file=trim(species(i)%filename),action='read',status='old')
+       !
+       Jmax = 0 
+       !
+       do
+         !
+         ! Scan and find Jmax
+         read(bunit,*,end=14) gamma_,n_,J_
+         !
+         Jmax = max(Jmax,J_)
+         !
+         cycle 
+         14  exit
+         !
        enddo
-     endif 
+       !
+       if (Jmax>0) then
+         !
+         allocate(species(i)%gammaQN(0:Jmax,-1:1),stat=info)
+         call ArrayStart('gammaQN',info,size(species(i)%gammaQN),kind(species(i)%gammaQN))
+         species(i)%gammaQN(:,:) = species(i)%gamma
+         !
+         allocate(species(i)%nQN(0:Jmax,-1:1),stat=info)
+         call ArrayStart('nQN',info,size(species(i)%nQN),kind(species(i)%nQN))
+         species(i)%nQN(:,:) = species(i)%N
+         !
+        else
+         !
+         write(out,"('Jmax = 0 in ',a)") trim(species(i)%filename)
+         stop 'Jmax = 0 in a broadening file'
+         !
+       endif
+       !
+       rewind(bunit)
+       !
+       ! read in the QN-dependent broadening parameters
+       !
+       do
+         !
+         ! model specific read
+         !
+         select case ( trim(species(i)%model) )
+           !
+         case ('J','A0')
+           !
+           read(bunit,*,end=15) gamma_,n_,J
+           species(i)%gammaQN(J,:) = gamma_
+           species(i)%nQN(J,:) = n_
+           !
+         case ('JJ','A1')
+           !
+           read(bunit,*,end=15) gamma_,n_,Jpp,Jp
+           !
+           if (abs(Jp-Jpp)>1) stop 'Jp-Jpp in broadening file'
+           !
+           species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
+           species(i)%nQN(Jpp,Jp-Jpp) = n_
+           !
+         case ('JJKK-X')
+           !
+           read(bunit,*,end=15) gamma_,n_,Jpp,Jp,Kp,Kpp
+           !
+           if (abs(Jp-Jpp)>1) stop 'Jp-Jpp in broadening file'
+           if (Kp>Jp.or.Kpp>Jpp) stop 'K > J in broadening file'
+           !
+           !species(i)%gammaQN(Jpp,Jp-Jpp,Kp,Kpp) = gamma_
+           !species(i)%nQN(Jpp,Jp-Jpp,Kp,Kpp) = n_
+           !
+         case default 
+           !
+           write(out,"('The broadening model',a,' is not implemented yet')") trim(species(i)%model)
+           stop 'Illegal broadening model'
+           !
+         end select 
+         !
+         cycle 
+         15  exit
+         !
+       enddo
+       !
+     endif
      !
-     stop
-     !
-   else
-     !
-     if (verbose>=4) print('("|",f9.1,1x,es16.8)'),real(j0-1)*0.5,partfunc
-     !
-   endif
-   !
-   if (verbose>=2.or.(partfunc_do.and.verbose>0)) print('(1x,a,1x,es16.8/)'),'! partition function value is',partfunc
-   !
+     close(bunit)
+     ! 
+   enddo
    !
    ! Intensities
    !
@@ -753,6 +887,14 @@ module spectrum
        !
    end select
    !
+   ! estimate memory 
+   ! memory_limit-memory_now
+   !
+   if (hitran.and.partfunc<0.0) then
+     write(out,"('For HITRAN partition function must be defined using PF or QSTAT keywords')")
+     stop 'Undefined PF'
+   endif
+   !
    do i = 1,nfiles
      !
      open(unit=tunit,file=trim(intfilename(i)),action='read',status='old')
@@ -763,6 +905,29 @@ module spectrum
            ! using pre-computed integrated intensities for a given Temperature and bin
            !
            read(tunit,*,end=20) tranfreq,abscoef
+           !
+        elseif (hitran) then 
+           !
+           ! using pre-computed integrated intensities for a given Temperature and bin
+           !
+           read(tunit,"(i3,f12.6,e10.3e3,e10.3,10x,f10.4,12x,a55,23x,2f7.1)",end=20) imol,tranfreq,abscoef,acoef,energyi,ch_q,gf,gi
+           !
+           if (imol/=iso) cycle
+           !
+           if (tranfreq<small_) cycle
+           !
+           select case (trim(specttype))
+             !
+           case default
+             !
+             print('(a,2x,a)'),'Illegal key:',trim(specttype)
+             stop 'Illegal specttype-key'
+             !
+           case ('ABSORPTION')
+             !
+             abscoef=cmcoef*acoef*gf*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+             !
+           end select
            !
         else
            !
@@ -842,6 +1007,28 @@ module spectrum
           if (tranfreq<small_) cycle
           !
           halfwidth=dpwcoef*tranfreq
+          !
+        else
+          !
+          do ispecies =1,Nspecies
+            !
+            halfwidth = 0
+            !
+            if ( trim(species(ispecies)%filename)/="" ) then
+              !
+              gamma_ = species(ispecies)%gammaQN(Jpp,Jp-Jpp)
+              n_     = species(ispecies)%nQN(Jpp,Jp-Jpp)
+              !
+            else
+              !
+              gamma_ = species(ispecies)%gamma
+              n_     = species(ispecies)%n
+              !
+            endif
+            !
+            halfwidth =  halfwidth + species(ispecies)%ratio*gamma_*(species(ispecies)%T0/Temp)**N_*pressure/species(ispecies)%P0
+            !
+          enddo
           !
         endif
         !
@@ -1146,6 +1333,8 @@ module spectrum
             alpha = halfwidth0
             gamma = halfwidth
             !
+            !call voi_quad(npoints,ib,ie,freq,abscoef,intens,dfreq,tranfreq,alpha,gamma,nquad,abciss,weight)
+            !
             sigma = alpha/ln22
             !
             y = gamma/sigma
@@ -1333,14 +1522,82 @@ module spectrum
    !
    call ArrayStop('frequency')
    call ArrayStop('intens')
-   call ArrayStop('energies')
-   call ArrayStop('Jrot')
-   call ArrayStop('gtot')
+   if (trim(enrfilename)/="none") call ArrayStop('energies')
+   if (trim(enrfilename)/="none") call ArrayStop('Jrot')
+   if (trim(enrfilename)/="none") call ArrayStop('gtot')
    if (specttype(1:4)=='PART') call ArrayStop('pf')
    !
   end subroutine intensity
   !
 
+
+
+  subroutine voi_quad(npoints,ib,ie,freq,abscoef,intens,dfreq,tranfreq,alpha,gamma,nquad,abciss,weight)
+     implicit none 
+     !
+     integer(ik),intent(in) :: npoints,nquad,ib,ie
+     real(rk),intent(in)  :: abscoef,dfreq,alpha,gamma,tranfreq
+     real(rk), intent(in) :: freq(npoints),abciss(nquad),weight(nquad)
+     real(rk),intent(inout) :: intens(npoints)
+     !
+     real(rk) :: bnormq(nquad),Lorentz(nquad)
+     integer(ik) :: iquad,ipoint
+     real(rk)    :: sigma,y,dx2,xi,x1,x2,L1,L2,voigt_,ln22,xp
+       !
+       ln22 = log(2.0_rk)*2.0_rk
+       !
+       sigma = alpha/ln22
+       !
+       y = gamma/sigma
+       !
+       dx2 = dfreq*0.5_rk/sigma
+       !
+       do iquad=1,nquad
+          !
+          xi = abciss(iquad)
+          !
+          x1 = (freq(ib)-tranfreq)/sigma-xi
+          x2 = (freq(ie)-tranfreq)/sigma-xi
+          !
+          L1 = atan( x1/y )
+          L2 = atan( x2/y )
+          !
+          bnormq(iquad) = 1.0_rk/(L2-L1)*pi
+          !
+       enddo
+       !
+       Lorentz = 0
+       !
+       do ipoint=ib,ie
+          !
+          xp = (freq(ipoint)-tranfreq)/sigma
+          !
+          do iquad=1,nquad
+             !
+             xi = abciss(iquad)
+             !
+             x1 = xp-dx2-xi
+             x2 = xp+dx2-xi
+             !
+             L1 = atan( x1/y )
+             L2 = atan( x2/y )
+             !
+             Lorentz(iquad) = (L2-L1)/pi
+             !
+          enddo
+          !
+          voigt_ = sum(Lorentz(1:nquad)*weight(1:nquad)*bnormq(1:nquad))/dfreq
+          !
+          intens(ipoint)=intens(ipoint)+abscoef*voigt_
+          !
+       enddo
+       !
+  end subroutine voi_quad 
+
+
+
+
+  !
   function voigt_faddeeva(nu,nu0,alpha,gamma) result(f)
    !
    real(rk),intent(in) :: nu,nu0,alpha,gamma
