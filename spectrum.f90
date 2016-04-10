@@ -8,7 +8,7 @@ module spectrum
   private
   public intensity,readinput,verbose
   !
-  integer(ik),parameter   :: nfiles_max =1000, max_items = 1000, nspecies_max = 10, nquadmax = 100, filtermax = 100
+  integer(ik),parameter   :: nfiles_max =1000, max_items = 1000, nspecies_max = 10, nquadmax = 101, filtermax = 100
   !
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=3,ioffset = 10,iso=1
   real(rk)      :: temp=298.0,partfunc=-1.0,freql=-small_,freqr= 20000.0,thresh=1.0d-90,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
@@ -101,6 +101,10 @@ module spectrum
           call readi(nquad)
           !
           if (nquad>nquadmax) call report ("nquad is > nquadmax, which then should be icreased ",.true.)
+          !
+          ! nquad must be odd
+          !
+          !if (mod(nquad,2)==0) nquad = nquad + 1
           !
         case ("PF","QSTAT")
           !
@@ -436,9 +440,10 @@ module spectrum
    use  input
    !
    integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,j,ilog,ib,ie,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,kitem,l,nlines,iquad,ifilter
-   real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0,dnu_half
+   integer(ik) :: indexf_,indexi_
+   real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0,dnu_half,dxp
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,bnorm,f,eta1,eta2,intens1,intens2,Va0,gammaV,a,wg,d
-   real(rk)    :: sigma,alpha,gamma,y,x1,x2,voigt_,dx2,xi,L1,L2
+   real(rk)    :: sigma,alpha,gamma,y,x1,x2,voigt_,dx2,xi,L1,L2,acoef_
    integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,ispecies
    real(rk)    :: gamma_,n_
    character(len=cl) :: ioname
@@ -449,7 +454,10 @@ module spectrum
    integer(ik),allocatable :: gtot(:),indices(:)
    character(len=20),allocatable :: quantum_numbers(:,:)
    !
+   integer(ik),allocatable :: nchars_quanta(:)  ! max number of characters used for each quantum number
+   !
    character(len=9) :: npoints_fmt  !text variable containing formats for reads/writes
+   character(len=9) :: b_fmt
    integer(hik):: Nintens(-60:60)
    !
    logical :: eof
@@ -551,8 +559,13 @@ module spectrum
         !
       endif
       !
-      allocate(quantum_numbers(maxitems,iline),stat=info)
+      allocate(quantum_numbers(0:maxitems,iline),nchars_quanta(maxitems),stat=info)
       call ArrayStart('quantum_numbers',info,size(quantum_numbers),kind(quantum_numbers))
+      call ArrayStart('nchars_quanta',info,size(nchars_quanta),kind(nchars_quanta))
+      !
+      ! default, min value of number of characters for quantum numbers outputs
+      !
+      nchars_quanta = 3
       !
       if (verbose>=3) call MemoryReport
       !
@@ -613,9 +626,16 @@ module spectrum
          call readi(gtot(i))
          call readf(jrot(i))
          !
+         if (mod(nint(jrot(i)*2),2)/=0) then 
+           write(b_fmt,"(f5.1)") jrot(i)             ; quantum_numbers(0,i) = adjustl(b_fmt)
+         else
+           write(b_fmt,"(tl1,i5,tl1)") nint(jrot(i)) ; quantum_numbers(0,i) = adjustl(b_fmt)
+         endif 
+         !
          do kitem = 5,nitems
             !
             call reada(quantum_numbers(kitem-4,i))
+            nchars_quanta(kitem-4) = max(len(trim(quantum_numbers(kitem-4,i))),nchars_quanta(kitem-4))
             !
          enddo
          !
@@ -623,7 +643,7 @@ module spectrum
            !
            do ifilter = 1,Nfilters
              !
-             if (lower(ifilter)%i<1.or.lower(ifilter)%i>nitems-4.or.upper(ifilter)%i<1.or.upper(ifilter)%i>nitems-4) then
+             if (lower(ifilter)%i<0.or.lower(ifilter)%i>nitems-4.or.upper(ifilter)%i<0.or.upper(ifilter)%i>nitems-4) then
                !
                write(out,"('wrong filter indices, upper or lower: ',2i)") upper(ifilter)%i+4,lower(ifilter)%i+4
                print*,quantum_numbers(:,i)
@@ -829,6 +849,9 @@ module spectrum
    intens = 0.0
    intband = 0.0
    sunit = 0
+   acoef_ = 0
+   indexf_ = 0
+   indexi_ = 0
    !
    Nintens = 0
    !
@@ -912,6 +935,8 @@ module spectrum
            !
            read(tunit,"(i3,f12.6,e10.3e3,e10.3,10x,f10.4,12x,a55,23x,2f7.1)",end=20) imol,tranfreq,abscoef,acoef,energyi,ch_q,gf,gi
            !
+           energyf = tranfreq + energyi
+           !
            if (imol/=iso) cycle
            !
            if (tranfreq<small_) cycle
@@ -935,6 +960,8 @@ module spectrum
            !
            read(tunit,*,end=20) indexf,indexi,acoef
            !
+           indexf_ = indexf ; indexi_ = indexi ; acoef_ = acoef
+           !
            if (indexf>nlevels.or.indexi>nlevels) cycle
            !
            ilevelf = indices(indexf)
@@ -957,7 +984,8 @@ module spectrum
              !
              do ifilter = 1,Nfilters
                !
-               if (upper(ifilter)%mask/=trim(quantum_numbers(upper(ifilter)%i,ilevelf)).or.lower(ifilter)%mask/=trim(quantum_numbers(lower(ifilter)%i,ileveli))) cycle loop_tran
+               if (upper(ifilter)%mask/=trim(quantum_numbers(upper(ifilter)%i,ilevelf)).and.trim(upper(ifilter)%mask)/="") cycle loop_tran
+               if (lower(ifilter)%mask/=trim(quantum_numbers(lower(ifilter)%i,ileveli)).and.trim(lower(ifilter)%mask)/="") cycle loop_tran
                !
              enddo
              !
@@ -969,6 +997,16 @@ module spectrum
            tranfreq = energyf-energyi
            !
            if (tranfreq<small_) cycle
+           !
+           ! check for duplicates 
+           !
+           if (indexf==indexf_.and.indexi_==indexi) then
+             !
+             if (abs(acoef-acoef_)>small_) then
+               write(out,"('but A-coefs are different:',2e17.5)") acoef_,acoef
+             endif 
+             !
+           endif
            !
            select case (trim(specttype))
              !
@@ -1057,6 +1095,13 @@ module spectrum
         ! if only stick spectrum needed
         if (proftype(1:5)=='STICK') then
            !
+           if (hitran) then 
+             !
+             write(out,"('HITRAN option has not been implemeneted to worj with STICK yet, try other options')")
+             stop 'HITRAN is not working with STICK'
+             !
+           endif
+           !
            if (abscoef>thresh)  then 
               !
               ! write to .stick-file
@@ -1065,13 +1110,15 @@ module spectrum
               write(out,my_fmt,advance="no"), &
               tranfreq,abscoef,jrot(ilevelf),energyf, jrot(ileveli),energyi 
               !
-              write(out,"(a4)",advance="no"), " <- "
+              !write(out,"(a4)",advance="no"), " <- "
               !
               do kitem = 1,maxitems 
                 !
                 l = len(trim(quantum_numbers(kitem,ilevelf)))
                 !
                 b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
+                !
+                write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
                 !
                 write(out,b_fmt,advance="no"), trim(quantum_numbers(kitem,ilevelf))
                 !
@@ -1081,9 +1128,11 @@ module spectrum
               !
               do kitem = 1,maxitems 
                 !
-                l = len(trim(quantum_numbers(kitem,ileveli)))
+                !l = len(trim(quantum_numbers(kitem,ileveli)))
                 !
-                b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
+                !b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
+                !
+                write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
                 !
                 write(out,b_fmt,advance="no"), trim(quantum_numbers(kitem,ileveli))
                 !
@@ -1357,17 +1406,19 @@ module spectrum
             !
             Lorentz = 0
             !
-            !$omp parallel do private(ipoint,xp,iquad,xi,x1,x2,L1,L2,Lorentz,voigt_) shared(intens) schedule(dynamic)
+            !$omp parallel do private(ipoint,xp,iquad,xi,x1,x2,dxp,L1,L2,Lorentz,voigt_) shared(intens) schedule(dynamic)
             do ipoint=ib,ie
                !
                xp = (freq(ipoint)-tranfreq)/sigma
+               !
+               dxp  = xp-xi
                !
                do iquad=1,nquad
                   !
                   xi = abciss(iquad)
                   !
-                  x1 = xp-dx2-xi
-                  x2 = xp+dx2-xi
+                  x1 = dxp-dx2
+                  x2 = dxp+dx2
                   !
                   L1 = atan( x1/y )
                   L2 = atan( x2/y )
@@ -1464,9 +1515,11 @@ module spectrum
        !
        do kitem = 1,maxitems 
          !
-         l = len(trim(quantum_numbers(kitem,ilevelf)))
+         !l = len(trim(quantum_numbers(kitem,ilevelf)))
          !
-         b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
+         !b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
+         !
+         write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
          !
          write(tunit,b_fmt,advance="no"), trim(quantum_numbers(kitem,ilevelf))
          !
@@ -1778,6 +1831,94 @@ module spectrum
        !
        return
     end subroutine gauher
+
+
+    subroutine gauher_half(x,w,n)
+       !
+       ! modified for w = exp(-x^2/2)/sqrt(2 pi)
+       !
+       integer(ik) :: n,MAXIT
+       real(rk) :: w(n),x(n)
+       real(rk) ::  EPS,PIM4
+       parameter (EPS=3.D-16,PIM4=.75112554446494248285870300477622_rk,MAXIT=40)
+       integer(ik) :: i,its,j,m
+       real(rk) ::p1,p2,p3,pp,z,z1
+
+       !
+       !if (n==20) then 
+       !  !
+       !     x(1:20)  = &
+       !       (/-7.619048541679757_rk,-6.510590157013656_rk,-5.578738805893203_rk,&
+       !       -4.734581334046057_rk,-3.943967350657318_rk,-3.18901481655339_rk,&
+       !       -2.458663611172367_rk,-1.745247320814127_rk,-1.042945348802751_rk,&
+       !       -0.346964157081356_rk, 0.346964157081356_rk, 1.042945348802751_rk,&
+       !        1.745247320814127_rk, 2.458663611172367_rk, 3.18901481655339_rk,&
+       !        3.943967350657316_rk, 4.734581334046057_rk, 5.578738805893202_rk,&
+       !        6.510590157013653_rk, 7.619048541679757_rk/)
+       !   w(1:20) =  (/0.000000000000126_rk, 0.000000000248206_rk, 0.000000061274903_rk,&
+       !        0.00000440212109_rk, 0.000128826279962_rk, 0.00183010313108_rk,&
+       !        0.013997837447101_rk, 0.061506372063977_rk, 0.161739333984_rk,&
+       !        0.260793063449555_rk, 0.260793063449555_rk, 0.161739333984_rk,&
+       !        0.061506372063977_rk, 0.013997837447101_rk, 0.00183010313108_rk,&
+       !        0.000128826279962_rk, 0.00000440212109_rk, 0.000000061274903_rk,&
+       !        0.000000000248206_rk, 0.000000000000126_rk/)
+       !   return
+       !  !
+       !endif 
+       !
+       ! do only half 
+       ! m=(n+1)/2
+       !
+       m=n
+       !
+       do i=1,m
+         !
+         if(i.eq.1)then
+           z=sqrt(float(2*n+1))-1.85575*(2*n+1)**(-.16667)
+         else if(i.eq.2)then
+           z=z-1.14*n**.426/z
+         else if (i.eq.3)then
+           z=1.86*z-.86*x(1)
+         else if (i.eq.4)then
+           z=1.91*z-.91*x(2)
+         else
+           z=2.*z-x(i-2)
+         endif
+         do its=1,MAXIT
+           p1=PIM4
+           p2=0.0_rk
+           do j=1,n
+             p3=p2
+             p2=p1
+             p1=z*sqrt(2.0_rk/j)*p2-sqrt(real(j-1,ark)/real(j,ark))*p3
+           enddo
+           pp=sqrt(2.0_rk*n)*p2
+           z1=z
+           z=z1-p1/pp
+           if(abs(z-z1).le.EPS) exit
+           !
+         enddo
+         if (its==MAXIT) stop 'too many iterations in gauher'
+         x(i)=z
+         !
+         ! exclude the symmetric point
+         !x(n+1-i)=-z
+         !
+         w(i)=2.0_rk/(pp*pp)
+         !
+         ! exclude the symmetric point
+         !w(n+1-i)=w(i)
+         !
+       enddo
+       !
+       w = w / sqrt(pi) * 2.0_rk
+       x = x*sqrt(2.0_rk)
+       !
+       return
+    end subroutine gauher_half
+
+
+
     !C  (C) Copr. 1986-92 Numerical Recipes Software 
 
   subroutine gauher_ark(xr,wr,n)
