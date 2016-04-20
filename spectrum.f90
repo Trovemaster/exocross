@@ -15,9 +15,9 @@ module spectrum
   real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = -25.0, pressure = 1.0_rk 
   real(rk)      :: enermax = 1e6, abscoef_thresh = 1.0d-50
   integer(ik)   :: nquad = 20      ! Number of quadrature points 
-
   !
   character(len=cl) :: specttype="absorption",enrfilename="none",intfilename(nfiles_max),proftype="DOPPL",output="output"
+  integer(ik)   :: intJvalue(nfiles_max)
   character(4) a_fmt
   character(9) b_fmt
   !
@@ -46,7 +46,7 @@ module spectrum
   integer(ik)    :: Nspecies = 0, Nfilters = 0
   type(speciesT) :: species(nspecies_max)
   !
-  logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran = .false.
+  logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran = .false.,  histogramJ = .false.
   !
   contains
   !
@@ -192,6 +192,11 @@ module spectrum
           !
           histogram = .true.
           !
+        case ("HISTOGRAM-J")
+          !
+          histogram = .true.
+          histogramJ = .true.
+          !
         case ("HITRAN")
           !
           hitran = .true.
@@ -275,6 +280,10 @@ module spectrum
            nfiles = 1 
            call reada(intfilename(1))
            !
+           ! for J-dependent histograms a J-value is expected in the last column 
+           !
+           if (histogramJ)   call readi(intJvalue(1))
+           !
            cycle 
            !
          endif
@@ -291,6 +300,12 @@ module spectrum
            if (i>nfiles_max) call report ("Too many files, increase nfiles_max"//trim(w),.true.)
            !
            intfilename(i) = trim(v)
+           !
+           ! for J-dependent histograms a J-value is expected in the last column 
+           !
+           if (histogramJ) then 
+             call readi(intJvalue(i))
+           endif 
            !
            call read_line(eof) ; if (eof) exit
            call reada(w)
@@ -929,6 +944,12 @@ module spectrum
            !
            read(tunit,*,end=20) tranfreq,abscoef
            !
+           ! for pre-computed J-dependent integrated intensities 
+           if (histogramJ) then 
+             Ji = IntJvalue(i)
+             Jf = Ji
+           endif
+           !
         elseif (hitran) then 
            !
            ! using pre-computed integrated intensities for a given Temperature and bin
@@ -959,8 +980,6 @@ module spectrum
            !   read new line from intensities file
            !
            read(tunit,*,end=20) indexf,indexi,acoef
-           !
-           indexf_ = indexf ; indexi_ = indexi ; acoef_ = acoef
            !
            if (indexf>nlevels.or.indexi>nlevels) cycle
            !
@@ -1000,11 +1019,13 @@ module spectrum
            !
            ! check for duplicates 
            !
-           if (indexf==indexf_.and.indexi_==indexi) then
+           if (indexf==indexf_.and.indexi_==indexi.and.abs(acoef-acoef_)<small_) then
              !
+             write(out,"('Duplicate: J = ',2f9.1,' E = ',2f18.6,' Ind = ',2i9,' A = ',e18.5)") jf,ji,energyf,energyi,indexf_,indexi_,acoef
              if (abs(acoef-acoef_)>small_) then
                write(out,"('but A-coefs are different:',2e17.5)") acoef_,acoef
              endif 
+             stop 'Duplicates'
              !
            endif
            !
@@ -1053,6 +1074,9 @@ module spectrum
             halfwidth = 0
             !
             if ( trim(species(ispecies)%filename)/="" ) then
+              !
+              Jpp = nint(Ji)
+              Jp  = nint(Jf)
               !
               gamma_ = species(ispecies)%gammaQN(Jpp,Jp-Jpp)
               n_     = species(ispecies)%nQN(Jpp,Jp-Jpp)
@@ -1489,6 +1513,10 @@ module spectrum
           intens(ipoint)=intens(ipoint)+abscoef
           !
         end select
+        !
+        ! will be used to check duplicates 
+        !
+        indexf_ = indexf ; indexi_ = indexi ; acoef_ = acoef
         !
         cycle
      20  exit
