@@ -1435,11 +1435,11 @@ module spectrum
                !
                xp = (freq(ipoint)-tranfreq)/sigma
                !
-               dxp  = xp-xi
-               !
                do iquad=1,nquad
                   !
                   xi = abciss(iquad)
+                  !
+                  dxp  = xp-xi
                   !
                   x1 = dxp-dx2
                   x2 = dxp+dx2
