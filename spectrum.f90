@@ -660,7 +660,7 @@ module spectrum
              !
              if (lower(ifilter)%i<0.or.lower(ifilter)%i>nitems-4.or.upper(ifilter)%i<0.or.upper(ifilter)%i>nitems-4) then
                !
-               write(out,"('wrong filter indices, upper or lower: ',2i)") upper(ifilter)%i+4,lower(ifilter)%i+4
+               write(out,"('wrong filter indices, upper or lower: ',2i9)") upper(ifilter)%i+4,lower(ifilter)%i+4
                print*,quantum_numbers(:,i)
                stop 'wrong filter indices, upper or lower'
                !
@@ -1015,7 +1015,7 @@ module spectrum
            !
            tranfreq = energyf-energyi
            !
-           if (tranfreq<small_) cycle
+           if (tranfreq<small_.or.abscoef<thresh) cycle
            !
            ! check for duplicates 
            !
@@ -1069,9 +1069,9 @@ module spectrum
           !
         else
           !
+          halfwidth = 0
+          !
           do ispecies =1,Nspecies
-            !
-            halfwidth = 0
             !
             if ( trim(species(ispecies)%filename)/="" ) then
               !
@@ -1126,7 +1126,7 @@ module spectrum
              !
            endif
            !
-           if (abscoef>thresh)  then 
+           !if (abscoef>thresh)  then 
               !
               ! write to .stick-file
               write(sunit,my_fmt) tranfreq,abscoef
@@ -1164,7 +1164,7 @@ module spectrum
               !
               write(out,"(a1)",advance="yes") " "
               !
-           endif 
+           !endif 
            !
            cycle
         end if
