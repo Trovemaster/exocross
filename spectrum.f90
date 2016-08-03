@@ -1015,7 +1015,7 @@ module spectrum
            !
            tranfreq = energyf-energyi
            !
-           if (tranfreq<small_.or.abscoef<thresh) cycle
+           if (tranfreq<small_) cycle
            !
            ! check for duplicates 
            !
@@ -1093,6 +1093,8 @@ module spectrum
           enddo
           !
         endif
+        !
+        if (abscoef<thresh) cycle
         !
         if (offset<0) offset = ioffset*halfwidth
         !
