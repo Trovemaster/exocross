@@ -38,15 +38,22 @@ module spectrum
     character(len=cl) :: model="const"  ! Broadening model
     real(rk),pointer  :: gammaQN(:,:) ! Voigt parameter gamma as a function of QN
     real(rk),pointer  :: nQN(:,:)     ! Voigt parameter n as a function of QN
+    real(rk)          :: delta = 0    ! Pressure shift induced by air, referred to p=1 atm
     !
   end type speciesT
+  !
+  type HitranT
+    integer(ik)  :: molec_id     = 1 ! The HITRAN integer ID for this molecule in all its isotopologue forms
+    integer(ik)  :: molec_iso_id = 1 ! Integer ID of a particular Isotopologue, unique only to a given molecule, in order or abundance (1 = most abundant)
+  end type HitranT
   !
   type(selectT) :: upper(filtermax),lower(filtermax)
   !
   integer(ik)    :: Nspecies = 0, Nfilters = 0
   type(speciesT) :: species(nspecies_max)
+  type(hitranT) :: hitran
   !
-  logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran = .false.,  histogramJ = .false.
+  logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., stick_hitran = .false.
   !
   contains
   !
@@ -199,8 +206,40 @@ module spectrum
           !
         case ("HITRAN")
           !
-          hitran = .true.
+          hitran_do = .true.
           !
+          call read_line(eof) ; if (eof) exit
+          call readu(w)
+          !
+          do while (trim(w)/="".and.trim(w)/="END")
+            !
+            select case(w)
+            !
+            case('WRITE')
+            !
+            hitran_do = .false.
+            stick_hitran = .true.
+            !
+            case('ID')
+              !
+              call readi(hitran%molec_id)
+              !
+              if (hitran%molec_id<0) call report ("Illegal molec_id "//trim(w),.true.)
+              !
+            case ("ISO","ISO_ID")
+              !
+              call readi(hitran%molec_iso_id)
+              !
+            case default
+              !
+              call report ("Unrecognized unit name "//trim(w),.true.)
+              !
+            end select
+            !
+            call read_line(eof) ; if (eof) exit
+            call readu(w)
+            !
+          enddo          !
         case ("SELECT","FILTER")
           !
           filter  = .true.
@@ -340,6 +379,14 @@ module spectrum
           if (trim(w(1:3))=="PSE") ioffset = 500
           offset = 25.0_rk
           !
+          if (trim(w(1:5))=="STICK".and.Nitems>1) then 
+            call readu(w)
+            if (trim(w)=="HITRAN") call report ("Illegal keyord for stick, HITRAN expected not "//trim(w),.true.)
+            !
+            stick_hitran = .true.
+            !
+          endif
+          !
        case ("HWHM","HALFWIDTH")
           !
           call readf(halfwidth)
@@ -385,6 +432,10 @@ module spectrum
               case ("N")
                 !
                 call readf(species(i)%N)
+                !
+              case("DELTA")
+                !
+                call readf(species(i)%delta)
                 !
               case ("RATIO")
                 !
@@ -478,7 +529,7 @@ module spectrum
    logical :: eof
    character(len=cl) :: w
    !
-   integer(ik) :: imol
+   integer(ik) :: imol,nchars_
    real(rk)    :: gf,gi
    character(55) ch_q
    !
@@ -506,7 +557,7 @@ module spectrum
    !
    ! open and count number of lines (levels) in the Energy files
    !
-   if (trim(enrfilename)/="none".and..not.hitran) then
+   if (trim(enrfilename)/="none".and..not.hitran_do) then
       !
       write(ioname, '(a)') 'Energy file'
       call IOstart(trim(ioname),enunit)
@@ -926,7 +977,7 @@ module spectrum
       enddo 
    endif
    !
-   if (hitran.and.partfunc<0.0) then
+   if (hitran_do.and.partfunc<0.0) then
      write(out,"('For HITRAN partition function must be defined using PF or QSTAT keywords')")
      stop 'Undefined PF'
    endif
@@ -948,7 +999,7 @@ module spectrum
              Jf = Ji
            endif
            !
-        elseif (hitran) then 
+        elseif (hitran_do) then 
            !
            ! HITRAN format
            !
@@ -1119,14 +1170,67 @@ module spectrum
         ! if only stick spectrum needed
         if (proftype(1:5)=='STICK') then
            !
-           if (hitran) then 
+           if (stick_hitran) then 
              !
-             write(out,"('HITRAN option has not been implemeneted to worj with STICK yet, try other options')")
-             stop 'HITRAN is not working with STICK'
+             write(out,"(i2,i1,f12.6,e10.3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6)",advance="no") &
+                         hitran%molec_id,hitran%molec_iso_id,tranfreq,abscoef,acoef,&
+                         species(1)%gamma,species(2)%gamma,&
+                         energyi,species(1)%n,species(1)%delta
              !
-           endif
-           !
-           !if (abscoef>thresh)  then 
+             !
+             nchars_ = 0 
+             !
+             do kitem = 2,maxitems 
+               !
+               l = len(trim(quantum_numbers(kitem,ilevelf)))
+               !
+               b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
+               !
+               write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
+               !
+               nchars_  = nchars_ + nchars_quanta(kitem)
+               !
+               if (nchars_>15) cycle
+               !
+               write(out,b_fmt,advance="no"), trim(quantum_numbers(kitem,ilevelf))
+               !
+             enddo
+             !
+             nchars_ = 0 
+             !
+             do kitem = 2,maxitems 
+               !
+               !l = len(trim(quantum_numbers(kitem,ileveli)))
+               !
+               !b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
+               !
+               write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
+               !
+               nchars_  = nchars_ + nchars_quanta(kitem)
+               !
+               if (nchars_>15) cycle
+               !
+               write(out,b_fmt,advance="no"), trim(quantum_numbers(kitem,ileveli))
+               !
+             enddo
+             !
+             if ( mod(nint(2*Jf),2)==0 ) then 
+               !
+               write(out,'(i7,2x,a1,5x)',advance="no"), nint(Jf),trim(quantum_numbers(1,ilevelf))
+               write(out,'(i7,2x,a1,5x)',advance="no"), nint(Ji),trim(quantum_numbers(1,ileveli))
+               !
+             else 
+               !
+               write(out,'(f7.1,2x,a1,5x)',advance="no"), Jf,trim(quantum_numbers(1,ilevelf))
+               write(out,'(f7.1,2x,a1,5x)',advance="no"), Ji,trim(quantum_numbers(1,ileveli))
+               !
+             endif
+             !
+             write(out,"('0 0x',f7.1,f7.1)",advance="yes") real(gtot(ilevelf)),real(gtot(ileveli))
+             !
+           else
+              !
+              !if (abscoef>thresh)  then 
               !
               ! write to .stick-file
               write(sunit,my_fmt) tranfreq,abscoef
@@ -1172,7 +1276,7 @@ module spectrum
               !
               write(out,"(a1)",advance="yes") " "
               !
-           !endif 
+           endif 
            !
            cycle
         end if
