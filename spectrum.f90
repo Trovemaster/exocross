@@ -459,7 +459,7 @@ module spectrum
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0,dnu_half,dxp
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,bnorm,f,eta1,eta2,intens1,intens2,Va0,gammaV,a,wg,d
    real(rk)    :: sigma,alpha,gamma,y,x1,x2,voigt_,dx2,xi,L1,L2,acoef_
-   integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,ispecies
+   integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,ispecies,alloc_p
    real(rk)    :: gamma_,n_
    character(len=cl) :: ioname
    character(wl) :: string_tmp
@@ -886,13 +886,6 @@ module spectrum
           write(out,"(10x,'Partition function = ',f17.4)") partfunc
           write(out,"(10x,'Spectrum type = ',a/)") trim(specttype)
           if (offset<0) write(out,"(10x,'Line truncated at ',f9.2/)") offset
-          if (Nspecies>0) then 
-             write(out,"(10x,'Pressure = ',e18.7)") pressure
-             write(out,"(10x,'Voigt parameters:  gamma       n         T0            P0')")
-             do i =1,Nspecies
-               write(out,"(21x,a,4f12.4)") trim(species(i)%name),species(i)%gamma,species(i)%n,species(i)%t0,species(i)%p0
-             enddo 
-          endif
           !
        endif
        !
@@ -925,8 +918,13 @@ module spectrum
        !
    end select
    !
-   ! estimate memory 
-   ! memory_limit-memory_now
+   if (Nspecies>0) then 
+      write(out,"(10x,'Pressure = ',e18.7)") pressure
+      write(out,"(10x,'Voigt parameters:  gamma       n         T0            P0')")
+      do i =1,Nspecies
+        write(out,"(21x,a,4f12.4)") trim(species(i)%name),species(i)%gamma,species(i)%n,species(i)%t0,species(i)%p0
+      enddo 
+   endif
    !
    if (hitran.and.partfunc<0.0) then
      write(out,"('For HITRAN partition function must be defined using PF or QSTAT keywords')")
@@ -952,9 +950,9 @@ module spectrum
            !
         elseif (hitran) then 
            !
-           ! using pre-computed integrated intensities for a given Temperature and bin
+           ! HITRAN format
            !
-           read(tunit,"(i3,f12.6,e10.3e3,e10.3,10x,f10.4,12x,a55,23x,2f7.1)",end=20) imol,tranfreq,abscoef,acoef,energyi,ch_q,gf,gi
+           read(tunit,"(i3,f12.6,e10.3,e10.3,10x,f10.4,12x,a55,23x,2f7.1)",end=20) imol,tranfreq,abscoef,acoef,energyi,ch_q,gf,gi
            !
            energyf = tranfreq + energyi
            !
@@ -1135,6 +1133,14 @@ module spectrum
               !
               write(out,my_fmt,advance="no"), &
               tranfreq,abscoef,jrot(ilevelf),energyf, jrot(ileveli),energyi 
+              !
+              ! printing the line width 
+              !
+              if (Nspecies>0) then 
+                !
+                write(out,"(f12.5)",advance="no") halfwidth
+                !
+              endif
               !
               !write(out,"(a4)",advance="no"), " <- "
               !
