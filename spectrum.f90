@@ -42,16 +42,10 @@ module spectrum
     !
   end type speciesT
   !
-  type HitranT
-    integer(ik)  :: molec_id     = 1 ! The HITRAN integer ID for this molecule in all its isotopologue forms
-    integer(ik)  :: molec_iso_id = 1 ! Integer ID of a particular Isotopologue, unique only to a given molecule, in order or abundance (1 = most abundant)
-  end type HitranT
-  !
   type(selectT) :: upper(filtermax),lower(filtermax)
   !
   integer(ik)    :: Nspecies = 0, Nfilters = 0
   type(speciesT) :: species(nspecies_max)
-  type(hitranT) :: hitran
   !
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., stick_hitran = .false.
   !
@@ -208,38 +202,21 @@ module spectrum
           !
           hitran_do = .true.
           !
-          call read_line(eof) ; if (eof) exit
-          call readu(w)
+          if (nitems>1) then 
+            call readu(w) 
+            if (trim(w)/="READ".and.trim(w)/="WRITE") then 
+              call report ("Illegal HITRAN keyword: only read and write are legal"//trim(w),.true.)
+            endif
+            !
+            if (trim(w)=="WRITE") then
+              !
+              hitran_do = .false.
+              stick_hitran = .true.
+              !
+            endif
+            !
+          endif
           !
-          do while (trim(w)/="".and.trim(w)/="END")
-            !
-            select case(w)
-            !
-            case('WRITE')
-            !
-            hitran_do = .false.
-            stick_hitran = .true.
-            !
-            case('ID')
-              !
-              call readi(hitran%molec_id)
-              !
-              if (hitran%molec_id<0) call report ("Illegal molec_id "//trim(w),.true.)
-              !
-            case ("ISO","ISO_ID")
-              !
-              call readi(hitran%molec_iso_id)
-              !
-            case default
-              !
-              call report ("Unrecognized unit name "//trim(w),.true.)
-              !
-            end select
-            !
-            call read_line(eof) ; if (eof) exit
-            call readu(w)
-            !
-          enddo          !
         case ("SELECT","FILTER")
           !
           filter  = .true.
@@ -904,9 +881,9 @@ module spectrum
          !
        enddo
        !
+       close(bunit)
+       !
      endif
-     !
-     close(bunit)
      ! 
    enddo
    !
@@ -1172,15 +1149,15 @@ module spectrum
            !
            if (stick_hitran) then 
              !
-             write(out,"(i2,i1,f12.6,e10.3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6)",advance="no") &
-                         hitran%molec_id,hitran%molec_iso_id,tranfreq,abscoef,acoef,&
+             write(out,"(i3,f12.6,e10.3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6)",advance="no") &
+                         iso,tranfreq,abscoef,acoef,&
                          species(1)%gamma,species(2)%gamma,&
                          energyi,species(1)%n,species(1)%delta
              !
              !
              nchars_ = 0 
              !
-             do kitem = 2,maxitems 
+             do kitem = 3,maxitems 
                !
                l = len(trim(quantum_numbers(kitem,ilevelf)))
                !
@@ -1198,7 +1175,7 @@ module spectrum
              !
              nchars_ = 0 
              !
-             do kitem = 2,maxitems 
+             do kitem = 3,maxitems 
                !
                !l = len(trim(quantum_numbers(kitem,ileveli)))
                !
@@ -1216,17 +1193,17 @@ module spectrum
              !
              if ( mod(nint(2*Jf),2)==0 ) then 
                !
-               write(out,'(i7,2x,a1,5x)',advance="no"), nint(Jf),trim(quantum_numbers(1,ilevelf))
-               write(out,'(i7,2x,a1,5x)',advance="no"), nint(Ji),trim(quantum_numbers(1,ileveli))
+               write(out,'(i7,1x,a1,1x,a1)',advance="no"), nint(Jf),trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
+               write(out,'(i7,1x,a1,1x,a1)',advance="no"), nint(Ji),trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
                !
              else 
                !
-               write(out,'(f7.1,2x,a1,5x)',advance="no"), Jf,trim(quantum_numbers(1,ilevelf))
-               write(out,'(f7.1,2x,a1,5x)',advance="no"), Ji,trim(quantum_numbers(1,ileveli))
+               write(out,'(f7.1,1x,a1,1x,a1)',advance="no"), Jf,trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
+               write(out,'(f7.1,1x,a1,1x,a1)',advance="no"), Ji,trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
                !
              endif
              !
-             write(out,"('0 0x',f7.1,f7.1)",advance="yes") real(gtot(ilevelf)),real(gtot(ileveli))
+             write(out,"('000000 0 0 0 0 0 0 0',f7.1,f7.1)",advance="yes") real(gtot(ilevelf)),real(gtot(ileveli))
              !
            else
               !
