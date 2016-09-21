@@ -1093,6 +1093,10 @@ module spectrum
           !
           halfwidth=dpwcoef*tranfreq
           !
+        elseif (proftype(1:5)=='GAUSS') then
+          !
+          halfwidth = halfwidth
+          !
         else
           !
           halfwidth = 0
