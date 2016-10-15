@@ -142,7 +142,7 @@ module spectrum
           !
           call readi(verbose)
           !
-        case ("PARTFUNC","PARTITION-FUNCTION")
+        case ("PARTFUNC","PARTITION-FUNCTION","COOLING")
           !
           specttype = trim(w)
           !
@@ -493,7 +493,7 @@ module spectrum
    character(wl) :: string_tmp
    real(rk) :: Lorentz(nquadmax)
    !
-   real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
+   real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:),cooling(:)
    integer(ik),allocatable :: gtot(:),indices(:)
    character(len=20),allocatable :: quantum_numbers(:,:)
    !
@@ -623,7 +623,7 @@ module spectrum
       ! In case of specttype = partfunc the partition function will be computed for a series of temperatures. 
       ! npoints stands for the number of temperature steps, and the frequency limits as temperature limits
       !
-      if (specttype(1:4)=='PART') then
+      if (specttype(1:4)=='PART'.or.specttype(1:4)=='COOL') then
         !
         if (trim(enrfilename)=="none") then 
            !
@@ -634,20 +634,33 @@ module spectrum
         !
         dtemp=maxtemp/real(npoints,rk)
         !
-        if (ipartf<0.or.ipartf>3) stop "illegal partfunc component, can be only 0,1,2,3"
-        !
-        if (verbose>=1) print("('0,1,2,3 stand for PF, 1st and 2d moments and Cp:')")
-        !
-        if (verbose>=1) print('("!",5x,a4,( 1x,'//npoints_fmt//'( 5x,"T=",f8.2,5x) ) )'),'  J ',(i*dtemp,i=1,npoints)
+        if (specttype(1:4)=='PART') then 
+          !
+          if (ipartf<0.or.ipartf>3) stop "illegal partfunc component, can be only 0,1,2,3"
+          !
+          if (verbose>=1) print("('0,1,2,3 stand for PF, 1st and 2d moments and Cp:')")
+          !
+          if (verbose>=1) print('("!",5x,a4,( 1x,'//npoints_fmt//'( 5x,"T=",f8.2,5x) ) )'),'  J ',(i*dtemp,i=1,npoints)
+          !
+        endif
         !
         allocate(pf(0:3,npoints),stat=info)
         call ArrayStart('pf',info,size(pf),kind(pf))
         !
+        if (specttype(1:4)=='COOL') then
+          !
+          allocate(cooling(npoints),stat=info)
+          call ArrayStart('cooling',info,size(cooling),kind(cooling))
+          !
+        endif
+        !
         pf = 0 
+        cooling = 0
         !
       endif
       j0 = 0
       i = 0
+      if (partfunc_do) partfunc = 0
       !
       ! start reading the energies 
       !
@@ -720,7 +733,7 @@ module spectrum
            !
           endif
           !
-          if (specttype(1:4)=='PART') then
+          if (specttype(1:4)=='PART'.or.specttype(1:4)=='COOL') then
             !
             do itemp = 1,npoints
               !
@@ -728,7 +741,9 @@ module spectrum
               !
               temp0 = real(itemp,rk)*dtemp
               !
-              beta0 = planck*vellgt/(boltz*temp0)
+              beta0 = c2/temp0
+              !
+              !beta0 = planck*vellgt/(boltz*temp0)
               !
               pf(0,itemp) = pf(0,itemp) + gtot(i)*exp(-beta0*energy)
               pf(1,itemp) = pf(1,itemp) + gtot(i)*exp(-beta0*energy)*(beta0*energy)
@@ -744,6 +759,27 @@ module spectrum
       close(enunit)
       !
       ! print out the computed part. function objects and finish
+      !
+      if (specttype(1:4)=='PART'.or.specttype(1:4)=='COOL') then
+        !
+        write(ioname, '(a)') 'Partition function'
+        call IOstart(trim(ioname),tunit)
+        !
+        open(unit=tunit,file=trim(output)//".pf",action='write',status='replace')
+        !
+        do itemp = 1,npoints
+          !
+          if (energy>enermax) cycle
+          !
+          temp0 = real(itemp,rk)*dtemp
+          !
+          write(tunit,"(1x,f12.3,1x,es20.8)") temp0,pf(0,itemp)
+          !
+        enddo
+        !
+        close(tunit,status='keep')   
+        !
+      endif
       !
       if (specttype(1:4)=='PART') then
         !
@@ -765,6 +801,23 @@ module spectrum
             print('(f12.2,1x,es20.8)'),temp0,pf(0,itemp)
           enddo
         endif 
+        !
+        write(ioname, '(a)') 'Partition function'
+        call IOstart(trim(ioname),tunit)
+        !
+        open(unit=tunit,file=trim(output)//".pf",action='write',status='replace')
+        !
+        do itemp = 1,npoints
+          !
+          if (energy>enermax) cycle
+          !
+          temp0 = real(itemp,rk)*dtemp
+          !
+          write(tunit,"(1x,f12.3,1x,es20.8)") temp0,pf(0,itemp)
+          !
+        enddo
+        !
+        close(tunit,status='keep')   
         !
         stop
         !
@@ -1066,11 +1119,28 @@ module spectrum
              !
              abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
              !
-           case ('emission','EMISSION','EMISS','emiss')
+           case ('emission','EMISSION','EMISS','emiss','COOLING')
              !
              ! emission coefficient [Ergs/mol/Sr]
              !
              abscoef=emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-beta*energyf)*tranfreq/(partfunc)
+             !
+             !
+             if (trim(specttype)=='COOLING') then
+               !
+               !$omp parallel do private(itemp,temp0,beta0) shared(cooling) schedule(dynamic)
+               do itemp = 1,npoints
+                 !
+                 temp0 = real(itemp,rk)*dtemp
+                 !
+                 beta0 = c2/temp0
+                 !
+                 cooling(itemp) = cooling(itemp) + emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-beta0*energyf)*tranfreq/(pf(0,itemp))
+                 !
+               enddo
+               !$omp end parallel do
+               !
+             endif
              !
             case ('LIFETIME')
              !
@@ -1124,8 +1194,6 @@ module spectrum
           !
         endif
         !
-        if (abscoef<thresh) cycle
-        !
         if (offset<0) offset = ioffset*halfwidth
         !
         x0 = sqrt(ln2)/halfwidth*dfreq*0.5_rk
@@ -1147,6 +1215,8 @@ module spectrum
         ilog = max(min(ubound(Nintens,dim=1),ilog),lbound(Nintens,dim=1))
         !
         Nintens(ilog) = Nintens(ilog)+1
+        !
+        if (abscoef<thresh) cycle
         !
         ! if only stick spectrum needed
         if (proftype(1:5)=='STICK') then
@@ -1640,13 +1710,36 @@ module spectrum
          !
          !b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
          !
-         write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
+         if (nchars_quanta(kitem)<10) then
+            write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
+         else
+            write(b_fmt,"('(1x,a',i2,')')") nchars_quanta(kitem)
+         endif
          !
          write(tunit,b_fmt,advance="no"), trim(quantum_numbers(kitem,ilevelf))
          !
        enddo
        !
        write(tunit,"(a1)",advance="yes") " "
+       !
+     enddo
+     !
+     close(tunit,status='keep')   
+     !
+   elseif (trim(specttype)=='COOLING') then 
+     !
+     write(ioname, '(a)') 'Cooling'
+     call IOstart(trim(ioname),tunit)
+     !
+     open(unit=tunit,file=trim(output)//".cooling",action='write',status='replace')
+     !
+     do itemp = 1,npoints
+       !
+       if (energy>enermax) cycle
+       !
+       temp0 = real(itemp,rk)*dtemp
+       !
+       write(tunit,"(1x,f12.3,1x,es20.8)") temp0,cooling(itemp)
        !
      enddo
      !

@@ -53,7 +53,7 @@ module accuracy
   real(drk), parameter :: uma        =  1.660538921e-24_rk        ! unified atomic mass unit [=mass(C-12)/12 ] in grams
   real(drk), parameter :: aston      =  planck/(8._rk*PI**2*vellgt*uma*1e-16_rk)  !rotational factor in cm-1 amu Ang^2
   real(drk), parameter :: todebye    =  2.541765_rk               ! a.u. in debye
-  real(drk), parameter :: c2         =  1.4387751601679204d0                 ! second radiative constant
+  real(drk), parameter :: c2         =  1.43877736d0              ! second radiative constant NIST http://physics.nist.gov/cgi-bin/cuu/Value?c22ndrc
   
   contains
 
