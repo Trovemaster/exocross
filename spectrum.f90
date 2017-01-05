@@ -9,6 +9,7 @@ module spectrum
   public intensity,readinput,verbose
   !
   integer(ik),parameter   :: nfiles_max =1000, max_items = 1000, nspecies_max = 10, nquadmax = 101, filtermax = 100
+  integer(ik),parameter :: HITRAN_max_ierr = 10            ! maximal number of QNs for error-specification in HITRAN
   !
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=3,ioffset = 10,iso=1
   real(rk)      :: temp=298.0,partfunc=-1.0,freql=-small_,freqr= 20000.0,thresh=1.0d-90,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
@@ -41,11 +42,22 @@ module spectrum
     real(rk)          :: delta = 0    ! Pressure shift induced by air, referred to p=1 atm
     !
   end type speciesT
+
+  type HitranErrorT ! broadener
+    !
+    integer(ik) :: iqn                ! the QN-index used for error
+    integer(ik) :: error_vmax(0:6)=-1  ! errors vs range of qn
+    integer(ik) :: N=0                ! Number of QN-entries
+    integer(ik) :: ierr = 0           ! Number of QN-entries
+    !
+  end type HitranErrorT
+
   !
   type(selectT) :: upper(filtermax),lower(filtermax)
   !
   integer(ik)    :: Nspecies = 0, Nfilters = 0
   type(speciesT) :: species(nspecies_max)
+  type(HitranErrorT),target :: HITRAN_E(HITRAN_max_ierr),HITRAN_S(HITRAN_max_ierr),HITRAN_Air,HITRAN_Self,HITRAN_N,HITRAN_Delta
   !
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., stick_hitran = .false.
   !
@@ -60,7 +72,8 @@ module spectrum
     logical :: eof
     character(len=cl) :: w,v
     real(rk)      :: m1,m2
-    integer(ik)   :: i,ifilter
+    integer(ik)   :: i,ifilter,iqn,ierror,iE,iS
+    type(HitranErrorT),pointer :: HITRAN
     ! -----------------------------------------------------------
     !
     write(out,"('Read the input')")
@@ -201,21 +214,97 @@ module spectrum
         case ("HITRAN")
           !
           hitran_do = .true.
+          iE = 0 
+          iS = 0 
           !
-          if (nitems>1) then 
-            call readu(w) 
-            if (trim(w)/="READ".and.trim(w)/="WRITE") then 
-              call report ("Illegal HITRAN keyword: only read and write are legal"//trim(w),.true.)
-            endif
-            !
-            if (trim(w)=="WRITE") then
-              !
-              hitran_do = .false.
-              stick_hitran = .true.
-              !
-            endif
-            !
-          endif
+          call read_line(eof) ; if (eof) exit
+          !
+          call readu(w)
+          !
+          do while (trim(w)/="".and.trim(w)/="END")
+             !
+             select case(w)
+               !
+             case("WRITE")
+               !
+               hitran_do = .false.
+               stick_hitran = .true.
+               !
+             case("ERROR-E","ERROR-S")
+               !
+               if (iE>HITRAN_max_ierr.or.iS>HITRAN_max_ierr) call report ("Too many ERROR-E/S, increase HITRAN_max_irr"//trim(w),.true.)
+               !
+               if (trim(w)=="ERROR-E") then 
+                 iE = iE + 1
+                 HITRAN => HITRAN_E(iE)
+                 HITRAN_E(1)%N = iE
+               endif
+               if (trim(w)=="ERROR-S") then 
+                 iS = iS + 1
+                 HITRAN => HITRAN_S(iS)
+                 HITRAN_S(1)%N = iS
+               endif
+               !
+               do while (trim(w)/="".and.item<Nitems)
+                 !
+                 call readu(w)
+                 !
+                 select case(w)
+                   !
+                 case("QN")
+                   !
+                   call readi(HITRAN%iqn)
+                   !
+                 case ("IERR")
+                   !
+                   call readi(ierror)
+                   !
+                   if (ierror<0.or.ierror>6) call report("Illegal error code in HITRAN options, must be within [0..6] "//trim(w),.true.)
+                   !
+                   call readu(w) 
+                   !
+                   if (trim(w)/="VMAX") call report("Illegal record, vmax is expected after ierr value in HITRAN"//trim(w),.true.)
+                   !
+                   call readi(hitran%error_vmax(ierror))
+                   !
+                 end select
+               enddo
+               !
+             case("HITRAN-AIR","HITRAN-SELF","HITRAN-N","HITRAN-DELTA")
+               !
+               if (trim(w)=="ERROR-AIR")   HITRAN => HITRAN_Air
+               if (trim(w)=="ERROR-SELF")  HITRAN => HITRAN_Self
+               if (trim(w)=="ERROR-N")     HITRAN => HITRAN_N
+               if (trim(w)=="ERROR-DELTA") HITRAN => HITRAN_Delta
+               !
+               do while (trim(w)/="".and.item<Nitems)
+                 !
+                 call readu(w)
+                 !
+                 select case(w)
+                   !
+                 case ("IERR")
+                   !
+                   call readi(HITRAN%ierr)
+                   !
+                 case default 
+                   !
+                   call report ("Unrecognized unit name in HITRAN-air .. options"//trim(w),.true.)
+                   !
+                 end select
+               enddo
+               !
+             case default 
+               !
+               call report ("Unrecognized unit name in HITRAN options"//trim(w),.true.)
+               !
+             end select 
+             !
+             call read_line(eof) ; if (eof) exit
+             !
+             call readu(w)
+             !
+          enddo
           !
         case ("SELECT","FILTER")
           !
@@ -506,7 +595,7 @@ module spectrum
    logical :: eof
    character(len=cl) :: w
    !
-   integer(ik) :: imol,nchars_
+   integer(ik) :: imol,nchars_,ierror_nu,ierror_S,ierror_i,ierror_f,iqn,NQn,ierror,qni,qnf
    real(rk)    :: gf,gi
    character(55) ch_q
    !
@@ -598,7 +687,7 @@ module spectrum
         !
         Asum = -1.0_rk
         !
-        write(my_fmt,'(a)')  '(1x,i11,1x,f12.4,1x,f5.1,1x,es16.8,5x)'
+        write(my_fmt,'(a)')  '(1x,i11,1x,f12.6,1x,i6,1x,f7.1,1x,es16.8,3x)'
         !
       endif
       !
@@ -845,13 +934,13 @@ module spectrum
      !
    endif
    !
-   ! open and read broenning files
+   ! open and read broadening files
    !
    do i =1,Nspecies
      !
      if ( trim(species(i)%filename)/="" ) then
        !
-       write(ioname, '(a)') 'brodenning file'
+       write(ioname, '(a)') 'broadening file'
        !
        call IOstart(trim(ioname),bunit)
        open(unit=bunit,file=trim(species(i)%filename),action='read',status='old')
@@ -1054,7 +1143,7 @@ module spectrum
              !
            end select
            !
-        else
+        else ! ExoMol format of the trans-file
            !
            !   read new line from intensities file
            !
@@ -1277,7 +1366,48 @@ module spectrum
                !
              endif
              !
-             write(out,"('000000 0 0 0 0 0 0 0',f7.1,f7.1)",advance="yes") real(gtot(ilevelf)),real(gtot(ileveli))
+             ierror_nu = 0
+             !
+             do iE = 1,HITRAN_E(1)%N
+                !
+                read(quantum_numbers(HITRAN_E(iE)%iqn,ileveli),*) qni
+                read(quantum_numbers(HITRAN_E(iE)%iqn,ilevelf),*) qnf
+                !
+                ierror_i = 0
+                do ierror = 0,6 
+                  if (qni<=HITRAN_E(iE)%error_vmax(ierror)) ierror_i = ierror 
+                  if (qnf<=HITRAN_E(iE)%error_vmax(ierror)) ierror_f = ierror 
+                enddo
+                !
+                ierror_nu = max(ierror_i,ierror_f) 
+                !
+             enddo
+             !
+             ierror_S = 0
+             !
+             do iE = 1,HITRAN_S(1)%N
+                !
+                read(quantum_numbers(HITRAN_S(iE)%iqn,ileveli),*) qni
+                read(quantum_numbers(HITRAN_S(iE)%iqn,ilevelf),*) qnf
+                !
+                ierror_i = 0
+                do ierror = 0,6 
+                  if (qni<=HITRAN_S(iE)%error_vmax(ierror)) ierror_i = ierror 
+                  if (qnf<=HITRAN_S(iE)%error_vmax(ierror)) ierror_f = ierror 
+                enddo
+                !
+                ierror_S = max(ierror_i,ierror_f) 
+                !
+             enddo
+             !
+             write(out,'(1x,i1)',advance="no"),ierror_nu
+             write(out,'(i1)',advance="no"),ierror_S
+             write(out,'(i1)',advance="no"),HITRAN_Air%ierr
+             write(out,'(i1)',advance="no"),HITRAN_Self%ierr
+             write(out,'(i1)',advance="no"),HITRAN_n%ierr
+             write(out,'(i1)',advance="no"),HITRAN_Delta%ierr
+             !
+             write(out,"(' 0 0 0 0 0 0 0',f7.1,f7.1)",advance="yes") real(gtot(ilevelf)),real(gtot(ileveli))
              !
            else
               !
@@ -1702,7 +1832,7 @@ module spectrum
        !
        ! write to .life-file
        !
-       write(tunit,my_fmt,advance="no") indices(ilevelf),energies(ilevelf),jrot(ilevelf),1.0_rk/Asum(ilevelf) 
+       write(tunit,my_fmt,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),jrot(ilevelf),1.0_rk/Asum(ilevelf) 
        !
        do kitem = 1,maxitems 
          !
