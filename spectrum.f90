@@ -270,7 +270,7 @@ module spectrum
                  end select
                enddo
                !
-             case("HITRAN-AIR","HITRAN-SELF","HITRAN-N","HITRAN-DELTA")
+             case("ERROR-AIR","ERROR-SELF","ERROR-N","ERROR-DELTA")
                !
                if (trim(w)=="ERROR-AIR")   HITRAN => HITRAN_Air
                if (trim(w)=="ERROR-SELF")  HITRAN => HITRAN_Self
@@ -1407,7 +1407,7 @@ module spectrum
              write(out,'(i1)',advance="no"),HITRAN_n%ierr
              write(out,'(i1)',advance="no"),HITRAN_Delta%ierr
              !
-             write(out,"(' 0 0 0 0 0 0 0',f7.1,f7.1)",advance="yes") real(gtot(ilevelf)),real(gtot(ileveli))
+             write(out,"(' 0 0 0 0 0 0 ',f7.1,f7.1)",advance="yes") real(gtot(ilevelf)),real(gtot(ileveli))
              !
            else
               !
