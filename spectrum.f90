@@ -14,7 +14,10 @@ module spectrum
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=3,ioffset = 10,iso=1
   real(rk)      :: temp=298.0,partfunc=-1.0,freql=-small_,freqr= 20000.0,thresh=1.0d-90,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
   real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = -25.0, pressure = 1.0_rk 
-  real(rk)      :: enermax = 1e6, abscoef_thresh = 1.0d-50
+  real(rk)      :: enermax = 1e6, abscoef_thresh = 1.0d-50, abundance = 1.0d0
+  real(rk)      :: S_crit = 1e-29      ! cm/molecule, HITRAN cut-off paramater 
+  real(rk)      :: nu_crit = 2000.0d0  ! cm-1, HITRAN cut-off paramater 
+  character(len=cl) :: cutoff_model = "NONE"
   integer(ik)   :: nquad = 20      ! Number of quadrature points 
   !
   character(len=cl) :: specttype="absorption",enrfilename="none",intfilename(nfiles_max),proftype="DOPPL",output="output"
@@ -144,12 +147,16 @@ module spectrum
           specttype = trim(w)
           !
        case ("MEM","MEMORY")
-         !
+          !
          call readf(memory_limit)
           !
         case ("ISO","ISOTOPE")
           !
           call readi(iso)  
+          !
+        case ("ABUNDANCE")
+          !
+          call readf(abundance)  
           !
         case ("VERBOSE")
           !
@@ -427,9 +434,31 @@ module spectrum
             !
          endif
           !
-       case ("THRESHOLD")
+       case ("THRESHOLD","CUTOFF")
           !
-          call readf(thresh)
+          if (Nitems>2) then 
+            !
+            call readu(w)
+            !
+            if (trim(w)/="HITRAN") call report ("Expected: either HITRAN with the a cutoff Intensity or just one number = cutoff "//trim(w),.true.)
+            cutoff_model = "HITRAN"
+            call readf(thresh)
+            !
+            S_crit = thresh
+            !
+            write(out,"('HITRAN intensity cut-off model is used, see HITRAN 2012 paper')")
+            !
+            call readu(w)
+            !
+            if (trim(w)/="NU_CRIT".and.trim(w)/="NUCRIT") call report ("Expected: keyword = NU_CRIT with the switching frquency"//trim(w),.true.)
+            !
+            call readf(nu_crit)
+            !
+          else
+            !
+            call readf(thresh)
+            !
+          endif
           !
        case ("ENERMAX")
           !
@@ -575,7 +604,7 @@ module spectrum
    integer(ik) :: indexf_,indexi_
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0,dnu_half,dxp
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,bnorm,f,eta1,eta2,intens1,intens2,Va0,gammaV,a,wg,d
-   real(rk)    :: sigma,alpha,gamma,y,x1,x2,voigt_,dx2,xi,L1,L2,acoef_
+   real(rk)    :: sigma,alpha,gamma,y,x1,x2,voigt_,dx2,xi,L1,L2,acoef_,cutoff
    integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,ispecies,alloc_p
    real(rk)    :: gamma_,n_
    character(len=cl) :: ioname
@@ -605,6 +634,11 @@ module spectrum
    cmcoef=1.0_rk/(8.0_rk*pi*vellgt)
    emcoef=1.0_rk*planck*vellgt/(4.0_rk*pi)
    dfreq=(freqr-freql)/real(npoints-1,rk)
+   !
+   ! Let's include abundance intpo the constants
+   !
+   cmcoef = cmcoef*abundance
+   emcoef = emcoef*abundance
    !
    !   half width for Doppler profiling
    !
@@ -1078,7 +1112,11 @@ module spectrum
        !
        if (verbose>=2) then
           !
-          write(out,"(10x,/'Stick pectra of type ',a,' stronger than ',e18.5)") trim(proftype),thresh
+          if (cutoff_model=="HITRAN") then
+             write(out,"(10x,/'Stick pectra of type ',a,' with the HITRAN cut-off model, Scrit = ',e18.5,' nu_crit = ',f16.4)") trim(proftype),S_crit,nu_crit
+          else
+             write(out,"(10x,/'Stick pectra of type ',a,' stronger than ',e18.5)") trim(proftype),thresh
+          endif 
           write(out,"(10x,'Range = ',f18.7,'-',f18.7)") freql,freqr
           write(out,"(10x,'Temperature = ',f18.7)") temp
           write(out,"(10x,'Partition function = ',f17.4)") partfunc
@@ -1305,7 +1343,19 @@ module spectrum
         !
         Nintens(ilog) = Nintens(ilog)+1
         !
-        if (abscoef<thresh) cycle
+        !
+        ! HITAN cutoff model as an intensity threshold
+        if (trim(cutoff_model)=="HITRAN") then
+           if (tranfreq<=nu_crit) then
+             cutoff = S_crit*tranfreq/nu_crit*tanh(0.5_rk*c2/temp*tranfreq)
+           else
+             cutoff = S_crit
+           endif
+        else
+           cutoff = thresh
+        endif
+        !
+        if (abscoef<cutoff) cycle
         !
         ! if only stick spectrum needed
         if (proftype(1:5)=='STICK') then
