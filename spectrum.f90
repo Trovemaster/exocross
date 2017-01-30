@@ -1485,7 +1485,11 @@ module spectrum
                 !
                 b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
                 !
-                write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
+                if (nchars_quanta(kitem)<10) then
+                  write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
+                else
+                  write(b_fmt,"('(1x,a',i2,')')") nchars_quanta(kitem)
+                endif
                 !
                 write(out,b_fmt,advance="no"), trim(quantum_numbers(kitem,ilevelf))
                 !
@@ -1499,7 +1503,11 @@ module spectrum
                 !
                 !b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
                 !
-                write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
+                if (nchars_quanta(kitem)<10) then
+                  write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
+                else
+                  write(b_fmt,"('(1x,a',i2,')')") nchars_quanta(kitem)
+                endif
                 !
                 write(out,b_fmt,advance="no"), trim(quantum_numbers(kitem,ileveli))
                 !
