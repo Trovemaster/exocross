@@ -1965,7 +1965,7 @@ module spectrum
       !
       do i = lbound(Nintens,dim=1),ubound(Nintens,dim=1)
         !
-        write(tunit,'(i4,2x,i10)'), i,Nintens(i)
+        write(tunit,'(i4,2x,i12)'), i,Nintens(i)
         !
       enddo
       !
