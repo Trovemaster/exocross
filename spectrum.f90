@@ -63,6 +63,7 @@ module spectrum
   type(HitranErrorT),target :: HITRAN_E(HITRAN_max_ierr),HITRAN_S(HITRAN_max_ierr),HITRAN_Air,HITRAN_Self,HITRAN_N,HITRAN_Delta
   !
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., stick_hitran = .false.
+  logical :: microns = .false.
   !
   contains
   !
@@ -133,6 +134,36 @@ module spectrum
           !
           call readf(freql)
           call readf(freqr)
+          !
+          if (Nitems>3) then
+            !
+            call readu(w)
+            !
+            select case(w)
+              !
+            case("UM","MICRON")
+              !
+              microns = .true.
+              !
+              if (freql<small_) then
+                write(out,"('Error: Using zero micron is Illegal')")
+                call report ("Using zero micron is Illegal"//trim(w),.true.)
+              endif
+              !
+              ioffset = 0
+              offset = 0
+              !
+            case ("CM-1")
+              !
+              microns = .false.
+              !
+            case default 
+              !
+              call report ("Unrecognized unit name in units of RANGE "//trim(w),.true.)
+              !
+            end select 
+            !
+          endif
           !
         case ("NPOINTS","NUMBER-OF-POINTS","NTEMPS")
           !
@@ -482,6 +513,11 @@ module spectrum
             !
           endif
           !
+          if (microns) then
+            ioffset = 0
+            offset = 0
+          endif
+          !
        case ("HWHM","HALFWIDTH")
           !
           call readf(halfwidth)
@@ -579,6 +615,13 @@ module spectrum
       !
     enddo
     !
+    if (proftype(1:3)/='BIN'.and.microns) then
+      !
+      write(out,"('Microns or um is currently only working with BIN, not ',a)") proftype(1:3)
+      call report ("Illegal profile for Microns"//trim(w),.true.)
+      !
+    endif
+    !
     !   half width for Doppler profiling
     if (proftype(1:3)=='VOI'.or.proftype(1:3)=='PSE'.or.proftype(1:3)=='LOR'.and.Nspecies>0) then
       !
@@ -602,7 +645,7 @@ module spectrum
    !
    integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,j,ilog,ib,ie,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,kitem,l,nlines,iquad,ifilter
    integer(ik) :: indexf_,indexi_
-   real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0,dnu_half,dxp
+   real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0,dnu_half,dxp,tranfreq0
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,bnorm,f,eta1,eta2,intens1,intens2,Va0,gammaV,a,wg,d
    real(rk)    :: sigma,alpha,gamma,y,x1,x2,voigt_,dx2,xi,L1,L2,acoef_,cutoff
    integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,ispecies,alloc_p
@@ -1330,10 +1373,17 @@ module spectrum
           if (tranfreq<small_) cycle
           halfwidth0=dpwcoef*tranfreq
           x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
-        endif 
+        endif
+        !
+        tranfreq0 = tranfreq
+        !
+        if (microns) then 
+          offset = offset/tranfreq**2
+          tranfreq0 = 10000.0_rk/(tranfreq+small_)
+        endif
         !
         !   if transition frequency is out of selected range
-        if (tranfreq>freqr+offset.or.tranfreq<freql-offset) cycle
+        if (tranfreq0>freqr+offset.or.tranfreq0<freql-offset) cycle
         !
         intband = intband + abscoef
         !
@@ -1859,7 +1909,17 @@ module spectrum
           !
         case ('BIN');
           !
-          ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
+          if (microns) then 
+            !
+            ipoint =  nint( ( 10000.0_rk/tranfreq-freql )/dfreq )+1
+            !
+            if (ipoint<1.or.ipoint>npoints) cycle 
+            !
+          else
+            !
+            ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
+            !
+          endif
           !
           intens(ipoint)=intens(ipoint)+abscoef
           !
@@ -1940,7 +2000,24 @@ module spectrum
      !
      open(unit=tunit,file=trim(output)//".xsec",action='write',status='replace')
      !
-     write(tunit,'(2(1x,es16.8))'),(freq(ipoint),intens(ipoint),ipoint=1,npoints)
+     if (microns) then
+       !
+       ! change from microns to wavenumbers 
+       !
+       do ipoint =  npoints,1,-1
+         !
+         write(tunit,'(2(1x,es16.8))') 10000.0_rk/freq(ipoint),intens(ipoint)
+         !
+       enddo
+       !
+     else
+       !
+       write(tunit,'(2(1x,es16.8))'),(freq(ipoint),intens(ipoint),ipoint=1,npoints)
+       !
+     endif
+     !
+     ! no need to scale with dfreq for bin or max 
+     if (any( trim(proftype(1:3))==(/'BIN','MAX'/)) ) dfreq = 1.0d0
      !
      if (verbose>=2) print('(/"Total intensity  (sum):",es16.8," (int):",es16.8)'), intband,sum(intens)*dfreq
      !
