@@ -17,6 +17,7 @@ module spectrum
   real(rk)      :: enermax = 1e6, abscoef_thresh = 1.0d-50, abundance = 1.0d0
   real(rk)      :: S_crit = 1e-29      ! cm/molecule, HITRAN cut-off paramater 
   real(rk)      :: nu_crit = 2000.0d0  ! cm-1, HITRAN cut-off paramater 
+  real(rk)      :: resolving_power  = 1e6,resolving_f ! using resolving_power to set up grid 
   character(len=cl) :: cutoff_model = "NONE"
   integer(ik)   :: nquad = 20      ! Number of quadrature points 
   !
@@ -64,6 +65,7 @@ module spectrum
   !
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., stick_hitran = .false.
   logical :: microns = .false.
+  logical :: use_resolving_power = .true.  ! using resolving for creating the grid
   !
   contains
   !
@@ -76,7 +78,7 @@ module spectrum
     logical :: eof
     character(len=cl) :: w,v
     real(rk)      :: m1,m2
-    integer(ik)   :: i,ifilter,iqn,ierror,iE,iS
+    integer(ik)   :: i,ifilter,iqn,ierror,iE,iS,npoints0
     type(HitranErrorT),pointer :: HITRAN
     ! -----------------------------------------------------------
     !
@@ -129,6 +131,14 @@ module spectrum
           call readf(partfunc)
           !
           partfunc_do = .false.
+          !
+        case ("RESOLVING","R")
+          !
+          call readf(resolving_power)
+          !
+          resolving_f = log((resolving_power+1.0)/resolving_power)
+          !
+          use_resolving_power = .true.
           !
         case ("WINDOW","FREQUENCY","FREQUENCIES","WAVENUMBERS","RANGE")
           !
@@ -619,6 +629,33 @@ module spectrum
       !
       write(out,"('Microns or um is currently only working with BIN, not ',a)") proftype(1:3)
       call report ("Illegal profile for Microns"//trim(w),.true.)
+      !
+    endif
+    !
+    if (proftype(1:3)/='BIN'.and.microns) then
+      !
+      write(out,"('Microns or um is currently only working with BIN, not ',a)") proftype(1:3)
+      call report ("Illegal profile for Microns"//trim(w),.true.)
+      !
+    endif
+    !
+    if (use_resolving_power ) then 
+      !
+      npoints0 = nint(real((log(freqr)-log(freql))/resolving_f,rk))+1
+      !
+      if (npoints0>npoints) then
+        write(out,"('For the resolving power of ',f15.1,' and range of',2f12.2,' npoints(max) must be > ',i18,'; please increase npoints = ',i15)") resolving_power,freql,freqr,npoints0
+        write(out,"('Consider increasing npoints > ',i15)") npoints
+        write(out,"('Npoints(max) = ln(nu2/nu1)/ln(1+1/R)+1')") 
+        stop "Too small number of points for resolving_power and range given!"
+      endif
+      !
+      npoints = npoints0
+      !
+      if (freql<small_) then 
+        write(out,"('use_resolving_power cannot be used for range starting at zero',2f11.3)") freql,freqr
+        stop "Illegal use_resolving_power with zero nu1"
+      endif 
       !
     endif
     !
@@ -1915,7 +1952,15 @@ module spectrum
             !
             if (ipoint<1.or.ipoint>npoints) cycle 
             !
-          else
+          elseif (use_resolving_power) then 
+            !
+            ipoint =  nint(real((log(tranfreq)-log(freql))/resolving_f,rk))+1
+            !
+            !nint( ( 10000.0_rk/tranfreq-freql )/dfreq )+1
+            !
+            if (ipoint<1.or.ipoint>npoints) cycle 
+            !
+          else 
             !
             ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
             !
@@ -2007,6 +2052,18 @@ module spectrum
        do ipoint =  npoints,1,-1
          !
          write(tunit,'(2(1x,es16.8))') 10000.0_rk/freq(ipoint),intens(ipoint)
+         !
+       enddo
+       !
+     elseif (use_resolving_power.and.trim(proftype(1:3))=='BIN') then
+       !
+       do ipoint =  1,npoints
+         !
+         tranfreq0 = real(ipoint-1,rk)*resolving_f+log(freql)
+         !
+         tranfreq0 = exp(tranfreq0)
+         !
+         write(tunit,'(2(1x,es16.8))') tranfreq0,intens(ipoint)
          !
        enddo
        !
