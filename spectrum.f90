@@ -1,4 +1,4 @@
-module spectrum
+3module spectrum
   !
   use accuracy
   use timer
@@ -20,6 +20,7 @@ module spectrum
   real(rk)      :: resolving_power  = 1e6,resolving_f ! using resolving_power to set up grid 
   character(len=cl) :: cutoff_model = "NONE"
   integer(ik)   :: nquad = 20      ! Number of quadrature points 
+  integer(ik)   :: N_to_RAM = 1000 ! Lines to keep in RAM
   !
   character(len=cl) :: specttype="absorption",enrfilename="none",intfilename(nfiles_max),proftype="DOPPL",output="output"
   integer(ik)   :: intJvalue(nfiles_max)
@@ -55,7 +56,6 @@ module spectrum
     integer(ik) :: ierr = 0           ! Number of QN-entries
     !
   end type HitranErrorT
-
   !
   type(selectT) :: upper(filtermax),lower(filtermax)
   !
@@ -65,7 +65,7 @@ module spectrum
   !
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., stick_hitran = .false.
   logical :: microns = .false.
-  logical :: use_resolving_power = .true.  ! using resolving for creating the grid
+  logical :: use_resolving_power = .false.  ! using resolving for creating the grid
   !
   contains
   !
@@ -183,7 +183,7 @@ module spectrum
           !
           if (mod(npoints,2)==0) npoints = npoints + 1
           !
-        case ("ABSORPTION","EMISSION","LIFETIME")
+        case ("ABSORPTION","EMISSION","LIFETIME","PHOENIX")
           !
           specttype = trim(w)
           !
@@ -258,6 +258,10 @@ module spectrum
           !
           histogram = .true.
           histogramJ = .true.
+          !
+       case ("NRAM","NLINES-TO-RAM")
+          !
+          call readi(N_to_RAM)
           !
         case ("HITRAN")
           !
@@ -639,7 +643,7 @@ module spectrum
       !
     endif
     !
-    if (use_resolving_power ) then 
+    if (use_resolving_power) then 
       !
       npoints0 = nint(real((log(freqr)-log(freql))/resolving_f,rk))+1
       !
@@ -683,7 +687,7 @@ module spectrum
    integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,j,ilog,ib,ie,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,kitem,l,nlines,iquad,ifilter
    integer(ik) :: indexf_,indexi_
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0,dnu_half,dxp,tranfreq0
-   real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,bnorm,f,eta1,eta2,intens1,intens2,Va0,gammaV,a,wg,d
+   real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,bnorm,f,eta1,eta2,intens1,intens2,Va0,gammaV,a,wg,d,lambda
    real(rk)    :: sigma,alpha,gamma,y,x1,x2,voigt_,dx2,xi,L1,L2,acoef_,cutoff
    integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,ispecies,alloc_p
    real(rk)    :: gamma_,n_
@@ -694,6 +698,11 @@ module spectrum
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:),cooling(:)
    integer(ik),allocatable :: gtot(:),indices(:)
    character(len=20),allocatable :: quantum_numbers(:,:)
+   !
+   real(rk),allocatable :: acoef_RAM(:),abscoef_ram(:),nu_ram(:),energyi_ram(:)
+   integer(ik),allocatable :: indexi_RAM(:),indexf_RAM(:)
+   integer(ik),allocatable :: ileveli_RAM(:),ilevelf_RAM(:)
+   integer(ik) :: kswaps,iswaps,nswap_,nswap,iswap,iswap_
    !
    integer(ik),allocatable :: nchars_quanta(:)  ! max number of characters used for each quantum number
    !
@@ -805,7 +814,7 @@ module spectrum
         !
       endif
       !
-      allocate(quantum_numbers(0:maxitems,iline),nchars_quanta(maxitems),stat=info)
+      allocate(quantum_numbers(0:maxitems,nlines),nchars_quanta(maxitems),stat=info)
       call ArrayStart('quantum_numbers',info,size(quantum_numbers),kind(quantum_numbers))
       call ArrayStart('nchars_quanta',info,size(nchars_quanta),kind(nchars_quanta))
       !
@@ -1219,9 +1228,29 @@ module spectrum
      stop 'Undefined PF'
    endif
    !
-   do i = 1,nfiles
+   allocate(acoef_RAM(N_to_RAM),indexf_RAM(N_to_RAM),indexi_RAM(N_to_RAM),stat=info)
+   call ArrayStart('swap:acoef_RAM',info,size(acoef_RAM),kind(acoef_RAM))
+   call ArrayStart('swap:indexf_RAM',info,size(indexf_RAM),kind(indexf_RAM))
+   call ArrayStart('swap:indexi_RAM',info,size(indexi_RAM),kind(indexi_RAM))
+   !
+   allocate(abscoef_ram(N_to_RAM),nu_ram(N_to_RAM),energyi_ram(N_to_RAM),stat=info)
+   call ArrayStart('swap:abscoef_ram',info,size(abscoef_ram),kind(abscoef_ram))
+   call ArrayStart('swap:nu_ram',info,size(nu_ram),kind(nu_ram))
+   call ArrayStart('swap:energyi_ram',info,size(energyi_ram),kind(energyi_ram))
+   !
+   allocate(ileveli_RAM(N_to_RAM),ilevelf_RAM(N_to_RAM),stat=info)
+   call ArrayStart('swap:ileveli_RAM',info,size(ileveli_RAM),kind(ileveli_RAM))
+   call ArrayStart('swap:ilevelf_RAM',info,size(ilevelf_RAM),kind(ilevelf_RAM))
+   !
+   kswaps = 0
+   nswap = 0
+   !
+   loop_file : do i = 1,nfiles
      !
      open(unit=tunit,file=trim(intfilename(i)),action='read',status='old')
+     !
+     if (verbose>=3) print('("Processing ",a,"...")'), trim(intfilename(i))
+     !
      loop_tran: do
         !
         if (histogram) then 
@@ -1265,670 +1294,306 @@ module spectrum
            !
            !   read new line from intensities file
            !
-           read(tunit,*,end=20) indexf,indexi,acoef
+           nswap_ = N_to_RAM
            !
-           if (indexf>nlevels.or.indexi>nlevels) cycle
+           kswaps = kswaps + 1
            !
-           ilevelf = indices(indexf)
-           ileveli = indices(indexi)
+           !print*,"Reading transitions ...  ",kswaps
            !
-           if (ilevelf==0.or.ileveli==0) cycle
-           !
-           energyf = energies(ilevelf)
-           energyi = energies(ileveli)
-           !
-           if (energyf-energyi<-1e1) then 
-             write(out,"(4i12,2x,3es16.8)"),ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
-             stop 'wrong order of indices'
-             cycle
-           elseif (energyf-energyi<-small_) then
-             cycle
-           endif 
-           !
-           if (filter) then
+           do iswap = 1,N_to_RAM
              !
-             do ifilter = 1,Nfilters
-               !
-               if (upper(ifilter)%mask/=trim(quantum_numbers(upper(ifilter)%i,ilevelf)).and.trim(upper(ifilter)%mask)/="") cycle loop_tran
-               if (lower(ifilter)%mask/=trim(quantum_numbers(lower(ifilter)%i,ileveli)).and.trim(lower(ifilter)%mask)/="") cycle loop_tran
-               !
-             enddo
+             read(tunit,*,end=120) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
              !
+             if (indexf_RAM(iswap)==84.and.indexi_RAM(iswap)==140) then
+               continue
+             endif
+             !
+             cycle
+             !
+           120 continue
+             !
+             nswap_ = iswap-1
+             !
+             exit
+             !
+           enddo
+           !
+           if (nswap_<1) then
+              !
+              write(out,"('... Finish swap')") 
+              !
+              exit loop_tran
+              !
+              stop 'Error nswap_=0'
            endif
            !
-           jf = jrot(ilevelf)
-           ji = jrot(ileveli)
+           if (nswap_<N_to_RAM) print('(a,i12)'),"Now computing ... ",nswap_," transitions..."
            !
-           tranfreq = energyf-energyi
+           !read(tunit,*,end=20) indexf,indexi,acoef
+           iswap_ = 1
+           abscoef_ram = 0
            !
-           if (tranfreq<small_) cycle
-           !
-           ! check for duplicates 
-           !
-           if (indexf==indexf_.and.indexi_==indexi.and.abs(acoef-acoef_)<small_) then
+           !omp parallel do private(iswap,ilevelf_,ileveli_,energyf,energyi,jf,ji,igammai,igammaf,tranfreq,tran
+           !omp& taken1,taken2,ifreq,f_t,itemp,abscoef,factor_,taken,unit_f) schedule(static) reduction(+:itaken,istrong,iweak)
+           do iswap = 1,nswap_
              !
-             write(out,"('Duplicate: J = ',2f9.1,' E = ',2f18.6,' Ind = ',2i9,' A = ',e18.5)") jf,ji,energyf,energyi,indexf_,indexi_,acoef
-             if (abs(acoef-acoef_)>small_) then
-               write(out,"('but A-coefs are different:',2e17.5)") acoef_,acoef
+             indexf = indexf_RAM(iswap)
+             indexi = indexi_RAM(iswap)
+             acoef = acoef_RAM(iswap)
+             !
+             if (indexf>nlevels.or.indexi>nlevels) cycle
+             !
+             ilevelf = indices(indexf)
+             ileveli = indices(indexi)
+             !
+             if (ilevelf==0.or.ileveli==0) cycle
+             !
+             energyf = energies(ilevelf)
+             energyi = energies(ileveli)
+             !
+             if (energyf-energyi<-1e1) then 
+               write(out,"(4i12,2x,3es16.8)"),ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
+               stop 'wrong order of indices'
+               cycle
+             elseif (energyf-energyi<-small_) then
+               cycle
              endif 
-             stop 'Duplicates'
              !
-           endif
-           !
-           select case (trim(specttype))
-             !
-           case default
-             !
-             print('(a,2x,a)'),'Illegal key:',trim(specttype)
-             stop 'Illegal specttype-key'
-             !
-           case ('ABSORPTION')
-             !
-             abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
-             !
-           case ('emission','EMISSION','EMISS','emiss','COOLING')
-             !
-             ! emission coefficient [Ergs/mol/Sr]
-             !
-             abscoef=emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-beta*energyf)*tranfreq/(partfunc)
-             !
-             !
-             if (trim(specttype)=='COOLING') then
+             if (filter) then
                !
-               !$omp parallel do private(itemp,temp0,beta0) shared(cooling) schedule(dynamic)
-               do itemp = 1,npoints
+               do ifilter = 1,Nfilters
                  !
-                 temp0 = real(itemp,rk)*dtemp
-                 !
-                 beta0 = c2/temp0
-                 !
-                 cooling(itemp) = cooling(itemp) + emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-beta0*energyf)*tranfreq/(pf(0,itemp))
+                 if (upper(ifilter)%mask/=trim(quantum_numbers(upper(ifilter)%i,ilevelf)).and.trim(upper(ifilter)%mask)/="") cycle loop_tran
+                 if (lower(ifilter)%mask/=trim(quantum_numbers(lower(ifilter)%i,ileveli)).and.trim(lower(ifilter)%mask)/="") cycle loop_tran
                  !
                enddo
-               !$omp end parallel do
                !
              endif
              !
-            case ('LIFETIME')
+             jf = jrot(ilevelf)
+             ji = jrot(ileveli)
              !
-             if (Asum(ilevelf)<0) Asum(ilevelf) = 0 
+             tranfreq = energyf-energyi
              !
-             Asum(ilevelf) = Asum(ilevelf) + acoef
+             tranfreq0 = tranfreq
              !
-             !print*,ilevelf,indexf,indexi,acoef
+             if (microns) then 
+               offset = offset/tranfreq**2
+               tranfreq0 = 10000.0_rk/(tranfreq+small_)
+             endif
              !
-             cycle 
+             if (tranfreq0>freqr+offset.or.tranfreq0<freql-offset) cycle
              !
-           end select
+             !if (tranfreq<small_) cycle
+             !
+             ! check for duplicates 
+             !
+             !if (indexf==indexf_.and.indexi_==indexi.and.abs(acoef-acoef_)<small_) then
+             !  !
+             !  write(out,"('Duplicate: J = ',2f9.1,' E = ',2f18.6,' Ind = ',2i9,' A = ',e18.5)") jf,ji,energyf,energyi,indexf_,indexi_,acoef
+             !  if (abs(acoef-acoef_)>small_) then
+             !    write(out,"('but A-coefs are different:',2e17.5)") acoef_,acoef
+             !  endif 
+             !  stop 'Duplicates'
+             !  !
+             !endif
+             !
+             select case (trim(specttype))
+               !
+             case default
+               !
+               print('(a,2x,a)'),'Illegal key:',trim(specttype)
+               stop 'Illegal specttype-key'
+               !
+             case ('ABSORPTION')
+               !
+               abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+               !
+             case ('PHOENIX')
+               !
+               !gf = (1.4992 x 10^4)(A/s-1)(lambda/nm)^2
+               !
+               !abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+               !
+               lambda = 1e7/tranfreq
+               !
+               abscoef = 1.4992e4*acoef*(lambda)**2
+               !
+               energyi_ram(iswap_) = energyi
+               !
+             case ('emission','EMISSION','EMISS','emiss','COOLING')
+               !
+               ! emission coefficient [Ergs/mol/Sr]
+               !
+               abscoef=emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-beta*energyf)*tranfreq/(partfunc)
+               !
+               if (trim(specttype)=='COOLING') then
+                 !
+                 !$omp parallel do private(itemp,temp0,beta0) shared(cooling) schedule(dynamic)
+                 do itemp = 1,npoints
+                   !
+                   temp0 = real(itemp,rk)*dtemp
+                   !
+                   beta0 = c2/temp0
+                   !
+                   cooling(itemp) = cooling(itemp) + emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-beta0*energyf)*tranfreq/(pf(0,itemp))
+                   !
+                 enddo
+                 !$omp end parallel do
+                 !
+               endif
+               !
+              case ('LIFETIME')
+               !
+               if (Asum(ilevelf)<0) Asum(ilevelf) = 0 
+               !
+               Asum(ilevelf) = Asum(ilevelf) + acoef
+               !
+               !print*,ilevelf,indexf,indexi,acoef
+               !
+               cycle 
+               !
+             end select
+             !
+             if (abscoef<abscoef_thresh) cycle
+             !
+             cutoff = thresh
+             !
+             if (trim(cutoff_model)=="HITRAN") then
+                if (tranfreq<=nu_crit) then
+                  cutoff = S_crit*tranfreq/nu_crit*tanh(0.5_rk*c2/temp*tranfreq)
+                else
+                  cutoff = S_crit
+                endif
+             endif
+             !
+             if (abscoef<cutoff) then 
+               cycle
+             endif 
+             !
+             ilevelf_ram(iswap_) = ilevelf
+             ileveli_ram(iswap_) = ileveli
+             abscoef_ram(iswap_) = abscoef
+             acoef_ram(iswap_) = acoef
+             !
+             nu_ram(iswap_) = tranfreq
+             !
+             intband = intband + abscoef
+             !
+             !do do_log_intensity
+             iswap_ = iswap_ + 1
+             !
+           enddo
+           !!omp end parallel do
+           !
+           nswap = iswap_-1
            !
         endif
         !
-        !   half width for Doppler profiling
-        if (proftype(1:5)=='DOPPL') then
-          !
-          if (tranfreq<small_) cycle
-          !
-          halfwidth=dpwcoef*tranfreq
-          !
-        elseif (proftype(1:5)=='GAUSS') then
-          !
-          halfwidth = halfwidth
-          !
-        else
-          !
-          halfwidth = 0
-          !
-          do ispecies =1,Nspecies
-            !
-            if ( trim(species(ispecies)%filename)/="" ) then
-              !
-              Jpp = nint(Ji)
-              Jp  = nint(Jf)
-              !
-              gamma_ = species(ispecies)%gammaQN(Jpp,Jp-Jpp)
-              n_     = species(ispecies)%nQN(Jpp,Jp-Jpp)
-              !
-            else
-              !
-              gamma_ = species(ispecies)%gamma
-              n_     = species(ispecies)%n
-              !
-            endif
-            !
-            halfwidth =  halfwidth + species(ispecies)%ratio*gamma_*(species(ispecies)%T0/Temp)**N_*pressure/species(ispecies)%P0
-            !
-          enddo
-          !
-        endif
-        !
-        if (offset<0) offset = ioffset*halfwidth
-        !
-        x0 = sqrt(ln2)/halfwidth*dfreq*0.5_rk
-        !
-        !   half width for Doppler profiling
-        if (proftype(1:3)=='VOI'.or.proftype(1:3)=='PSE') then
-          if (tranfreq<small_) cycle
-          halfwidth0=dpwcoef*tranfreq
-          x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
-        endif
-        !
-        tranfreq0 = tranfreq
-        !
-        if (microns) then 
-          offset = offset/tranfreq**2
-          tranfreq0 = 10000.0_rk/(tranfreq+small_)
-        endif
+        !if (offset<0) offset = ioffset*halfwidth
         !
         !   if transition frequency is out of selected range
-        if (tranfreq0>freqr+offset.or.tranfreq0<freql-offset) cycle
-        !
-        intband = intband + abscoef
-        !
-        ilog=log10(abscoef)
-        !
-        ilog = max(min(ubound(Nintens,dim=1),ilog),lbound(Nintens,dim=1))
-        !
-        Nintens(ilog) = Nintens(ilog)+1
-        !
-        !
-        ! HITAN cutoff model as an intensity threshold
-        if (trim(cutoff_model)=="HITRAN") then
-           if (tranfreq<=nu_crit) then
-             cutoff = S_crit*tranfreq/nu_crit*tanh(0.5_rk*c2/temp*tranfreq)
-           else
-             cutoff = S_crit
-           endif
-        else
-           cutoff = thresh
-        endif
-        !
-        if (abscoef<cutoff) cycle
-        !
-        ! if only stick spectrum needed
-        if (proftype(1:5)=='STICK') then
-           !
-           if (stick_hitran) then 
-             !
-             write(out,"(i3,f12.6,e10.3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6)",advance="no") &
-                         iso,tranfreq,abscoef,acoef,&
-                         species(1)%gamma,species(2)%gamma,&
-                         energyi,species(1)%n,species(1)%delta
-             !
-             !
-             nchars_ = 0 
-             !
-             do kitem = 3,maxitems 
-               !
-               l = len(trim(quantum_numbers(kitem,ilevelf)))
-               !
-               b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
-               !
-               write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
-               !
-               nchars_  = nchars_ + nchars_quanta(kitem)
-               !
-               if (nchars_>15) cycle
-               !
-               write(out,b_fmt,advance="no"), trim(quantum_numbers(kitem,ilevelf))
-               !
-             enddo
-             !
-             nchars_ = 0 
-             !
-             do kitem = 3,maxitems 
-               !
-               !l = len(trim(quantum_numbers(kitem,ileveli)))
-               !
-               !b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
-               !
-               write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
-               !
-               nchars_  = nchars_ + nchars_quanta(kitem)
-               !
-               if (nchars_>15) cycle
-               !
-               write(out,b_fmt,advance="no"), trim(quantum_numbers(kitem,ileveli))
-               !
-             enddo
-             !
-             if ( mod(nint(2*Jf),2)==0 ) then 
-               !
-               write(out,'(i7,1x,a1,1x,a1)',advance="no"), nint(Jf),trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
-               write(out,'(i7,1x,a1,1x,a1)',advance="no"), nint(Ji),trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
-               !
-             else 
-               !
-               write(out,'(f7.1,1x,a1,1x,a1)',advance="no"), Jf,trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
-               write(out,'(f7.1,1x,a1,1x,a1)',advance="no"), Ji,trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
-               !
-             endif
-             !
-             ierror_nu = 0
-             !
-             do iE = 1,HITRAN_E(1)%N
-                !
-                read(quantum_numbers(HITRAN_E(iE)%iqn,ileveli),*) qni
-                read(quantum_numbers(HITRAN_E(iE)%iqn,ilevelf),*) qnf
-                !
-                ierror_i = 0
-                do ierror = 0,6 
-                  if (qni<=HITRAN_E(iE)%error_vmax(ierror)) ierror_i = ierror 
-                  if (qnf<=HITRAN_E(iE)%error_vmax(ierror)) ierror_f = ierror 
-                enddo
-                !
-                ierror_nu = max(ierror_i,ierror_f) 
-                !
-             enddo
-             !
-             ierror_S = 0
-             !
-             do iE = 1,HITRAN_S(1)%N
-                !
-                read(quantum_numbers(HITRAN_S(iE)%iqn,ileveli),*) qni
-                read(quantum_numbers(HITRAN_S(iE)%iqn,ilevelf),*) qnf
-                !
-                ierror_i = 0
-                do ierror = 0,6 
-                  if (qni<=HITRAN_S(iE)%error_vmax(ierror)) ierror_i = ierror 
-                  if (qnf<=HITRAN_S(iE)%error_vmax(ierror)) ierror_f = ierror 
-                enddo
-                !
-                ierror_S = max(ierror_i,ierror_f) 
-                !
-             enddo
-             !
-             write(out,'(1x,i1)',advance="no"),ierror_nu
-             write(out,'(i1)',advance="no"),ierror_S
-             write(out,'(i1)',advance="no"),HITRAN_Air%ierr
-             write(out,'(i1)',advance="no"),HITRAN_Self%ierr
-             write(out,'(i1)',advance="no"),HITRAN_n%ierr
-             write(out,'(i1)',advance="no"),HITRAN_Delta%ierr
-             !
-             write(out,"(' 0 0 0 0 0 0 ',f7.1,f7.1)",advance="yes") real(gtot(ilevelf)),real(gtot(ileveli))
-             !
-           else
-              !
-              !if (abscoef>thresh)  then 
-              !
-              ! write to .stick-file
-              write(sunit,my_fmt) tranfreq,abscoef
-              !
-              write(out,my_fmt,advance="no"), &
-              tranfreq,abscoef,jrot(ilevelf),energyf, jrot(ileveli),energyi 
-              !
-              ! printing the line width 
-              !
-              if (Nspecies>0) then 
-                !
-                write(out,"(f12.5)",advance="no") halfwidth
-                !
-              endif
-              !
-              !write(out,"(a4)",advance="no"), " <- "
-              !
-              do kitem = 1,maxitems 
-                !
-                l = len(trim(quantum_numbers(kitem,ilevelf)))
-                !
-                b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
-                !
-                if (nchars_quanta(kitem)<10) then
-                  write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
-                else
-                  write(b_fmt,"('(1x,a',i2,')')") nchars_quanta(kitem)
-                endif
-                !
-                write(out,b_fmt,advance="no"), trim(quantum_numbers(kitem,ilevelf))
-                !
-              enddo
-              !
-              write(out,"(a3)",advance="no") " <-"
-              !
-              do kitem = 1,maxitems 
-                !
-                !l = len(trim(quantum_numbers(kitem,ileveli)))
-                !
-                !b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
-                !
-                if (nchars_quanta(kitem)<10) then
-                  write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
-                else
-                  write(b_fmt,"('(1x,a',i2,')')") nchars_quanta(kitem)
-                endif
-                !
-                write(out,b_fmt,advance="no"), trim(quantum_numbers(kitem,ileveli))
-                !
-              enddo
-              !
-              write(out,"(a1)",advance="yes") " "
-              !
-           endif 
-           !
-           cycle
-        end if
-        !
-        if (abscoef<abscoef_thresh) cycle
-        !
-        ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
-        ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
         !
         select case (trim(proftype(1:5)))
             !
-        case ('GAUS0','DOPP0')
+        case ('STICK')
             !
-            alpha = -ln2/halfwidth**2
+            cutoff =  apply_HITRAN_cutoff(tranfreq)
+            if (abscoef<cutoff) cycle
             !
-            abscoef=abscoef*sqrt(ln2/pi)/halfwidth
+            call do_stick(sunit,nswap,nlines,maxitems,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nchars_quanta,quantum_numbers)
             !
-            !$omp parallel do private(ipoint,dfreq_,de) shared(intens) schedule(dynamic)
-            do ipoint=ib,ie
-               !
-               dfreq_=freq(ipoint)-tranfreq
-               !
-               de = exp(alpha*dfreq_**2)
-               !
-               intens(ipoint)=intens(ipoint)+abscoef*de
-               !
-            enddo
-            !$omp end parallel do
+            cycle
             !
-        case ('GAUSS','DOPPL')
+        case ('PHOENIX')
             !
-            !$omp parallel do private(ipoint,dfreq_,xp,xm,de) shared(intens) schedule(dynamic)
-            do ipoint=ib,ie
-               !
-               dfreq_=freq(ipoint)-tranfreq
-               !
-               xp = sqrt(ln2)/halfwidth*(dfreq_)+x0
-               xm = sqrt(ln2)/halfwidth*(dfreq_)-x0
-               !
-               de = erf(xp)-erf(xm)
-               !
-               intens(ipoint)=intens(ipoint)+abscoef*0.5_rk/dfreq*de
-               !
-            enddo
-            !$omp end parallel do 
+            !cutoff =  apply_HITRAN_cutoff(tranfreq)
+            !
+            call do_gf_oscillator_strength_France(nswap_,iso,Jf,Ji,nu_ram,energyi_ram,abscoef_ram)
+            !
+            cycle
+
+
+!ielion, wl, gf-value, xi, igr, igs, igw
+!where ielion: internal code of the molecule for Phoenix, 
+!wl:wavelength, 
+!xi:lower state energy, 
+!gf-value: log gf coded in integer format,
+!igr: natural width constant, 
+!igs: Stark broadening constant, 
+!igw: van der Waals damping constants.
+!igr for gamma0 and igs for n (Voigt parameters) 
+
+
+            !
+        case ('GAUS0')
+            !
+            call do_gauss0(tranfreq,abscoef,dfreq,freq,halfwidth,freql,intens)
+            !
+        case ('DOPPL')
+            !
+            if (tranfreq<small_) cycle
+            !
+            call do_gauss(tranfreq,abscoef,dfreq,freq,halfwidth,offset,dpwcoef,freql,intens)
+            !
+        case ('GAUSS')
+            !
+            if (tranfreq<small_) cycle
+            !
+            call do_gauss(tranfreq,abscoef,dfreq,freq,halfwidth,offset,dpwcoef,freql,intens)
             !
         case ('LOREN')
             !
-            ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
-            ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
-            !
-            !abscoef=abscoef*sqrt(ln2/pi)/halfwidth
-            !
-            !lor = halfwidth/dfreq
-            !b = 0.25_rk*pi*lor*( 4.0_rk+lor**2**2 )/( 2.0_rk+lor**2 )
-            !
-            !b = 1.0_rk
-            !
-            !lor = 0.5_rk/pi*halfwidth*abscoef*b
-            !lor2 = 0.25_rk*halfwidth**2
-            !
-            dfreq_=freq(ib)-tranfreq
-            !
-            xm = atan( (freq(ib)-tranfreq)/halfwidth )
-            xp = atan( (freq(ie)-tranfreq)/halfwidth )
-            !
-            b = 1.0_rk/(xp-xm)
-            !
-            dnu_half = dfreq*0.5_rk
-            !
-            !$omp parallel do private(ipoint,dfreq_,xp,xm,de) shared(intens) schedule(dynamic)
-            do ipoint=ib,ie
-               !
-               dfreq_=freq(ipoint)-tranfreq
-               !
-               xp = atan((dfreq_+dnu_half)/halfwidth)
-               xm = atan((dfreq_-dnu_half)/halfwidth)
-               !
-               de = (xp)-(xm)
-               !
-               intens(ipoint)=intens(ipoint)+abscoef*de/dfreq*b
-               !
-               !dfreq_2=(freq(ipoint)-tranfreq)**2+lor2
-               !
-               !intens(ipoint)=intens(ipoint)+lor/dfreq_2
-               !
-            enddo
-            !$omp end parallel do 
+            call do_lorentz(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens)
             !
         case ('PSEUD')
             !
-            ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
-            ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+            if (tranfreq<small_) cycle
             !
-            !abscoef=abscoef*sqrt(ln2/pi)/halfwidth
+            call get_Voigt_gamma_n(Nspecies,Jf,Ji)
             !
-            !
-            dfreq_=freq(ib)-tranfreq
-            !
-            xm = atan( (freq(ib)-tranfreq)/halfwidth )
-            xp = atan( (freq(ie)-tranfreq)/halfwidth )
-            !
-            bnorm = 1.0_rk/(xp-xm)
-            !
-            f = ( halfwidth0**5 + 2.69269_rk*halfwidth0**4*halfwidth+2.42843_rk*halfwidth0**3*halfwidth**2+4.47163_rk*halfwidth0**2*halfwidth**3+0.07842_rk*halfwidth0*halfwidth**4+halfwidth**5)**0.2_rk
-            !
-            eta1 = 1.36603_rk*(halfwidth/f)-0.47719_rk*(halfwidth/f)**2+0.11116_rk*(halfwidth/f)**3
-            !
-            eta2 = 1.0_rk - eta1
-            !
-            dnu_half = dfreq*0.5_rk
-            !
-            !$omp parallel do private(ipoint,dfreq_,xp,xm,de,intens1,intens2) shared(intens) schedule(dynamic)
-            do ipoint=ib,ie
-               !
-               dfreq_=freq(ipoint)-tranfreq
-               !
-               xp = atan((dfreq_+dnu_half)/halfwidth)
-               xm = atan((dfreq_-dnu_half)/halfwidth)
-               !
-               de = (xp)-(xm)
-               !
-               intens1 = de/dfreq*bnorm
-               !
-               xp = sqrt(ln2)/halfwidth0*(dfreq_)+x0
-               xm = sqrt(ln2)/halfwidth0*(dfreq_)-x0
-               !
-               de = erf(xp)-erf(xm)
-               !
-               intens2 = 0.5_rk/dfreq*de
-               !
-               intens(ipoint)=intens(ipoint)+abscoef*(intens1*eta1+intens2*eta2)
-               !
-            enddo
-            !$omp end parallel do
+            call do_pseud(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
             !
         case ('PSE-R') ! pseudo_Voigt_Rocco_Cruzado_ActaPhysPol_2012.pdf
             !
-            ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
-            ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+            if (tranfreq<small_) cycle
             !
-            dfreq_=freq(ib)-tranfreq
+            halfwidth0=dpwcoef*tranfreq
+            x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
             !
-            xm = atan( (freq(ib)-tranfreq)/halfwidth )
-            xp = atan( (freq(ie)-tranfreq)/halfwidth )
-            !
-            bnorm = 1.0_rk/(xp-xm)
-            !
-            ! halfwidth0 is Doppler and halfwidth is Lorentzian
-            !
-            a = halfwidth/halfwidth0
-            !
-            wG = halfwidth0/ln2
-            !
-            Va0 = exp(a**2)*(1.0_rk-erf(a))/sqrt(pi)
-            !
-            gammaV = ( a+ln2*exp(-0.6055_rk*a+0.0718_rk*a**2-0.0049_rk*a**3+ 0.000136*a**4) )
-            !
-            eta1 = ( sqrt(pi)*Va0*gammaV-ln2 )/( sqrt(pi)*Va0*gammaV*( 1.0_rk - sqrt(pi*ln2) ) )
-            !
-            eta2 = 1.0_rk - eta1
-            !
-            dnu_half = dfreq*0.5_rk
-            !
-            !$omp parallel do private(ipoint,dfreq_,xp,xm,de,intens1,intens2) shared(intens) schedule(dynamic)
-            do ipoint=ib,ie
-               !
-               dfreq_=freq(ipoint)-tranfreq
-               !
-               xp = atan((dfreq_+dnu_half)/halfwidth)
-               xm = atan((dfreq_-dnu_half)/halfwidth)
-               !
-               de = (xp)-(xm)
-               !
-               intens1 = de/dfreq*bnorm
-               !
-               xp = sqrt(ln2)/halfwidth0*(dfreq_)+x0
-               xm = sqrt(ln2)/halfwidth0*(dfreq_)-x0
-               !
-               de = erf(xp)-erf(xm)
-               !
-               intens2 = 0.5_rk/dfreq*de
-               !
-               intens(ipoint)=intens(ipoint)+abscoef*(intens1*eta1+intens2*eta2)
-               !
-            enddo
-            !$omp end parallel do       
+            call get_Voigt_gamma_n(Nspecies,Jf,Ji)
+            call do_pse_R(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
             !
         case ('PSE-L') ! pseudo_Voigt_Liu_Lin_JOptSocAmB_2001.pdf
             !
-            ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
-            ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+            if (tranfreq<small_) cycle
             !
-            dfreq_=freq(ib)-tranfreq
-            !
-            xm = atan( (freq(ib)-tranfreq)/halfwidth )
-            xp = atan( (freq(ie)-tranfreq)/halfwidth )
-            !
-            bnorm = 1.0_rk/(xp-xm)
-            !
-            ! halfwidth0 is Doppler and halfwidth is Lorentzian
-            !
-            d = (halfwidth-halfwidth0)/(halfwidth+halfwidth0)
-            !
-            eta1 = 0.68188_rk+0.61293_rk*d-0.18384_rk*d**2-0.11568_rk*d**3
-            !
-            eta2 = 1.0_rk-eta1
-            !
-            dnu_half = dfreq*0.5_rk
-            !
-            !eta2 = 0.32460_rk-0.61825_rk*d+0.17681_rk*d**2+0.12109_rk*d**3
-            !
-            !$omp parallel do private(ipoint,dfreq_,xp,xm,de,intens1,intens2) shared(intens) schedule(dynamic)
-            do ipoint=ib,ie
-               !
-               dfreq_=freq(ipoint)-tranfreq
-               !
-               xp = atan((dfreq_+dnu_half)/halfwidth)
-               xm = atan((dfreq_-dnu_half)/halfwidth)
-               !
-               de = (xp)-(xm)
-               !
-               intens1 = de/dfreq*bnorm
-               !
-               xp = sqrt(ln2)/halfwidth0*(dfreq_)+x0
-               xm = sqrt(ln2)/halfwidth0*(dfreq_)-x0
-               !
-               de = erf(xp)-erf(xm)
-               !
-               intens2 = 0.5_rk/dfreq*de
-               !
-               intens(ipoint)=intens(ipoint)+abscoef*(intens1*eta1+intens2*eta2)
-               !
-            enddo
-            !$omp end parallel do             
+            call get_Voigt_gamma_n(Nspecies,Jf,Ji)
+            call do_pse_L(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
             !
         case ('VOI-Q') ! VOIGT-QUADRATURES
             !
-            alpha = halfwidth0
-            gamma = halfwidth
+            if (tranfreq<small_) cycle
             !
-            !call voi_quad(npoints,ib,ie,freq,abscoef,intens,dfreq,tranfreq,alpha,gamma,nquad,abciss,weight)
+            !halfwidth0=dpwcoef*tranfreq
+            !x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
             !
-            sigma = alpha/ln22
-            !
-            y = gamma/sigma
-            !
-            dx2 = dfreq*0.5_rk/sigma
-            !
-            do iquad=1,nquad
-               !
-               xi = abciss(iquad)
-               !
-               x1 = (freq(ib)-tranfreq)/sigma-xi
-               x2 = (freq(ie)-tranfreq)/sigma-xi
-               !
-               L1 = atan( x1/y )
-               L2 = atan( x2/y )
-               !
-               bnormq(iquad) = 1.0_rk/(L2-L1)*pi
-               !
-            enddo
-            !
-            Lorentz = 0
-            !
-            !$omp parallel do private(ipoint,xp,iquad,xi,x1,x2,dxp,L1,L2,Lorentz,voigt_) shared(intens) schedule(dynamic)
-            do ipoint=ib,ie
-               !
-               xp = (freq(ipoint)-tranfreq)/sigma
-               !
-               do iquad=1,nquad
-                  !
-                  xi = abciss(iquad)
-                  !
-                  dxp  = xp-xi
-                  !
-                  x1 = dxp-dx2
-                  x2 = dxp+dx2
-                  !
-                  L1 = atan( x1/y )
-                  L2 = atan( x2/y )
-                  !
-                  Lorentz(iquad) = (L2-L1)/pi
-                  !
-               enddo
-               !
-               voigt_ = sum(Lorentz(1:nquad)*weight(1:nquad)*bnormq(1:nquad))/dfreq
-               !
-               intens(ipoint)=intens(ipoint)+abscoef*voigt_
-               !
-            enddo
-            !$omp end parallel do
+            call get_Voigt_gamma_n(Nspecies,Jf,Ji)
+            call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth,offset,freql,dpwcoef,intens)
             !
         case ('VOIGT')
             !
-            ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
-            ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+            if (tranfreq<small_) cycle
             !
-            ! bnorm is due to to truncation of the wings, see Sharp and Burrows 2007 
+            !halfwidth0=dpwcoef*tranfreq
+            !x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
             !
-            !bnorm = 2.0_rk-2.0_rk/pi * atan(2.0_rk*offset/halfwidth)
-            !
-            !if (halfwidth<0.5_rk*dfreq**2) then
-            !  !
-            !  dfreq_2 = halfwidth/dfreq
-            !  !
-            !  bnorm = pi*0.25_rk*dfreq_2*(4.0_rk+dfreq_2**2)/(2.0_rk+dfreq_2**2)
-            !  !
-            !  tranfreq = min(max(nint( ( tranfreq)/dfreq )+1,1),npoints)
-            !  !
-            !endif
-            !
-            !abscoef = abscoef*bnorm
-            !
-            !$omp parallel do private(ipoint,tranfreq_i) shared(intens) schedule(dynamic)
-            do ipoint=ib,ie
-               !
-               tranfreq_i = freq(ipoint)
-               !
-               !intens(ipoint)=intens(ipoint)+voigt_faddeeva(tranfreq_i,tranfreq,halfwidth0,halfwidth)*abscoef
-               intens(ipoint)=intens(ipoint)+voigt_humlicek(tranfreq_i,tranfreq,halfwidth0,halfwidth)*abscoef
-               !
-            enddo
-            !$omp end parallel do      
+            call get_Voigt_gamma_n(Nspecies,Jf,Ji)
+            call do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,x0,offset,freql,bnormq,intens)
             !
         case ('MAX');
+          !
+          cutoff =  apply_HITRAN_cutoff(tranfreq)
           !
           ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
           !
@@ -1945,28 +1610,41 @@ module spectrum
           !$omp end parallel do
           !
         case ('BIN');
-          !
-          if (microns) then 
+          
+
+          do iswap = 1,nswap
             !
-            ipoint =  nint( ( 10000.0_rk/tranfreq-freql )/dfreq )+1
+            ilevelf = ilevelf_ram(iswap)
+            ileveli = ileveli_ram(iswap)
+            abscoef = abscoef_ram(iswap)
+            acoef   = acoef_ram(iswap)
+            energyf = energies(ilevelf)
+            energyi = energies(ileveli)
+            tranfreq = energyf - energyi
             !
-            if (ipoint<1.or.ipoint>npoints) cycle 
+            if (microns) then 
+              !
+              ipoint =  nint( ( 10000.0_rk/tranfreq-freql )/dfreq )+1
+              !
+              if (ipoint<1.or.ipoint>npoints) cycle 
+              !
+            elseif (use_resolving_power) then 
+              !
+              ipoint =  nint(real((log(tranfreq)-log(freql))/resolving_f,rk))+1
+              !
+              !nint( ( 10000.0_rk/tranfreq-freql )/dfreq )+1
+              !
+              if (ipoint<1.or.ipoint>npoints) cycle 
+              !
+            else 
+              !
+              ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
+              !
+            endif
             !
-          elseif (use_resolving_power) then 
+            intens(ipoint)=intens(ipoint)+abscoef
             !
-            ipoint =  nint(real((log(tranfreq)-log(freql))/resolving_f,rk))+1
-            !
-            !nint( ( 10000.0_rk/tranfreq-freql )/dfreq )+1
-            !
-            if (ipoint<1.or.ipoint>npoints) cycle 
-            !
-          else 
-            !
-            ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
-            !
-          endif
-          !
-          intens(ipoint)=intens(ipoint)+abscoef
+          enddo
           !
         end select
         !
@@ -1980,7 +1658,9 @@ module spectrum
      !
      close(tunit)
      !
-   enddo 
+     if (nswap_<nswap) exit loop_file
+     !
+   enddo loop_file
    !
    call IOstop(trim(ioname))
    !
@@ -1991,7 +1671,7 @@ module spectrum
      !
      open(unit=tunit,file=trim(output)//".life",action='write',status='replace')
      !
-     do ilevelf = 1,iline
+     do ilevelf = 1,nlines
        !
        ! write to .life-file
        !
@@ -2119,9 +1799,718 @@ module spectrum
   end subroutine intensity
   !
 
+!ielion, wl, gf-value, xi, igr, igs, igw
+!where ielion: internal code of the molecule for Phoenix, 
+!wl:wavelength, 
+!xi:lower state energy, 
+!gf-value: log gf coded in integer format,
+!igr: natural width constant, 
+!igs: Stark broadening constant, 
+!igw: van der Waals damping constants.
+!igr for gamma0 and igs for n (Voigt parameters) 
+
+   function apply_HITRAN_cutoff(tranfreq) result(cutoff)
+      !
+      implicit none
+      !
+      real(rk),intent(in) :: tranfreq
+      real(rk)  :: cutoff
+      !
+      ! HITAN cutoff model as an intensity threshold
+      if (trim(cutoff_model)=="HITRAN") then
+         if (tranfreq<=nu_crit) then
+           cutoff = S_crit*tranfreq/nu_crit*tanh(0.5_rk*c2/temp*tranfreq)
+         else
+           cutoff = S_crit
+         endif
+      else
+         cutoff = thresh
+      endif
+      !
+   end function apply_HITRAN_cutoff
+
+   subroutine do_log_intensity(abscoef,Nintens)
+     !
+     implicit none
+     !
+     !
+     real(rk),intent(in) :: abscoef
+     integer(ik),intent(out) :: Nintens(:)
+     integer(ik) :: ilog
+       !
+       ilog=log10(abscoef)
+       !
+       ilog = max(min(ubound(Nintens,dim=1),ilog),lbound(Nintens,dim=1))
+       !
+       Nintens(ilog) = Nintens(ilog)+1
+       !
+   end subroutine do_log_intensity
+
+
+  subroutine do_gauss0(tranfreq,abscoef0,dfreq,freq,halfwidth,freql,intens)
+     !
+     implicit none
+     !
+     real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,freql
+     real(rk),intent(in) :: freq(:)
+     real(rk),intent(out) :: intens(:)
+     real(rk) :: alpha,abscoef,dfreq_,de,ln2
+     integer(ik) :: ib,ie,ipoint
+     !
+     ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+     !
+     ln2=log(2.0_rk)
+     alpha = -ln2/halfwidth**2
+     !
+     abscoef=abscoef0*sqrt(ln2/pi)/halfwidth
+     !
+     !$omp parallel do private(ipoint,dfreq_,de) shared(intens) schedule(dynamic)
+     do ipoint=ib,ie
+        !
+        dfreq_=freq(ipoint)-tranfreq
+        !
+        de = exp(alpha*dfreq_**2)
+        !
+        intens(ipoint)=intens(ipoint)+abscoef*de
+        !
+     enddo
+     !$omp end parallel do
+     !
+  end subroutine do_gauss0
+
+
+  subroutine do_gauss(tranfreq,abscoef0,dfreq,freq,halfwidth0,offset,dpwcoef,freql,intens)
+     !
+     implicit none
+     !
+     real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth0,offset,freql,dpwcoef
+     real(rk),intent(in) :: freq(:)
+     real(rk),intent(out) :: intens(:)
+     real(rk) :: alpha,abscoef,dfreq_,de,xp,xm,ln2,x0,halfwidth
+     integer(ik) :: ib,ie,ipoint
+     !
+     x0 = sqrt(ln2)/halfwidth*dfreq*0.5_rk
+     !
+     halfwidth=dpwcoef*tranfreq
+     !
+     ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+     ln2=log(2.0_rk)
+     !
+     !$omp parallel do private(ipoint,dfreq_,xp,xm,de) shared(intens) schedule(dynamic)
+     do ipoint=ib,ie
+        !
+        dfreq_=freq(ipoint)-tranfreq
+        !
+        xp = sqrt(ln2)/halfwidth*(dfreq_)+x0
+        xm = sqrt(ln2)/halfwidth*(dfreq_)-x0
+        !
+        de = erf(xp)-erf(xm)
+        !
+        intens(ipoint)=intens(ipoint)+abscoef*0.5_rk/dfreq*de
+        !
+     enddo
+     !$omp end parallel do 
+
+  end subroutine do_gauss
+  !
+  !
+  subroutine do_lorentz(tranfreq,abscoef0,dfreq,freq,halfwidth,offset,freql,intens)
+     !
+     implicit none
+     !
+     real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,offset,freql
+     real(rk),intent(in) :: freq(:)
+     real(rk),intent(out) :: intens(:)
+     real(rk) :: alpha,abscoef,dfreq_,de,xp,xm,ln2,b,dnu_half,x0
+     integer(ik) :: ib,ie,ipoint
+     !
+     ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+     !
+     !abscoef=abscoef*sqrt(ln2/pi)/halfwidth
+     !
+     !lor = halfwidth/dfreq
+     !b = 0.25_rk*pi*lor*( 4.0_rk+lor**2**2 )/( 2.0_rk+lor**2 )
+     !
+     !b = 1.0_rk
+     !
+     !lor = 0.5_rk/pi*halfwidth*abscoef*b
+     !lor2 = 0.25_rk*halfwidth**2
+     !
+     dfreq_=freq(ib)-tranfreq
+     !
+     xm = atan( (freq(ib)-tranfreq)/halfwidth )
+     xp = atan( (freq(ie)-tranfreq)/halfwidth )
+     !
+     b = 1.0_rk/(xp-xm)
+     !
+     dnu_half = dfreq*0.5_rk
+     !
+     !$omp parallel do private(ipoint,dfreq_,xp,xm,de) shared(intens) schedule(dynamic)
+     do ipoint=ib,ie
+        !
+        dfreq_=freq(ipoint)-tranfreq
+        !
+        xp = atan((dfreq_+dnu_half)/halfwidth)
+        xm = atan((dfreq_-dnu_half)/halfwidth)
+        !
+        de = (xp)-(xm)
+        !
+        intens(ipoint)=intens(ipoint)+abscoef*de/dfreq*b
+        !
+        !dfreq_2=(freq(ipoint)-tranfreq)**2+lor2
+        !
+        !intens(ipoint)=intens(ipoint)+lor/dfreq_2
+        !
+     enddo
+     !$omp end parallel do 
+     !
+  end subroutine do_lorentz
+
+  subroutine do_pseud(tranfreq,abscoef0,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
+     !
+     implicit none
+     !
+     real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,offset,freql,dpwcoef
+     real(rk),intent(in) :: freq(:)
+     real(rk),intent(out) :: intens(:)
+     real(rk) :: alpha,abscoef,dfreq_,de,xp,xm,ln2,b,dnu_half,bnorm,f,eta1,eta2,intens2,halfwidth0,x0,intens1
+     integer(ik) :: ib,ie,ipoint
+  
+      !
+      halfwidth0=dpwcoef*tranfreq
+      x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
+      !
+      ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
+      ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+      !
+      !abscoef=abscoef*sqrt(ln2/pi)/halfwidth
+      !
+      !
+      dfreq_=freq(ib)-tranfreq
+      !
+      xm = atan( (freq(ib)-tranfreq)/halfwidth )
+      xp = atan( (freq(ie)-tranfreq)/halfwidth )
+      !
+      bnorm = 1.0_rk/(xp-xm)
+      !
+      f = ( halfwidth0**5 + 2.69269_rk*halfwidth0**4*halfwidth+2.42843_rk*halfwidth0**3*halfwidth**2+4.47163_rk*halfwidth0**2*halfwidth**3+0.07842_rk*halfwidth0*halfwidth**4+halfwidth**5)**0.2_rk
+      !
+      eta1 = 1.36603_rk*(halfwidth/f)-0.47719_rk*(halfwidth/f)**2+0.11116_rk*(halfwidth/f)**3
+      !
+      eta2 = 1.0_rk - eta1
+      !
+      dnu_half = dfreq*0.5_rk
+      !
+      !$omp parallel do private(ipoint,dfreq_,xp,xm,de,intens1,intens2) shared(intens) schedule(dynamic)
+      do ipoint=ib,ie
+         !
+         dfreq_=freq(ipoint)-tranfreq
+         !
+         xp = atan((dfreq_+dnu_half)/halfwidth)
+         xm = atan((dfreq_-dnu_half)/halfwidth)
+         !
+         de = (xp)-(xm)
+         !
+         intens1 = de/dfreq*bnorm
+         !
+         xp = sqrt(ln2)/halfwidth0*(dfreq_)+x0
+         xm = sqrt(ln2)/halfwidth0*(dfreq_)-x0
+         !
+         de = erf(xp)-erf(xm)
+         !
+         intens2 = 0.5_rk/dfreq*de
+         !
+         intens(ipoint)=intens(ipoint)+abscoef*(intens1*eta1+intens2*eta2)
+         !
+      enddo
+      !$omp end parallel do
+
+
+  end subroutine do_pseud
+
+  subroutine do_pse_R(tranfreq,abscoef0,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
+     !
+     implicit none
+     !
+     real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,offset,freql,dpwcoef
+     real(rk),intent(in) :: freq(:)
+     real(rk),intent(out) :: intens(:)
+     real(rk) :: alpha,abscoef,dfreq_,de,xp,xm,ln2,b,dnu_half,bnorm,f,eta1,eta2,intens2,halfwidth0,x0,a,wg,va0
+     real(rk) :: gammaV,intens1
+     integer(ik) :: ib,ie,ipoint
+     !
+     halfwidth0=dpwcoef*tranfreq
+     x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
+     !
+     ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+     !
+     dfreq_=freq(ib)-tranfreq
+     !
+     xm = atan( (freq(ib)-tranfreq)/halfwidth )
+     xp = atan( (freq(ie)-tranfreq)/halfwidth )
+     !
+     bnorm = 1.0_rk/(xp-xm)
+     !
+     ! halfwidth0 is Doppler and halfwidth is Lorentzian
+     !
+     a = halfwidth/halfwidth0
+     !
+     wG = halfwidth0/ln2
+     !
+     Va0 = exp(a**2)*(1.0_rk-erf(a))/sqrt(pi)
+     !
+     gammaV = ( a+ln2*exp(-0.6055_rk*a+0.0718_rk*a**2-0.0049_rk*a**3+ 0.000136*a**4) )
+     !
+     eta1 = ( sqrt(pi)*Va0*gammaV-ln2 )/( sqrt(pi)*Va0*gammaV*( 1.0_rk - sqrt(pi*ln2) ) )
+     !
+     eta2 = 1.0_rk - eta1
+     !
+     dnu_half = dfreq*0.5_rk
+     !
+     !$omp parallel do private(ipoint,dfreq_,xp,xm,de,intens1,intens2) shared(intens) schedule(dynamic)
+     do ipoint=ib,ie
+        !
+        dfreq_=freq(ipoint)-tranfreq
+        !
+        xp = atan((dfreq_+dnu_half)/halfwidth)
+        xm = atan((dfreq_-dnu_half)/halfwidth)
+        !
+        de = (xp)-(xm)
+        !
+        intens1 = de/dfreq*bnorm
+        !
+        xp = sqrt(ln2)/halfwidth0*(dfreq_)+x0
+        xm = sqrt(ln2)/halfwidth0*(dfreq_)-x0
+        !
+        de = erf(xp)-erf(xm)
+        !
+        intens2 = 0.5_rk/dfreq*de
+        !
+        intens(ipoint)=intens(ipoint)+abscoef*(intens1*eta1+intens2*eta2)
+        !
+     enddo
+     !$omp end parallel do       
+     !
+  end subroutine do_pse_R
+      !
+  subroutine  do_pse_L(tranfreq,abscoef0,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
+     !
+     implicit none
+     !
+     real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,offset,freql,dpwcoef
+     real(rk),intent(in) :: freq(:)
+     real(rk),intent(out) :: intens(:)
+     real(rk) :: alpha,abscoef,dfreq_,de,xp,xm,ln2,b,dnu_half,bnorm,f,eta1,eta2,intens2,halfwidth0
+     real(rk) :: d,x0,intens1
+     integer(ik) :: ib,ie,ipoint
+     !
+     halfwidth0=dpwcoef*tranfreq
+     x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
+     !
+     !
+     ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+     !
+     dfreq_=freq(ib)-tranfreq
+     !
+     xm = atan( (freq(ib)-tranfreq)/halfwidth )
+     xp = atan( (freq(ie)-tranfreq)/halfwidth )
+     !
+     bnorm = 1.0_rk/(xp-xm)
+     !
+     ! halfwidth0 is Doppler and halfwidth is Lorentzian
+     !
+     d = (halfwidth-halfwidth0)/(halfwidth+halfwidth0)
+     !
+     eta1 = 0.68188_rk+0.61293_rk*d-0.18384_rk*d**2-0.11568_rk*d**3
+     !
+     eta2 = 1.0_rk-eta1
+     !
+     dnu_half = dfreq*0.5_rk
+     !
+     !eta2 = 0.32460_rk-0.61825_rk*d+0.17681_rk*d**2+0.12109_rk*d**3
+     !
+     !$omp parallel do private(ipoint,dfreq_,xp,xm,de,intens1,intens2) shared(intens) schedule(dynamic)
+     do ipoint=ib,ie
+        !
+        dfreq_=freq(ipoint)-tranfreq
+        !
+        xp = atan((dfreq_+dnu_half)/halfwidth)
+        xm = atan((dfreq_-dnu_half)/halfwidth)
+        !
+        de = (xp)-(xm)
+        !
+        intens1 = de/dfreq*bnorm
+        !
+        xp = sqrt(ln2)/halfwidth0*(dfreq_)+x0
+        xm = sqrt(ln2)/halfwidth0*(dfreq_)-x0
+        !
+        de = erf(xp)-erf(xm)
+        !
+        intens2 = 0.5_rk/dfreq*de
+        !
+        intens(ipoint)=intens(ipoint)+abscoef*(intens1*eta1+intens2*eta2)
+        !
+     enddo
+     !$omp end parallel do           
+     !
+  end subroutine  do_pse_L
+
+
+  subroutine do_Voi_Q(tranfreq,abscoef0,dfreq,freq,abciss,weight,halfwidth,offset,freql,dpwcoef,intens)
+     !
+     implicit none
+     !
+     real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,offset,freql,dpwcoef
+     real(rk),intent(in) :: freq(:),abciss(nquad),weight(nquad)
+     real(rk),intent(out) :: intens(:)
+     real(rk) :: alpha,abscoef,dfreq_,de,xp,xm,ln2,b,dnu_half,bnorm,f,eta,eta2,intens2,halfwidth0,gamma
+     real(rk) :: ln22,y,dx2,x0,sigma,xi,x1,x2,l1,l2,bnormq(1:nquad),Lorentz(nquad),dxp,voigt_
+     integer(ik) :: ib,ie,ipoint,iquad
+     !
+     halfwidth0=dpwcoef*tranfreq
+     x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
+     !
+     ln2=log(2.0_rk)
+     ln22 = ln2*2.0_rk
+     !
+     ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+     !
+     alpha = halfwidth0
+     gamma = halfwidth
+     !
+     !call voi_quad(npoints,ib,ie,freq,abscoef,intens,dfreq,tranfreq,alpha,gamma,nquad,abciss,weight)
+     !
+     sigma = alpha/ln22
+     !
+     y = gamma/sigma
+     !
+     dx2 = dfreq*0.5_rk/sigma
+     !
+     do iquad=1,nquad
+        !
+        xi = abciss(iquad)
+        !
+        x1 = (freq(ib)-tranfreq)/sigma-xi
+        x2 = (freq(ie)-tranfreq)/sigma-xi
+        !
+        L1 = atan( x1/y )
+        L2 = atan( x2/y )
+        !
+        bnormq(iquad) = 1.0_rk/(L2-L1)*pi
+        !
+     enddo
+     !
+     Lorentz = 0
+     !
+     !$omp parallel do private(ipoint,xp,iquad,xi,x1,x2,dxp,L1,L2,Lorentz,voigt_) shared(intens) schedule(dynamic)
+     do ipoint=ib,ie
+        !
+        xp = (freq(ipoint)-tranfreq)/sigma
+        !
+        do iquad=1,nquad
+           !
+           xi = abciss(iquad)
+           !
+           dxp  = xp-xi
+           !
+           x1 = dxp-dx2
+           x2 = dxp+dx2
+           !
+           L1 = atan( x1/y )
+           L2 = atan( x2/y )
+           !
+           Lorentz(iquad) = (L2-L1)/pi
+           !
+        enddo
+        !
+        voigt_ = sum(Lorentz(1:nquad)*weight(1:nquad)*bnormq(1:nquad))/dfreq
+        !
+        intens(ipoint)=intens(ipoint)+abscoef*voigt_
+        !
+     enddo
+     !$omp end parallel do
+     !
+  end subroutine  do_Voi_Q
+
+  subroutine  do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,x0,offset,freql,bnormq,intens)
+     !
+     implicit none
+     !
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,x0,offset,freql,dpwcoef
+     real(rk),intent(in) :: freq(:),bnormq(nquad)
+     real(rk),intent(out) :: intens(:)
+     real(rk) :: tranfreq_i,halfwidth0
+     integer(ik) :: ib,ie,ipoint
+      ! 
+      ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
+      ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+      halfwidth0=dpwcoef*tranfreq
+      !
+      ! bnorm is due to to truncation of the wings, see Sharp and Burrows 2007 
+      !
+      !bnorm = 2.0_rk-2.0_rk/pi * atan(2.0_rk*offset/halfwidth)
+      !
+      !if (halfwidth<0.5_rk*dfreq**2) then
+      !  !
+      !  dfreq_2 = halfwidth/dfreq
+      !  !
+      !  bnorm = pi*0.25_rk*dfreq_2*(4.0_rk+dfreq_2**2)/(2.0_rk+dfreq_2**2)
+      !  !
+      !  tranfreq = min(max(nint( ( tranfreq)/dfreq )+1,1),npoints)
+      !  !
+      !endif
+      !
+      !abscoef = abscoef*bnorm
+      !
+      !$omp parallel do private(ipoint,tranfreq_i) shared(intens) schedule(dynamic)
+      do ipoint=ib,ie
+         !
+         tranfreq_i = freq(ipoint)
+         !
+         !intens(ipoint)=intens(ipoint)+voigt_faddeeva(tranfreq_i,tranfreq,halfwidth0,halfwidth)*abscoef
+         intens(ipoint)=intens(ipoint)+voigt_humlicek(tranfreq_i,tranfreq,halfwidth0,halfwidth)*abscoef
+         !
+      enddo
+      !$omp end parallel do      
+
+  end subroutine  do_Voigt
+  !
+  !
+  subroutine do_stick(sunit,nswap,nlines,maxitems,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nchars_quanta,quantum_numbers)
+
+     !
+     implicit none
+     !
+     integer(ik),intent(in) :: sunit,nswap,maxitems,nlines,ilevelf_ram(nswap),ileveli_ram(nswap)
+     real(rk),intent(in) :: abscoef_ram(nswap),acoef_ram(nswap),jrot(nlines),energies(nlines)
+     real(rk)  :: Jf,Ji,abscoef,acoef,tranfreq,energyf,energyi
+     integer(ik),intent(in) :: nchars_quanta(maxitems),gtot(nlines)
+     character(len=20),intent(in) :: quantum_numbers(0:maxitems,nlines)
+     integer(ik) :: nchars_,kitem,ierror_nu,iE,ierror_i,ierror,ierror_S,l,qni,qnf,ierror_f, ilevelf,ileveli,iswap
+     character(9) b_fmt
+     !
+     !
+     do iswap = 1,nswap
+       !
+       ilevelf = ilevelf_ram(iswap)
+       ileveli = ileveli_ram(iswap)
+       abscoef = abscoef_ram(iswap)
+       acoef   = acoef_ram(iswap)
+       energyf = energies(ilevelf)
+       energyi = energies(ileveli)
+       tranfreq = energyf - energyi
+       !
+       if (stick_hitran) then 
+         !
+         write(out,"(i3,f12.6,e10.3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6)",advance="no") &
+                     iso,tranfreq,abscoef,acoef,&
+                     species(1)%gamma,species(2)%gamma,&
+                     energyi,species(1)%n,species(1)%delta
+         !
+         nchars_ = 0 
+         !
+         do kitem = 3,maxitems 
+           !
+           l = len(trim(quantum_numbers(kitem,ilevelf)))
+           !
+           b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
+           !
+           write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
+           !
+           nchars_  = nchars_ + nchars_quanta(kitem)
+           !
+           if (nchars_>15) cycle
+           !
+           write(out,b_fmt,advance="no"), trim(quantum_numbers(kitem,ilevelf))
+           !
+         enddo
+         !
+         nchars_ = 0 
+         !
+         do kitem = 3,maxitems 
+           !
+           !l = len(trim(quantum_numbers(kitem,ileveli)))
+           !
+           !b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
+           !
+           write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
+           !
+           nchars_  = nchars_ + nchars_quanta(kitem)
+           !
+           if (nchars_>15) cycle
+           !
+           write(out,b_fmt,advance="no"), trim(quantum_numbers(kitem,ileveli))
+           !
+         enddo
+         !
+         if ( mod(nint(2*Jf),2)==0 ) then 
+           !
+           write(out,'(i7,1x,a1,1x,a1)',advance="no"), nint(Jf),trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
+           write(out,'(i7,1x,a1,1x,a1)',advance="no"), nint(Ji),trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
+           !
+         else 
+           !
+           write(out,'(f7.1,1x,a1,1x,a1)',advance="no"), Jf,trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
+           write(out,'(f7.1,1x,a1,1x,a1)',advance="no"), Ji,trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
+           !
+         endif
+         !
+         ierror_nu = 0
+         !
+         do iE = 1,HITRAN_E(1)%N
+            !
+            read(quantum_numbers(HITRAN_E(iE)%iqn,ileveli),*) qni
+            read(quantum_numbers(HITRAN_E(iE)%iqn,ilevelf),*) qnf
+            !
+            ierror_i = 0
+            do ierror = 0,6 
+              if (qni<=HITRAN_E(iE)%error_vmax(ierror)) ierror_i = ierror 
+              if (qnf<=HITRAN_E(iE)%error_vmax(ierror)) ierror_f = ierror 
+            enddo
+            !
+            ierror_nu = max(ierror_i,ierror_f) 
+            !
+         enddo
+         !
+         ierror_S = 0
+         !
+         do iE = 1,HITRAN_S(1)%N
+            !
+            read(quantum_numbers(HITRAN_S(iE)%iqn,ileveli),*) qni
+            read(quantum_numbers(HITRAN_S(iE)%iqn,ilevelf),*) qnf
+            !
+            ierror_i = 0
+            do ierror = 0,6 
+              if (qni<=HITRAN_S(iE)%error_vmax(ierror)) ierror_i = ierror 
+              if (qnf<=HITRAN_S(iE)%error_vmax(ierror)) ierror_f = ierror 
+            enddo
+            !
+            ierror_S = max(ierror_i,ierror_f) 
+            !
+         enddo
+         !
+         write(out,'(1x,i1)',advance="no"),ierror_nu
+         write(out,'(i1)',advance="no"),ierror_S
+         write(out,'(i1)',advance="no"),HITRAN_Air%ierr
+         write(out,'(i1)',advance="no"),HITRAN_Self%ierr
+         write(out,'(i1)',advance="no"),HITRAN_n%ierr
+         write(out,'(i1)',advance="no"),HITRAN_Delta%ierr
+         !
+         write(out,"(' 0 0 0 0 0 0 ',f7.1,f7.1)",advance="yes") real(gtot(ilevelf)),real(gtot(ileveli))
+         !
+       else
+          !
+          !if (abscoef>thresh)  then 
+          !
+          ! write to .stick-file
+          write(sunit,my_fmt) tranfreq,abscoef
+          !
+          write(out,my_fmt,advance="no"), &
+          tranfreq,abscoef,jrot(ilevelf),energyf, jrot(ileveli),energyi 
+          !
+          ! printing the line width 
+          !
+          if (Nspecies>0) then 
+            !
+            write(out,"(f12.5)",advance="no") halfwidth
+            !
+          endif
+          !
+          !write(out,"(a4)",advance="no"), " <- "
+          !
+          do kitem = 1,maxitems 
+            !
+            l = len(trim(quantum_numbers(kitem,ilevelf)))
+            !
+            b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
+            !
+            if (nchars_quanta(kitem)<10) then
+              write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
+            else
+              write(b_fmt,"('(1x,a',i2,')')") nchars_quanta(kitem)
+            endif
+            !
+            write(out,b_fmt,advance="no"), trim(quantum_numbers(kitem,ilevelf))
+            !
+          enddo
+          !
+          write(out,"(a3)",advance="no") " <-"
+          !
+          do kitem = 1,maxitems 
+            !
+            !l = len(trim(quantum_numbers(kitem,ileveli)))
+            !
+            !b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
+            !
+            if (nchars_quanta(kitem)<10) then
+              write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
+            else
+              write(b_fmt,"('(1x,a',i2,')')") nchars_quanta(kitem)
+            endif
+            !
+            write(out,b_fmt,advance="no"), trim(quantum_numbers(kitem,ileveli))
+            !
+          enddo
+          !
+          write(out,"(a1)",advance="yes") " "
+          !
+       endif 
+       !
+    enddo
+
+  end subroutine do_stick
+
+
+
+
+  subroutine do_gf_oscillator_strength_France(Ntrans,iso,Jf,Ji,nu_ram,energyi_ram,abscoef_r)
+    !
+    implicit none 
+    !
+    integer(ik),intent(in) :: Ntrans,iso
+    real(rk),intent(in) :: Jf,Ji,nu_ram(:),energyi_ram(:),abscoef_r(:)
+    integer(ik) :: i,iloggf
+    real(rk) :: lambda,energyi
+
+   call get_Voigt_gamma_n(Nspecies,Jf,Ji)
+
+   do i = 1,Ntrans
+       !
+       lambda = 1e7/nu_ram(i)
+       !
+       energyi = energyi_ram(i)
+       !
+       iloggf = nint(log(abscoef_r(i)))
+       !
+       write(out,"(i12,1x,f12.6,1x,i6,1x,f12.4,1x,f11.4,1x,f11.4,1x,f11.4)") &
+                   iso,lambda,iloggf,energyi,&
+                   species(1)%gamma,species(2)%gamma,species(1)%n
+       !
+
+   enddo
+
+!ielion, wl, gf-value, xi, igr, igs, igw
+!where ielion: internal code of the molecule for Phoenix, 
+!wl:wavelength, 
+!xi:lower state energy, 
+!gf-value: log gf coded in integer format,
+!igr: natural width constant, 
+!igs: Stark broadening constant, 
+!igw: van der Waals damping constants.
+!igr for gamma0 and igs for n (Voigt parameters) 
+
+
+  end subroutine do_gf_oscillator_strength_France
 
 
   subroutine voi_quad(npoints,ib,ie,freq,abscoef,intens,dfreq,tranfreq,alpha,gamma,nquad,abciss,weight)
+     !
      implicit none 
      !
      integer(ik),intent(in) :: npoints,nquad,ib,ie
@@ -2183,11 +2572,45 @@ module spectrum
        !
   end subroutine voi_quad 
 
+  subroutine get_Voigt_gamma_n(Nspecies,Jf,Ji)
+     !
+     implicit none 
+     !
+     integer(ik),intent(in) :: Nspecies
+     real(rk),intent(in) :: Jf,Ji
+     real(rk) :: halfwidth,gamma_,n_
+     integer(ik) :: ispecies,Jpp,Jp
+     
+     !
+     halfwidth = 0
+     !
+     do ispecies =1,Nspecies
+       !
+       if ( trim(species(ispecies)%filename)/="" ) then
+         !
+         Jpp = nint(Ji)
+         Jp  = nint(Jf)
+         !
+         gamma_ = species(ispecies)%gammaQN(Jpp,Jp-Jpp)
+         n_     = species(ispecies)%nQN(Jpp,Jp-Jpp)
+         !
+       else
+         !
+         gamma_ = species(ispecies)%gamma
+         n_     = species(ispecies)%n
+         !
+       endif
+       !
+       halfwidth =  halfwidth + species(ispecies)%ratio*gamma_*(species(ispecies)%T0/Temp)**N_*pressure/species(ispecies)%P0
+       !
+     enddo
 
-
+  end subroutine get_Voigt_gamma_n
 
   !
   function voigt_faddeeva(nu,nu0,alpha,gamma) result(f)
+   !
+   implicit none 
    !
    real(rk),intent(in) :: nu,nu0,alpha,gamma
    real(rk) :: f,sigma,x,y
