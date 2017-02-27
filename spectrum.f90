@@ -1,4 +1,4 @@
-3module spectrum
+module spectrum
   !
   use accuracy
   use timer
@@ -10,6 +10,8 @@
   !
   integer(ik),parameter   :: nfiles_max =1000, max_items = 1000, nspecies_max = 10, nquadmax = 101, filtermax = 100
   integer(ik),parameter :: HITRAN_max_ierr = 10            ! maximal number of QNs for error-specification in HITRAN
+  integer(ik),parameter :: max_transitions_to_ram = 1000000000
+  integer(ik) :: N_omp_procs=1
   !
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=3,ioffset = 10,iso=1
   real(rk)      :: temp=298.0,partfunc=-1.0,freql=-small_,freqr= 20000.0,thresh=1.0d-90,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
@@ -20,7 +22,7 @@
   real(rk)      :: resolving_power  = 1e6,resolving_f ! using resolving_power to set up grid 
   character(len=cl) :: cutoff_model = "NONE"
   integer(ik)   :: nquad = 20      ! Number of quadrature points 
-  integer(ik)   :: N_to_RAM = 1000 ! Lines to keep in RAM
+  integer(ik)   :: N_to_RAM = -1000 ! Lines to keep in RAM
   !
   character(len=cl) :: specttype="absorption",enrfilename="none",intfilename(nfiles_max),proftype="DOPPL",output="output"
   integer(ik)   :: intJvalue(nfiles_max)
@@ -183,13 +185,17 @@
           !
           if (mod(npoints,2)==0) npoints = npoints + 1
           !
-        case ("ABSORPTION","EMISSION","LIFETIME","PHOENIX")
+        case ("ABSORPTION","LIFETIME","OSCILLATOR")
           !
           specttype = trim(w)
           !
        case ("MEM","MEMORY")
           !
          call readf(memory_limit)
+         !
+       case ("OMP_PROCS","NPROCS","OMP_NUM_PROCS")
+          !
+         call readi(N_omp_procs)
           !
         case ("ISO","ISOTOPE")
           !
@@ -203,7 +209,7 @@
           !
           call readi(verbose)
           !
-        case ("PARTFUNC","PARTITION-FUNCTION","COOLING")
+        case ("PARTFUNC","PARTITION-FUNCTION")
           !
           specttype = trim(w)
           !
@@ -346,8 +352,9 @@
                  end select
                enddo
                !
-             case default 
-               !
+             case default
+               ! 
+               write(out,"('Please make sure that HITRAN is followed by a section body or an empty line')")
                call report ("Unrecognized unit name in HITRAN options"//trim(w),.true.)
                !
              end select 
@@ -510,7 +517,7 @@
           call readf(enermax)
           !
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
-            'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD')
+            'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX',"EMISSION")
           !
           proftype = trim(w)
           !
@@ -636,10 +643,26 @@
       !
     endif
     !
+    if (proftype(1:3)=='BIN'.or.proftype(1:3)=='MAX') then
+      offset = 0
+    endif
+    !
     if (proftype(1:3)/='BIN'.and.microns) then
       !
       write(out,"('Microns or um is currently only working with BIN, not ',a)") proftype(1:3)
       call report ("Illegal profile for Microns"//trim(w),.true.)
+      !
+    endif
+    !
+    if (proftype(1:3)=='BIN'.and.microns) then
+      !
+      proftype = 'BIN-MICRON'
+      !
+    endif
+    !
+    if (proftype(1:3)=='BIN'.and.use_resolving_power) then
+      !
+      proftype = 'BIN-R'
       !
     endif
     !
@@ -689,7 +712,7 @@
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0,dnu_half,dxp,tranfreq0
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,bnorm,f,eta1,eta2,intens1,intens2,Va0,gammaV,a,wg,d,lambda
    real(rk)    :: sigma,alpha,gamma,y,x1,x2,voigt_,dx2,xi,L1,L2,acoef_,cutoff
-   integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,ispecies,alloc_p
+   integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,ispecies,alloc_p,Noffset
    real(rk)    :: gamma_,n_
    character(len=cl) :: ioname
    character(wl) :: string_tmp
@@ -699,10 +722,10 @@
    integer(ik),allocatable :: gtot(:),indices(:)
    character(len=20),allocatable :: quantum_numbers(:,:)
    !
-   real(rk),allocatable :: acoef_RAM(:),abscoef_ram(:),nu_ram(:),energyi_ram(:)
+   real(rk),allocatable :: acoef_RAM(:),abscoef_ram(:),nu_ram(:),intens_omp(:,:)
    integer(ik),allocatable :: indexi_RAM(:),indexf_RAM(:)
    integer(ik),allocatable :: ileveli_RAM(:),ilevelf_RAM(:)
-   integer(ik) :: kswaps,iswaps,nswap_,nswap,iswap,iswap_
+   integer(ik) :: iswaps,nswap_,nswap,iswap,iswap_,iomp
    !
    integer(ik),allocatable :: nchars_quanta(:)  ! max number of characters used for each quantum number
    !
@@ -714,7 +737,7 @@
    character(len=cl) :: w
    !
    integer(ik) :: imol,nchars_,ierror_nu,ierror_S,ierror_i,ierror_f,iqn,NQn,ierror,qni,qnf
-   real(rk)    :: gf,gi
+   real(rk)    :: gf,gi,mem_t
    character(55) ch_q
    !
    ln2=log(2.0_rk)
@@ -741,6 +764,7 @@
    !
    allocate(intens(npoints),stat=info)
    call ArrayStart('intens',info,size(intens),kind(intens))
+   intens = 0
    !
    forall(ipoint=1:npoints) freq(ipoint)=freql+real(ipoint-1,rk)*dfreq
    !
@@ -859,7 +883,7 @@
         allocate(pf(0:3,npoints),stat=info)
         call ArrayStart('pf',info,size(pf),kind(pf))
         !
-        if (specttype(1:4)=='COOL') then
+        if (proftype(1:4)=='COOL') then
           !
           allocate(cooling(npoints),stat=info)
           call ArrayStart('cooling',info,size(cooling),kind(cooling))
@@ -1228,22 +1252,40 @@
      stop 'Undefined PF'
    endif
    !
+   if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE'/)) ) then 
+     allocate(intens_omp(npoints,N_omp_procs),stat=info)
+     call ArrayStart('swap:intens_omp',info,size(intens_omp),kind(intens_omp))
+   endif
+   !
+   ! estimate how many transitions we can out into RAM
+   !
+   if (N_to_RAM<0) then
+     !
+     mem_t = real(4*rk+4*ik,rk)/1024_rk**3
+     !
+     N_to_RAM = max(1,min( max_transitions_to_ram,int((memory_limit-memory_now)/mem_t,hik)))
+     !
+     if (verbose>=4) print('("We can swap ",i12," transitions into RAM")'),N_to_RAM
+     !
+   endif
+   !
+   ! allocating all different arrays to keep the data in RAM
+   !
    allocate(acoef_RAM(N_to_RAM),indexf_RAM(N_to_RAM),indexi_RAM(N_to_RAM),stat=info)
    call ArrayStart('swap:acoef_RAM',info,size(acoef_RAM),kind(acoef_RAM))
    call ArrayStart('swap:indexf_RAM',info,size(indexf_RAM),kind(indexf_RAM))
    call ArrayStart('swap:indexi_RAM',info,size(indexi_RAM),kind(indexi_RAM))
    !
-   allocate(abscoef_ram(N_to_RAM),nu_ram(N_to_RAM),energyi_ram(N_to_RAM),stat=info)
+   allocate(abscoef_ram(N_to_RAM),nu_ram(N_to_RAM),stat=info)
    call ArrayStart('swap:abscoef_ram',info,size(abscoef_ram),kind(abscoef_ram))
    call ArrayStart('swap:nu_ram',info,size(nu_ram),kind(nu_ram))
-   call ArrayStart('swap:energyi_ram',info,size(energyi_ram),kind(energyi_ram))
    !
    allocate(ileveli_RAM(N_to_RAM),ilevelf_RAM(N_to_RAM),stat=info)
    call ArrayStart('swap:ileveli_RAM',info,size(ileveli_RAM),kind(ileveli_RAM))
    call ArrayStart('swap:ilevelf_RAM',info,size(ilevelf_RAM),kind(ilevelf_RAM))
    !
-   kswaps = 0
    nswap = 0
+   Noffset = max(nint(offset/dfreq,ik),1)
    !
    loop_file : do i = 1,nfiles
      !
@@ -1253,60 +1295,89 @@
      !
      loop_tran: do
         !
+        !   read new line from intensities file
+        !
+        nswap_ = N_to_RAM
+        !
         if (histogram) then 
            !
            ! using pre-computed integrated intensities for a given Temperature and bin
            !
-           read(tunit,*,end=20) tranfreq,abscoef
+           do iswap = 1,N_to_RAM
+             !
+             read(tunit,*,end=118) nu_ram(iswap),abscoef_RAM(iswap)
+             !
+             cycle
+             !
+           118 continue
+             !
+             nswap_ = iswap-1
+             !
+             exit
+             !
+           enddo
+           !
+           if (nswap_<1) then
+              write(out,"('... Finish swap')") 
+              exit loop_tran
+           endif
            !
            ! for pre-computed J-dependent integrated intensities 
            if (histogramJ) then 
+             stop 'histogramJ is currently not working'
              Ji = IntJvalue(i)
              Jf = Ji
            endif
+           !
+           nswap = nswap_
            !
         elseif (hitran_do) then 
            !
            ! HITRAN format
            !
-           read(tunit,"(i3,f12.6,e10.3,e10.3,10x,f10.4,12x,a55,23x,2f7.1)",end=20) imol,tranfreq,abscoef,acoef,energyi,ch_q,gf,gi
+           if (trim(specttype)/='ABSORPTION') then
+             print('(a,2x,a)'),'Illegal key for HITRAN',trim(specttype)
+             stop 'Illegal specttype-key  for HITRAN'
+           endif
            !
-           energyf = tranfreq + energyi
+           if(any(trim(proftype(1:5))==(/'STICK','PHOEN'/))) then
+             print('(a,2x,a)'),'Illegal proftype HITRAN',trim(proftype)
+             stop 'Illegal proftype for HITRAN'
+           endif
            !
-           if (imol/=iso) cycle
+           do iswap = 1,N_to_RAM
+             !
+             !read(tunit,*,end=119) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
+             read(tunit,"(i3,f12.6,e10.3,e10.3,10x,f10.4,12x,a55,23x,2f7.1)",end=119) imol,tranfreq,abscoef,acoef,energyi,ch_q,gf,gi
+             !
+             energyf = tranfreq + energyi
+             !
+             if (imol/=iso) cycle
+             !
+             if (tranfreq<small_) cycle
+             !
+             abscoef_ram(iswap)=cmcoef*acoef*gf*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+             nu_ram(iswap) = tranfreq
+             !
+             cycle
+             !
+           119 continue
+             nswap_ = iswap-1
+             exit
+           enddo
            !
-           if (tranfreq<small_) cycle
+           if (nswap_<1) then
+              write(out,"('... Finish swap')") 
+              exit loop_tran
+           endif
            !
-           select case (trim(specttype))
-             !
-           case default
-             !
-             print('(a,2x,a)'),'Illegal key:',trim(specttype)
-             stop 'Illegal specttype-key'
-             !
-           case ('ABSORPTION')
-             !
-             abscoef=cmcoef*acoef*gf*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
-             !
-           end select
+           nswap = nswap_
            !
         else ! ExoMol format of the trans-file
-           !
-           !   read new line from intensities file
-           !
-           nswap_ = N_to_RAM
-           !
-           kswaps = kswaps + 1
-           !
-           !print*,"Reading transitions ...  ",kswaps
            !
            do iswap = 1,N_to_RAM
              !
              read(tunit,*,end=120) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
-             !
-             if (indexf_RAM(iswap)==84.and.indexi_RAM(iswap)==140) then
-               continue
-             endif
              !
              cycle
              !
@@ -1327,26 +1398,26 @@
               stop 'Error nswap_=0'
            endif
            !
-           if (nswap_<N_to_RAM) print('(a,i12)'),"Now computing ... ",nswap_," transitions..."
+           if (verbose>=4.and.nswap_<N_to_RAM) print('(a,i12,a)'),"Now computing ... ",nswap_," transitions..."
            !
            !read(tunit,*,end=20) indexf,indexi,acoef
            iswap_ = 1
            abscoef_ram = 0
            !
-           !omp parallel do private(iswap,ilevelf_,ileveli_,energyf,energyi,jf,ji,igammai,igammaf,tranfreq,tran
-           !omp& taken1,taken2,ifreq,f_t,itemp,abscoef,factor_,taken,unit_f) schedule(static) reduction(+:itaken,istrong,iweak)
-           do iswap = 1,nswap_
+           !omp parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,ifilter,energyf,energyi,jf,ji,tranfreq,tranfreq0,offset,abscoef,cutoff)
+           !omp&  schedule(static) reduction(+:iswap_,intband) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,Asum)
+           loop_swap : do iswap = 1,nswap_
              !
              indexf = indexf_RAM(iswap)
              indexi = indexi_RAM(iswap)
              acoef = acoef_RAM(iswap)
              !
-             if (indexf>nlevels.or.indexi>nlevels) cycle
+             if (indexf>nlevels.or.indexi>nlevels) cycle loop_swap
              !
              ilevelf = indices(indexf)
              ileveli = indices(indexi)
              !
-             if (ilevelf==0.or.ileveli==0) cycle
+             if (ilevelf==0.or.ileveli==0) cycle loop_swap
              !
              energyf = energies(ilevelf)
              energyi = energies(ileveli)
@@ -1354,17 +1425,17 @@
              if (energyf-energyi<-1e1) then 
                write(out,"(4i12,2x,3es16.8)"),ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
                stop 'wrong order of indices'
-               cycle
+               cycle loop_swap
              elseif (energyf-energyi<-small_) then
-               cycle
+               cycle loop_swap
              endif 
              !
              if (filter) then
                !
                do ifilter = 1,Nfilters
                  !
-                 if (upper(ifilter)%mask/=trim(quantum_numbers(upper(ifilter)%i,ilevelf)).and.trim(upper(ifilter)%mask)/="") cycle loop_tran
-                 if (lower(ifilter)%mask/=trim(quantum_numbers(lower(ifilter)%i,ileveli)).and.trim(lower(ifilter)%mask)/="") cycle loop_tran
+                 if (upper(ifilter)%mask/=trim(quantum_numbers(upper(ifilter)%i,ilevelf)).and.trim(upper(ifilter)%mask)/="") cycle loop_swap
+                 if (lower(ifilter)%mask/=trim(quantum_numbers(lower(ifilter)%i,ileveli)).and.trim(lower(ifilter)%mask)/="") cycle loop_swap
                  !
                enddo
                !
@@ -1382,7 +1453,7 @@
                tranfreq0 = 10000.0_rk/(tranfreq+small_)
              endif
              !
-             if (tranfreq0>freqr+offset.or.tranfreq0<freql-offset) cycle
+             if (tranfreq0>freqr+offset.or.tranfreq0<freql-offset) cycle loop_swap
              !
              !if (tranfreq<small_) cycle
              !
@@ -1409,41 +1480,13 @@
                !
                abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
                !
-             case ('PHOENIX')
-               !
-               !gf = (1.4992 x 10^4)(A/s-1)(lambda/nm)^2
-               !
-               !abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
-               !
-               lambda = 1e7/tranfreq
-               !
-               abscoef = 1.4992e4*acoef*(lambda)**2
-               !
-               energyi_ram(iswap_) = energyi
-               !
-             case ('emission','EMISSION','EMISS','emiss','COOLING')
+             case ('emission','EMISSION','EMISS','emiss')
                !
                ! emission coefficient [Ergs/mol/Sr]
                !
                abscoef=emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-beta*energyf)*tranfreq/(partfunc)
                !
-               if (trim(specttype)=='COOLING') then
-                 !
-                 !$omp parallel do private(itemp,temp0,beta0) shared(cooling) schedule(dynamic)
-                 do itemp = 1,npoints
-                   !
-                   temp0 = real(itemp,rk)*dtemp
-                   !
-                   beta0 = c2/temp0
-                   !
-                   cooling(itemp) = cooling(itemp) + emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-beta0*energyf)*tranfreq/(pf(0,itemp))
-                   !
-                 enddo
-                 !$omp end parallel do
-                 !
-               endif
-               !
-              case ('LIFETIME')
+             case ('LIFETIME')
                !
                if (Asum(ilevelf)<0) Asum(ilevelf) = 0 
                !
@@ -1451,11 +1494,11 @@
                !
                !print*,ilevelf,indexf,indexi,acoef
                !
-               cycle 
+               cycle loop_swap
                !
              end select
              !
-             if (abscoef<abscoef_thresh) cycle
+             if (abscoef<abscoef_thresh) cycle loop_swap
              !
              cutoff = thresh
              !
@@ -1468,7 +1511,7 @@
              endif
              !
              if (abscoef<cutoff) then 
-               cycle
+               cycle loop_swap
              endif 
              !
              ilevelf_ram(iswap_) = ilevelf
@@ -1483,7 +1526,7 @@
              !do do_log_intensity
              iswap_ = iswap_ + 1
              !
-           enddo
+           enddo loop_swap
            !!omp end parallel do
            !
            nswap = iswap_-1
@@ -1505,155 +1548,352 @@
             !
             cycle
             !
-        case ('PHOENIX')
+        case ('PHOEN')
             !
-            !cutoff =  apply_HITRAN_cutoff(tranfreq)
-            !
-            call do_gf_oscillator_strength_France(nswap_,iso,Jf,Ji,nu_ram,energyi_ram,abscoef_ram)
+            call do_gf_oscillator_strength_France(iso,nswap,nlines,maxitems,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram)
             !
             cycle
 
-
-!ielion, wl, gf-value, xi, igr, igs, igw
-!where ielion: internal code of the molecule for Phoenix, 
-!wl:wavelength, 
-!xi:lower state energy, 
-!gf-value: log gf coded in integer format,
-!igr: natural width constant, 
-!igs: Stark broadening constant, 
-!igw: van der Waals damping constants.
-!igr for gamma0 and igs for n (Voigt parameters) 
-
-
+        case ('COOLI')
+            !
+            intens_omp = 0
+            !
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                ilevelf = ilevelf_ram(iswap)
+                energyf = energies(ilevelf)
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                !
+                do itemp = 1,npoints
+                  !
+                  temp0 = real(itemp,rk)*dtemp
+                  !
+                  beta0 = c2/temp0
+                  !
+                  intens_omp(iswap,iomp) = intens_omp(iswap,iomp) + abscoef*exp(-(beta0-beta)*energyf)*partfunc/(pf(0,itemp))
+                  !
+                enddo
+                !
+              enddo
+              !              
+            enddo
+            !$omp parallel end do
+            !
+            cooling(:) = sum(intens_omp,dim=2)
             !
         case ('GAUS0')
             !
-            call do_gauss0(tranfreq,abscoef,dfreq,freq,halfwidth,freql,intens)
+            intens_omp = 0
+            !
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                !
+                call do_gauss0(tranfreq,abscoef,dfreq,freq,halfwidth,freql,intens_omp(:,iomp))
+                !
+              enddo
+              !              
+            enddo
+            !$omp parallel end do
+            !
+            intens(:) = sum(intens_omp,dim=2)
             !
         case ('DOPPL')
             !
-            if (tranfreq<small_) cycle
+            intens_omp = 0
             !
-            call do_gauss(tranfreq,abscoef,dfreq,freq,halfwidth,offset,dpwcoef,freql,intens)
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth0) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                halfwidth0=dpwcoef*tranfreq
+                !
+                call do_gauss(tranfreq,abscoef,dfreq,freq,halfwidth0,offset,dpwcoef,freql,intens_omp(:,iomp))
+                !
+              enddo
+              !              
+            enddo
+            !$omp parallel end do
+            !
+            intens(:) = sum(intens_omp,dim=2)
             !
         case ('GAUSS')
             !
-            if (tranfreq<small_) cycle
+            intens_omp = 0
             !
-            call do_gauss(tranfreq,abscoef,dfreq,freq,halfwidth,offset,dpwcoef,freql,intens)
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                !
+                call do_gauss(tranfreq,abscoef,dfreq,freq,halfwidth,offset,dpwcoef,freql,intens_omp(:,iomp))
+                !
+              enddo
+              !              
+            enddo
+            !$omp parallel end do
+            !
+            do iomp = 1,N_omp_procs
+               intens(:) = intens(:) + intens_omp(:,iomp)
+            enddo
             !
         case ('LOREN')
             !
-            call do_lorentz(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens)
+            intens_omp = 0
+            !
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                !
+                call do_lorentz(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens_omp(:,iomp))
+                !
+              enddo
+              !              
+            enddo
+            !$omp parallel end do
+            !
+            do iomp = 1,N_omp_procs
+               intens(:) = intens(:) + intens_omp(:,iomp)
+            enddo
             !
         case ('PSEUD')
             !
-            if (tranfreq<small_) cycle
+            intens_omp = 0
             !
-            call get_Voigt_gamma_n(Nspecies,Jf,Ji)
+            halfwidth=get_Voigt_gamma_n(Nspecies,Jf,Ji)
             !
-            call do_pseud(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                !
+                call do_pseud(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens_omp(:,iomp))
+                !
+              enddo
+              !              
+            enddo
+            !$omp parallel end do
             !
-        case ('PSE-R') ! pseudo_Voigt_Rocco_Cruzado_ActaPhysPol_2012.pdf
+            do iomp = 1,N_omp_procs
+               intens(:) = intens(:) + intens_omp(:,iomp)
+            enddo
             !
-            if (tranfreq<small_) cycle
+        !case ('PSE-R') ! pseudo_Voigt_Rocco_Cruzado_ActaPhysPol_2012.pdf
             !
-            halfwidth0=dpwcoef*tranfreq
-            x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
             !
-            call get_Voigt_gamma_n(Nspecies,Jf,Ji)
-            call do_pse_R(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
+        !case ('PSE-L') ! pseudo_Voigt_Liu_Lin_JOptSocAmB_2001.pdf
             !
-        case ('PSE-L') ! pseudo_Voigt_Liu_Lin_JOptSocAmB_2001.pdf
-            !
-            if (tranfreq<small_) cycle
-            !
-            call get_Voigt_gamma_n(Nspecies,Jf,Ji)
-            call do_pse_L(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
             !
         case ('VOI-Q') ! VOIGT-QUADRATURES
             !
-            if (tranfreq<small_) cycle
+            halfwidth=get_Voigt_gamma_n(Nspecies,Jf,Ji)
             !
-            !halfwidth0=dpwcoef*tranfreq
-            !x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
+            intens_omp = 0
             !
-            call get_Voigt_gamma_n(Nspecies,Jf,Ji)
-            call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth,offset,freql,dpwcoef,intens)
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                !
+                call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth,offset,freql,dpwcoef,intens_omp(:,iomp))
+                !
+              enddo
+              !              
+            enddo
+            !$omp parallel end do
+            !
+            do iomp = 1,N_omp_procs
+               intens(:) = intens(:) + intens_omp(:,iomp)
+            enddo
             !
         case ('VOIGT')
             !
-            if (tranfreq<small_) cycle
+            halfwidth=get_Voigt_gamma_n(Nspecies,Jf,Ji)
+            intens_omp = 0
             !
-            !halfwidth0=dpwcoef*tranfreq
-            !x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                !
+                call do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,offset,freql,bnormq,intens_omp(:,iomp))
+                !
+              enddo
+              !              
+            enddo
+            !$omp parallel end do
             !
-            call get_Voigt_gamma_n(Nspecies,Jf,Ji)
-            call do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,x0,offset,freql,bnormq,intens)
+            do iomp = 1,N_omp_procs
+               intens(:) = intens(:) + intens_omp(:,iomp)
+            enddo
             !
-        case ('MAX');
-          !
-          cutoff =  apply_HITRAN_cutoff(tranfreq)
-          !
-          ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
-          !
-          intens(ipoint)=max(intens(ipoint),abscoef)
-          !
-        case ('RECT','BOX');
-          !
-          !$omp parallel do private(ipoint) shared(intens) schedule(dynamic)
-          do ipoint=ib,ie
-             !
-             intens(ipoint)=intens(ipoint)+abscoef/dfreq
-             !
-          enddo
-          !$omp end parallel do
-          !
-        case ('BIN');
-          
-
-          do iswap = 1,nswap
+        case ('MAX')
             !
-            ilevelf = ilevelf_ram(iswap)
-            ileveli = ileveli_ram(iswap)
-            abscoef = abscoef_ram(iswap)
-            acoef   = acoef_ram(iswap)
-            energyf = energies(ilevelf)
-            energyi = energies(ileveli)
-            tranfreq = energyf - energyi
+            intens_omp = 0
             !
-            if (microns) then 
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,cutoff,ipoint) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
               !
-              ipoint =  nint( ( 10000.0_rk/tranfreq-freql )/dfreq )+1
-              !
-              if (ipoint<1.or.ipoint>npoints) cycle 
-              !
-            elseif (use_resolving_power) then 
-              !
-              ipoint =  nint(real((log(tranfreq)-log(freql))/resolving_f,rk))+1
-              !
-              !nint( ( 10000.0_rk/tranfreq-freql )/dfreq )+1
-              !
-              if (ipoint<1.or.ipoint>npoints) cycle 
-              !
-            else 
-              !
-              ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
-              !
-            endif
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                !
+                cutoff =  apply_HITRAN_cutoff(tranfreq)
+                !
+                if (abscoef<cutoff) cycle
+                !
+                ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
+                !
+                intens_omp(ipoint,iomp) = max(intens_omp(ipoint,iomp),abscoef)
+                !
+              enddo
+              !              
+            enddo
+            !$omp parallel end do
             !
-            intens(ipoint)=intens(ipoint)+abscoef
+            do ipoint = 1,npoints
+               intens(i) = maxval(intens_omp(ipoint,:),dim=1)
+            enddo
             !
-          enddo
-          !
+        case ('RECT','BOX')
+            !
+            intens_omp = 0
+            !
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                !
+                call do_rect(tranfreq,abscoef,dfreq,freq,offset,freql,intens_omp(:,iomp))
+                !
+              enddo
+              !              
+            enddo
+            !$omp parallel end do
+            !
+            do iomp = 1,N_omp_procs
+               intens(:) = intens(:) + intens_omp(:,iomp)
+            enddo
+            !
+        case ('BIN')
+            !
+            intens_omp = 0
+            !
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                !
+                !cutoff =  apply_HITRAN_cutoff(tranfreq)
+                !
+                !if (abscoef<cutoff) cycle
+                !
+                ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
+                !
+                intens_omp(ipoint,iomp) = intens_omp(ipoint,iomp)+abscoef
+                !
+              enddo
+              !              
+            enddo
+            !$omp parallel end do
+            !
+            intens(:) = sum(intens_omp(:,:),dim=2)
+            !
+        case ('BIN-MICRON');
+            !
+            intens_omp = 0
+            !
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                !
+                tranfreq = 10000.0_rk/tranfreq
+                !
+                ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
+                !
+                intens_omp(ipoint,iomp) = intens_omp(ipoint,iomp)+abscoef
+                !
+              enddo
+              !              
+            enddo
+            !$omp parallel end do
+            !
+            do iomp = 1,N_omp_procs
+               intens(:) = intens(:) + intens_omp(:,iomp)
+            enddo
+            !
+        case ('BIN-R')
+            !
+            intens_omp = 0
+            !
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                !
+                ipoint =  nint(real((log(tranfreq)-log(freql))/resolving_f,rk))+1
+                if (ipoint<1.or.ipoint>npoints) cycle 
+                !
+                intens_omp(ipoint,iomp) = intens_omp(ipoint,iomp)+abscoef
+                !
+              enddo
+              !              
+            enddo
+            !$omp parallel end do
+            !
+            do iomp = 1,N_omp_procs
+               intens(:) = intens(:) + intens_omp(:,iomp)
+            enddo
+            !
         end select
         !
         ! will be used to check duplicates 
         !
-        indexf_ = indexf ; indexi_ = indexi ; acoef_ = acoef
+        !!!indexf_ = indexf ; indexi_ = indexi ; acoef_ = acoef
         !
-        cycle
-     20  exit
+        !cycle
+        ! 20  exit
      enddo loop_tran
      !
      close(tunit)
@@ -1852,10 +2092,12 @@
      implicit none
      !
      real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,freql
-     real(rk),intent(in) :: freq(:)
-     real(rk),intent(out) :: intens(:)
+     real(rk),intent(in) :: freq(npoints)
+     real(rk),intent(inout) :: intens(npoints)
      real(rk) :: alpha,abscoef,dfreq_,de,ln2
      integer(ik) :: ib,ie,ipoint
+     !
+     if (halfwidth<small_) return
      !
      ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
      ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
@@ -1865,7 +2107,7 @@
      !
      abscoef=abscoef0*sqrt(ln2/pi)/halfwidth
      !
-     !$omp parallel do private(ipoint,dfreq_,de) shared(intens) schedule(dynamic)
+     !omp parallel do private(ipoint,dfreq_,de) shared(intens) schedule(dynamic)
      do ipoint=ib,ie
         !
         dfreq_=freq(ipoint)-tranfreq
@@ -1875,30 +2117,29 @@
         intens(ipoint)=intens(ipoint)+abscoef*de
         !
      enddo
-     !$omp end parallel do
+     !omp end parallel do
      !
   end subroutine do_gauss0
 
 
-  subroutine do_gauss(tranfreq,abscoef0,dfreq,freq,halfwidth0,offset,dpwcoef,freql,intens)
+  subroutine do_gauss(tranfreq,abscoef,dfreq,freq,halfwidth,offset,dpwcoef,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth0,offset,freql,dpwcoef
-     real(rk),intent(in) :: freq(:)
-     real(rk),intent(out) :: intens(:)
-     real(rk) :: alpha,abscoef,dfreq_,de,xp,xm,ln2,x0,halfwidth
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql,dpwcoef
+     real(rk),intent(in) :: freq(npoints)
+     real(rk),intent(inout) :: intens(npoints)
+     real(rk) :: alpha,dfreq_,de,xp,xm,ln2,x0
      integer(ik) :: ib,ie,ipoint
+     !
+     ln2=log(2.0_rk)
      !
      x0 = sqrt(ln2)/halfwidth*dfreq*0.5_rk
      !
-     halfwidth=dpwcoef*tranfreq
-     !
      ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
      ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
-     ln2=log(2.0_rk)
      !
-     !$omp parallel do private(ipoint,dfreq_,xp,xm,de) shared(intens) schedule(dynamic)
+     !omp parallel do private(ipoint,dfreq_,xp,xm,de) shared(intens) schedule(dynamic)
      do ipoint=ib,ie
         !
         dfreq_=freq(ipoint)-tranfreq
@@ -1911,19 +2152,19 @@
         intens(ipoint)=intens(ipoint)+abscoef*0.5_rk/dfreq*de
         !
      enddo
-     !$omp end parallel do 
+     !omp end parallel do 
 
   end subroutine do_gauss
   !
   !
-  subroutine do_lorentz(tranfreq,abscoef0,dfreq,freq,halfwidth,offset,freql,intens)
+  subroutine do_lorentz(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,offset,freql
-     real(rk),intent(in) :: freq(:)
-     real(rk),intent(out) :: intens(:)
-     real(rk) :: alpha,abscoef,dfreq_,de,xp,xm,ln2,b,dnu_half,x0
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql
+     real(rk),intent(in) :: freq(npoints)
+     real(rk),intent(inout) :: intens(npoints)
+     real(rk) :: alpha,dfreq_,de,xp,xm,ln2,b,dnu_half,x0
      integer(ik) :: ib,ie,ipoint
      !
      ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
@@ -1965,18 +2206,18 @@
         !intens(ipoint)=intens(ipoint)+lor/dfreq_2
         !
      enddo
-     !$omp end parallel do 
+     !$omp end parallel do
      !
   end subroutine do_lorentz
 
-  subroutine do_pseud(tranfreq,abscoef0,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
+  subroutine do_pseud(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,offset,freql,dpwcoef
-     real(rk),intent(in) :: freq(:)
-     real(rk),intent(out) :: intens(:)
-     real(rk) :: alpha,abscoef,dfreq_,de,xp,xm,ln2,b,dnu_half,bnorm,f,eta1,eta2,intens2,halfwidth0,x0,intens1
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql,dpwcoef
+     real(rk),intent(in) :: freq(npoints)
+     real(rk),intent(inout) :: intens(npoints)
+     real(rk) :: alpha,dfreq_,de,xp,xm,ln2,b,dnu_half,bnorm,f,eta1,eta2,intens2,halfwidth0,x0,intens1
      integer(ik) :: ib,ie,ipoint
   
       !
@@ -2031,14 +2272,14 @@
 
   end subroutine do_pseud
 
-  subroutine do_pse_R(tranfreq,abscoef0,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
+  subroutine do_pse_R(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,offset,freql,dpwcoef
-     real(rk),intent(in) :: freq(:)
-     real(rk),intent(out) :: intens(:)
-     real(rk) :: alpha,abscoef,dfreq_,de,xp,xm,ln2,b,dnu_half,bnorm,f,eta1,eta2,intens2,halfwidth0,x0,a,wg,va0
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql,dpwcoef
+     real(rk),intent(in) :: freq(npoints)
+     real(rk),intent(inout) :: intens(npoints)
+     real(rk) :: alpha,dfreq_,de,xp,xm,ln2,b,dnu_half,bnorm,f,eta1,eta2,intens2,halfwidth0,x0,a,wg,va0
      real(rk) :: gammaV,intens1
      integer(ik) :: ib,ie,ipoint
      !
@@ -2097,14 +2338,14 @@
      !
   end subroutine do_pse_R
       !
-  subroutine  do_pse_L(tranfreq,abscoef0,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
+  subroutine  do_pse_L(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,offset,freql,dpwcoef
-     real(rk),intent(in) :: freq(:)
-     real(rk),intent(out) :: intens(:)
-     real(rk) :: alpha,abscoef,dfreq_,de,xp,xm,ln2,b,dnu_half,bnorm,f,eta1,eta2,intens2,halfwidth0
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql,dpwcoef
+     real(rk),intent(in) :: freq(npoints)
+     real(rk),intent(inout) :: intens(npoints)
+     real(rk) :: alpha,dfreq_,de,xp,xm,ln2,b,dnu_half,bnorm,f,eta1,eta2,intens2,halfwidth0
      real(rk) :: d,x0,intens1
      integer(ik) :: ib,ie,ipoint
      !
@@ -2161,14 +2402,14 @@
   end subroutine  do_pse_L
 
 
-  subroutine do_Voi_Q(tranfreq,abscoef0,dfreq,freq,abciss,weight,halfwidth,offset,freql,dpwcoef,intens)
+  subroutine do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth,offset,freql,dpwcoef,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,offset,freql,dpwcoef
-     real(rk),intent(in) :: freq(:),abciss(nquad),weight(nquad)
-     real(rk),intent(out) :: intens(:)
-     real(rk) :: alpha,abscoef,dfreq_,de,xp,xm,ln2,b,dnu_half,bnorm,f,eta,eta2,intens2,halfwidth0,gamma
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql,dpwcoef
+     real(rk),intent(in) :: freq(npoints),abciss(nquad),weight(nquad)
+     real(rk),intent(inout) :: intens(npoints)
+     real(rk) :: alpha,dfreq_,de,xp,xm,ln2,b,dnu_half,bnorm,f,eta,eta2,intens2,halfwidth0,gamma
      real(rk) :: ln22,y,dx2,x0,sigma,xi,x1,x2,l1,l2,bnormq(1:nquad),Lorentz(nquad),dxp,voigt_
      integer(ik) :: ib,ie,ipoint,iquad
      !
@@ -2238,11 +2479,11 @@
      !
   end subroutine  do_Voi_Q
 
-  subroutine  do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,x0,offset,freql,bnormq,intens)
+  subroutine  do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,offset,freql,bnormq,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,x0,offset,freql,dpwcoef
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql,dpwcoef
      real(rk),intent(in) :: freq(:),bnormq(nquad)
      real(rk),intent(out) :: intens(:)
      real(rk) :: tranfreq_i,halfwidth0
@@ -2281,6 +2522,34 @@
 
   end subroutine  do_Voigt
   !
+
+
+  subroutine  do_rect(tranfreq,abscoef,dfreq,freq,offset,freql,intens)
+     !
+     implicit none
+     !
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,offset,freql
+     real(rk),intent(in) :: freq(:)
+     real(rk),intent(out) :: intens(:)
+     real(rk) :: tranfreq_i
+     integer(ik) :: ib,ie,ipoint
+      ! 
+      ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
+      ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+      !
+      !$omp parallel do private(ipoint,tranfreq_i) shared(intens) schedule(dynamic)
+      do ipoint=ib,ie
+         !
+         tranfreq_i = freq(ipoint)
+         !
+         intens(ipoint)=intens(ipoint)+abscoef/dfreq
+         !
+      enddo
+      !$omp end parallel do      
+
+  end subroutine  do_rect
+
+
   !
   subroutine do_stick(sunit,nswap,nlines,maxitems,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nchars_quanta,quantum_numbers)
 
@@ -2469,43 +2738,49 @@
 
 
 
-  subroutine do_gf_oscillator_strength_France(Ntrans,iso,Jf,Ji,nu_ram,energyi_ram,abscoef_r)
-    !
-    implicit none 
-    !
-    integer(ik),intent(in) :: Ntrans,iso
-    real(rk),intent(in) :: Jf,Ji,nu_ram(:),energyi_ram(:),abscoef_r(:)
-    integer(ik) :: i,iloggf
-    real(rk) :: lambda,energyi
-
-   call get_Voigt_gamma_n(Nspecies,Jf,Ji)
-
-   do i = 1,Ntrans
-       !
-       lambda = 1e7/nu_ram(i)
-       !
-       energyi = energyi_ram(i)
-       !
-       iloggf = nint(log(abscoef_r(i)))
-       !
-       write(out,"(i12,1x,f12.6,1x,i6,1x,f12.4,1x,f11.4,1x,f11.4,1x,f11.4)") &
-                   iso,lambda,iloggf,energyi,&
-                   species(1)%gamma,species(2)%gamma,species(1)%n
-       !
-
-   enddo
-
-!ielion, wl, gf-value, xi, igr, igs, igw
-!where ielion: internal code of the molecule for Phoenix, 
-!wl:wavelength, 
-!xi:lower state energy, 
-!gf-value: log gf coded in integer format,
-!igr: natural width constant, 
-!igs: Stark broadening constant, 
-!igw: van der Waals damping constants.
-!igr for gamma0 and igs for n (Voigt parameters) 
-
-
+  subroutine do_gf_oscillator_strength_France(iso,nswap,nlines,maxitems,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram)
+     !
+     implicit none
+     !
+     integer(ik),intent(in) :: iso,nswap,maxitems,nlines,ilevelf_ram(nswap),ileveli_ram(nswap)
+     real(rk),intent(in) :: abscoef_ram(nswap),acoef_ram(nswap),jrot(nlines),energies(nlines)
+     real(rk)  :: Jf,Ji,gf,acoef,tranfreq,energyf,energyi
+     integer(ik),intent(in) :: gtot(nlines)
+     integer(ik) :: i,iloggf,ileveli,ilevelf
+     real(rk) :: lambda,halfwidth
+     !
+     !halfwidth=get_Voigt_gamma_n(Nspecies,Jf,Ji)
+     !
+     do i = 1,nswap
+         !
+         ilevelf = ilevelf_ram(i)
+         ileveli = ileveli_ram(i)
+         acoef   = acoef_ram(i)
+         energyf = energies(ilevelf)
+         energyi = energies(ileveli)
+         tranfreq = energyf - energyi
+         !
+         lambda = 1e7/tranfreq ! wavelength in nm
+         !
+         gf = 1.4992e4*acoef*(lambda)**2 ! oscillator strength
+         !
+         iloggf = nint(log(gf))
+         !
+         write(out,"(i12,1x,f12.6,1x,i6,1x,f12.4,1x,f11.4,1x,f11.4,1x,f11.4,'||')") &
+                     iso,lambda,iloggf,energyi,&
+                     species(1)%gamma,species(2)%gamma,species(1)%n
+     enddo
+     !
+     !ielion, wl, gf-value, xi, igr, igs, igw
+     !where ielion: internal code of the molecule for Phoenix, 
+     !wl:wavelength, 
+     !xi:lower state energy, 
+     !gf-value: log gf coded in integer format,
+     !igr: natural width constant, 
+     !igs: Stark broadening constant, 
+     !igw: van der Waals damping constants.
+     !igr for gamma0 and igs for n (Voigt parameters) 
+     !
   end subroutine do_gf_oscillator_strength_France
 
 
@@ -2572,13 +2847,13 @@
        !
   end subroutine voi_quad 
 
-  subroutine get_Voigt_gamma_n(Nspecies,Jf,Ji)
+  function get_Voigt_gamma_n(Nspecies,Jf,Ji) result(f)
      !
      implicit none 
      !
      integer(ik),intent(in) :: Nspecies
      real(rk),intent(in) :: Jf,Ji
-     real(rk) :: halfwidth,gamma_,n_
+     real(rk) :: halfwidth,gamma_,n_,f
      integer(ik) :: ispecies,Jpp,Jp
      
      !
@@ -2604,8 +2879,10 @@
        halfwidth =  halfwidth + species(ispecies)%ratio*gamma_*(species(ispecies)%T0/Temp)**N_*pressure/species(ispecies)%P0
        !
      enddo
-
-  end subroutine get_Voigt_gamma_n
+     !
+     f = halfwidth
+     !
+  end function get_Voigt_gamma_n
 
   !
   function voigt_faddeeva(nu,nu0,alpha,gamma) result(f)
