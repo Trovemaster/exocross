@@ -14,7 +14,7 @@ module spectrum
   integer(ik) :: N_omp_procs=1
   !
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=3,ioffset = 10,iso=1
-  real(rk)      :: temp=298.0,partfunc=-1.0,freql=-small_,freqr= 20000.0,thresh=1.0d-90,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
+  real(rk)      :: temp=298.0,partfunc=-1.0,freql=-small_,freqr= 20000.0,thresh=1.0d-70,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
   real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = -25.0, pressure = 1.0_rk 
   real(rk)      :: enermax = 1e6, abscoef_thresh = 1.0d-50, abundance = 1.0d0
   real(rk)      :: S_crit = 1e-29      ! cm/molecule, HITRAN cut-off paramater 
@@ -185,7 +185,7 @@ module spectrum
           !
           if (mod(npoints,2)==0) npoints = npoints + 1
           !
-        case ("ABSORPTION","LIFETIME","OSCILLATOR")
+        case ("ABSORPTION","LIFETIME","EMISSION")
           !
           specttype = trim(w)
           !
@@ -209,9 +209,10 @@ module spectrum
           !
           call readi(verbose)
           !
-        case ("PARTFUNC","PARTITION-FUNCTION")
+        case ("PARTFUNC","PARTITION-FUNCTION","COOLING")
           !
-          specttype = trim(w)
+          !specttype = trim(w)
+          proftype = trim(w)
           !
           call read_line(eof) ; if (eof) exit
           call readu(w)
@@ -517,7 +518,7 @@ module spectrum
           call readf(enermax)
           !
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
-            'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX',"EMISSION")
+            'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX')
           !
           proftype = trim(w)
           !
@@ -859,7 +860,7 @@ module spectrum
       ! In case of specttype = partfunc the partition function will be computed for a series of temperatures. 
       ! npoints stands for the number of temperature steps, and the frequency limits as temperature limits
       !
-      if (specttype(1:4)=='PART'.or.specttype(1:4)=='COOL') then
+      if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL') then
         !
         if (trim(enrfilename)=="none") then 
            !
@@ -870,7 +871,7 @@ module spectrum
         !
         dtemp=maxtemp/real(npoints,rk)
         !
-        if (specttype(1:4)=='PART') then 
+        if (proftype(1:4)=='PART') then 
           !
           if (ipartf<0.or.ipartf>3) stop "illegal partfunc component, can be only 0,1,2,3"
           !
@@ -884,6 +885,16 @@ module spectrum
         call ArrayStart('pf',info,size(pf),kind(pf))
         !
         if (proftype(1:4)=='COOL') then
+          !
+          if (trim(specttype(1:5))/="EMISS") then 
+            write(out,"('Error: COOLING can work only with EMISSION, not',a)") trim(specttype)
+            stop 'Error: COOLING can work only with EMISSION'
+          endif
+          !
+          if (histogram) then
+            write(out,"('Error: COOLING does not work for HISTOGRAM')") 
+            stop 'Error: COOLING does not work with HISTOGRAM'
+          endif
           !
           allocate(cooling(npoints),stat=info)
           call ArrayStart('cooling',info,size(cooling),kind(cooling))
@@ -955,7 +966,7 @@ module spectrum
          if (partfunc_do) then
            if (j/=j0) then 
               !
-              if (specttype(1:4)=='PART') then 
+              if (proftype(1:4)=='PART') then 
                 if (verbose>=1.and.npoints<1000) print('("!",f8.1,3(1x,'//npoints_fmt//'es20.8))'),jrot(i),pf(ipartf,1:npoints)
               else 
                 if (verbose>=4) print('("|",f8.1,1x,es16.8)'),jrot(i),partfunc
@@ -969,7 +980,7 @@ module spectrum
            !
           endif
           !
-          if (specttype(1:4)=='PART'.or.specttype(1:4)=='COOL') then
+          if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL') then
             !
             do itemp = 1,npoints
               !
@@ -996,7 +1007,7 @@ module spectrum
       !
       ! print out the computed part. function objects and finish
       !
-      if (specttype(1:4)=='PART'.or.specttype(1:4)=='COOL') then
+      if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL') then
         !
         write(ioname, '(a)') 'Partition function'
         call IOstart(trim(ioname),tunit)
@@ -1017,7 +1028,7 @@ module spectrum
         !
       endif
       !
-      if (specttype(1:4)=='PART') then
+      if (proftype(1:4)=='PART') then
         !
         j0rk = real(j0-1)*0.5_rk
         !
@@ -1252,7 +1263,7 @@ module spectrum
      stop 'Undefined PF'
    endif
    !
-   if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE'/)) ) then 
+   if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE','COO'/)) ) then 
      allocate(intens_omp(npoints,N_omp_procs),stat=info)
      call ArrayStart('swap:intens_omp',info,size(intens_omp),kind(intens_omp))
    endif
@@ -1404,7 +1415,7 @@ module spectrum
            iswap_ = 1
            abscoef_ram = 0
            !
-           !omp parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,ifilter,energyf,energyi,jf,ji,tranfreq,tranfreq0,offset,abscoef,cutoff)
+           !omp parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,ifilter,jf,ji,tranfreq,tranfreq0,offset,abscoef,cutoff)&
            !omp&  schedule(static) reduction(+:iswap_,intband) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,Asum)
            loop_swap : do iswap = 1,nswap_
              !
@@ -1488,9 +1499,12 @@ module spectrum
                !
              case ('LIFETIME')
                !
+               !omp critical
+               !
                if (Asum(ilevelf)<0) Asum(ilevelf) = 0 
                !
                Asum(ilevelf) = Asum(ilevelf) + acoef
+               !omp end critical
                !
                !print*,ilevelf,indexf,indexi,acoef
                !
@@ -1498,7 +1512,7 @@ module spectrum
                !
              end select
              !
-             if (abscoef<abscoef_thresh) cycle loop_swap
+             !if (abscoef<abscoef_thresh) cycle loop_swap
              !
              cutoff = thresh
              !
@@ -1527,7 +1541,7 @@ module spectrum
              iswap_ = iswap_ + 1
              !
            enddo loop_swap
-           !!omp end parallel do
+           !omp end parallel do
            !
            nswap = iswap_-1
            !
@@ -1566,7 +1580,6 @@ module spectrum
                 ilevelf = ilevelf_ram(iswap)
                 energyf = energies(ilevelf)
                 abscoef = abscoef_ram(iswap)
-                tranfreq = nu_ram(iswap)
                 !
                 do itemp = 1,npoints
                   !
@@ -1574,16 +1587,16 @@ module spectrum
                   !
                   beta0 = c2/temp0
                   !
-                  intens_omp(iswap,iomp) = intens_omp(iswap,iomp) + abscoef*exp(-(beta0-beta)*energyf)*partfunc/(pf(0,itemp))
+                  intens_omp(itemp,iomp) = intens_omp(itemp,iomp) + abscoef*exp(-(beta0-beta)*energyf)*partfunc/(pf(0,itemp))
                   !
                 enddo
                 !
               enddo
               !              
             enddo
-            !$omp parallel end do
+            !$omp end parallel do
             !
-            cooling(:) = sum(intens_omp,dim=2)
+            cooling(:) = cooling(:) + sum(intens_omp,dim=2)
             !
         case ('GAUS0')
             !
@@ -1602,9 +1615,9 @@ module spectrum
               enddo
               !              
             enddo
-            !$omp parallel end do
+            !$omp end parallel do
             !
-            intens(:) = sum(intens_omp,dim=2)
+            intens(:) = intens(:) + sum(intens_omp,dim=2)
             !
         case ('DOPPL')
             !
@@ -1624,9 +1637,9 @@ module spectrum
               enddo
               !              
             enddo
-            !$omp parallel end do
+            !$omp end parallel do
             !
-            intens(:) = sum(intens_omp,dim=2)
+            intens(:) = intens(:) + sum(intens_omp,dim=2)
             !
         case ('GAUSS')
             !
@@ -1645,7 +1658,7 @@ module spectrum
               enddo
               !              
             enddo
-            !$omp parallel end do
+            !$omp end parallel do
             !
             do iomp = 1,N_omp_procs
                intens(:) = intens(:) + intens_omp(:,iomp)
@@ -1668,7 +1681,7 @@ module spectrum
               enddo
               !              
             enddo
-            !$omp parallel end do
+            !$omp end parallel do
             !
             do iomp = 1,N_omp_procs
                intens(:) = intens(:) + intens_omp(:,iomp)
@@ -1693,7 +1706,7 @@ module spectrum
               enddo
               !              
             enddo
-            !$omp parallel end do
+            !$omp end parallel do
             !
             do iomp = 1,N_omp_procs
                intens(:) = intens(:) + intens_omp(:,iomp)
@@ -1724,7 +1737,7 @@ module spectrum
               enddo
               !              
             enddo
-            !$omp parallel end do
+            !$omp end parallel do
             !
             do iomp = 1,N_omp_procs
                intens(:) = intens(:) + intens_omp(:,iomp)
@@ -1748,7 +1761,7 @@ module spectrum
               enddo
               !              
             enddo
-            !$omp parallel end do
+            !$omp end parallel do
             !
             do iomp = 1,N_omp_procs
                intens(:) = intens(:) + intens_omp(:,iomp)
@@ -1777,10 +1790,12 @@ module spectrum
               enddo
               !              
             enddo
-            !$omp parallel end do
+            !$omp end parallel do
             !
-            do ipoint = 1,npoints
-               intens(i) = maxval(intens_omp(ipoint,:),dim=1)
+            do iswap = iomp,nswap,N_omp_procs
+               do ipoint = 1,npoints
+                 intens(i) = max(intens_omp(ipoint,ipoint),intens(i))
+               enddo
             enddo
             !
         case ('RECT','BOX')
@@ -1800,7 +1815,7 @@ module spectrum
               enddo
               !              
             enddo
-            !$omp parallel end do
+            !$omp end parallel do
             !
             do iomp = 1,N_omp_procs
                intens(:) = intens(:) + intens_omp(:,iomp)
@@ -1829,9 +1844,9 @@ module spectrum
               enddo
               !              
             enddo
-            !$omp parallel end do
+            !$omp end parallel do
             !
-            intens(:) = sum(intens_omp(:,:),dim=2)
+            intens(:) = intens(:) +sum(intens_omp(:,:),dim=2)
             !
         case ('BIN-MICRON');
             !
@@ -1854,7 +1869,7 @@ module spectrum
               enddo
               !              
             enddo
-            !$omp parallel end do
+            !$omp end parallel do
             !
             do iomp = 1,N_omp_procs
                intens(:) = intens(:) + intens_omp(:,iomp)
@@ -1880,7 +1895,7 @@ module spectrum
               enddo
               !              
             enddo
-            !$omp parallel end do
+            !$omp end parallel do
             !
             do iomp = 1,N_omp_procs
                intens(:) = intens(:) + intens_omp(:,iomp)
@@ -1939,7 +1954,7 @@ module spectrum
      !
      close(tunit,status='keep')   
      !
-   elseif (trim(specttype)=='COOLING') then 
+   elseif (trim(proftype)=='COOLING') then 
      !
      write(ioname, '(a)') 'Cooling'
      call IOstart(trim(ioname),tunit)
@@ -2008,7 +2023,7 @@ module spectrum
    !
    !call IOStop(trim(ioname))
    !
-   if (verbose>=2.and.any(Nintens(:)/=0) ) then 
+   if (verbose>=-2.and.any(Nintens(:)/=0) ) then 
       !
       write(ioname, '(a)') 'Intensity distribution...'
       call IOstart(trim(ioname),tunit)
