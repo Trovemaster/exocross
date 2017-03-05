@@ -66,6 +66,7 @@ module spectrum
   type(HitranErrorT),target :: HITRAN_E(HITRAN_max_ierr),HITRAN_S(HITRAN_max_ierr),HITRAN_Air,HITRAN_Self,HITRAN_N,HITRAN_Delta
   !
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., stick_hitran = .false.
+  logical :: lineprofile_do = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
   !
@@ -692,6 +693,8 @@ module spectrum
       !
       halfwidth = 0 
       !
+      lineprofile_do = .true.
+      !
       do i=1,Nspecies
         !
         halfwidth =  halfwidth + species(i)%ratio*species(i)%gamma*(species(i)%T0/Temp)**species(i)%N*pressure/species(i)%P0
@@ -713,8 +716,8 @@ module spectrum
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,x0,tranfreq,tranfreq_i,abscoef,dfreq_,xp,xm,de,lor,b,lor2,dfreq_2,halfwidth0,dnu_half,dxp,tranfreq0
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,elow,jf,ji,acoef,j0rk,bnorm,f,eta1,eta2,intens1,intens2,Va0,gammaV,a,wg,d,lambda
    real(rk)    :: sigma,alpha,gamma,y,x1,x2,voigt_,dx2,xi,L1,L2,acoef_,cutoff
-   integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,ispecies,alloc_p,Noffset
-   real(rk)    :: gamma_,n_
+   integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,ispecies,alloc_p,Noffset,Nspecies_
+   real(rk)    :: gamma_,n_,gamma_s
    character(len=cl) :: ioname
    character(wl) :: string_tmp
    real(rk) :: Lorentz(nquadmax)
@@ -723,7 +726,7 @@ module spectrum
    integer(ik),allocatable :: gtot(:),indices(:)
    character(len=20),allocatable :: quantum_numbers(:,:)
    !
-   real(rk),allocatable :: acoef_RAM(:),abscoef_ram(:),nu_ram(:),intens_omp(:,:)
+   real(rk),allocatable :: acoef_RAM(:),abscoef_ram(:),nu_ram(:),intens_omp(:,:),gamma_ram(:)
    integer(ik),allocatable :: indexi_RAM(:),indexf_RAM(:)
    integer(ik),allocatable :: ileveli_RAM(:),ilevelf_RAM(:)
    integer(ik) :: iswaps,nswap_,nswap,iswap,iswap_,iomp
@@ -1295,6 +1298,11 @@ module spectrum
    call ArrayStart('swap:ileveli_RAM',info,size(ileveli_RAM),kind(ileveli_RAM))
    call ArrayStart('swap:ilevelf_RAM',info,size(ilevelf_RAM),kind(ilevelf_RAM))
    !
+   if (lineprofile_do) then
+     allocate(gamma_RAM(N_to_RAM),stat=info)
+     call ArrayStart('swap:gamma_RAM',info,size(gamma_RAM),kind(gamma_RAM))
+   endif
+   !
    nswap = 0
    Noffset = max(nint(offset/dfreq,ik),1)
    !
@@ -1356,10 +1364,14 @@ module spectrum
              stop 'Illegal proftype for HITRAN'
            endif
            !
-           do iswap = 1,N_to_RAM
+           Nspecies_ = max(Nspecies,2)
+           !
+           iswap_ = 0 
+           !
+           do while(iswap_<N_to_RAM)
              !
              !read(tunit,*,end=119) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
-             read(tunit,"(i3,f12.6,e10.3,e10.3,10x,f10.4,12x,a55,23x,2f7.1)",end=119) imol,tranfreq,abscoef,acoef,energyi,ch_q,gf,gi
+             read(tunit,"(i3,f12.6,e10.3,e10.3,f5.4,f5.3,f10.4,f4.2,8x,a55,23x,2f7.1)",end=119) imol,tranfreq,abscoef,acoef,gamma_,gamma_s,energyi,n_,ch_q,gf,gi
              !
              energyf = tranfreq + energyi
              !
@@ -1367,22 +1379,43 @@ module spectrum
              !
              if (tranfreq<small_) cycle
              !
-             abscoef_ram(iswap)=cmcoef*acoef*gf*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
-             nu_ram(iswap) = tranfreq
+             iswap_ = iswap_ + 1
+             !
+             abscoef_ram(iswap_)=cmcoef*acoef*gf*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+             !
+             nu_ram(iswap_) = tranfreq
+             !
+             ! estimate the line shape parameter 
+             !
+             if (lineprofile_do) then
+               !
+               ! The current version of ExoCross does know how to locate J-values in HITRAN-input. 
+               ! Therefore we can only use the static values of Voigt-parameters together with Nspecies
+               !
+               Jf = 1000.0_rk
+               Ji = 1000.0_rk
+               if (Nspecies==0) then
+                 species(1)%gamma = gamma_
+                 species(1)%n = n_
+                 species(2)%gamma = gamma_s
+                 species(2)%n = 0
+               endif
+               gamma_RAM(iswap_) = get_Voigt_gamma_n(Nspecies_,Jf,Ji)
+             endif
              !
              cycle
              !
            119 continue
-             nswap_ = iswap-1
+             nswap = iswap_-1
              exit
            enddo
            !
-           if (nswap_<1) then
+           nswap = iswap_
+           !
+           if (nswap<1) then
               write(out,"('... Finish swap')") 
               exit loop_tran
            endif
-           !
-           nswap = nswap_
            !
         else ! ExoMol format of the trans-file
            !
@@ -1535,6 +1568,10 @@ module spectrum
              !
              nu_ram(iswap_) = tranfreq
              !
+             if (lineprofile_do) then
+               gamma_RAM(iswap_)=get_Voigt_gamma_n(Nspecies,Jf,Ji)
+             endif
+             !
              intband = intband + abscoef
              !
              !do do_log_intensity
@@ -1668,13 +1705,14 @@ module spectrum
             !
             intens_omp = 0
             !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp) schedule(dynamic)
             do iomp = 1,N_omp_procs
               !
               do iswap = iomp,nswap,N_omp_procs
                 !
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
+                halfwidth = gamma_ram(iswap)
                 !
                 call do_lorentz(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens_omp(:,iomp))
                 !
@@ -1691,15 +1729,14 @@ module spectrum
             !
             intens_omp = 0
             !
-            halfwidth=get_Voigt_gamma_n(Nspecies,Jf,Ji)
-            !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp) schedule(dynamic)
             do iomp = 1,N_omp_procs
               !
               do iswap = iomp,nswap,N_omp_procs
                 !
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
+                halfwidth = gamma_ram(iswap)
                 !
                 call do_pseud(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens_omp(:,iomp))
                 !
@@ -1720,17 +1757,16 @@ module spectrum
             !
         case ('VOI-Q') ! VOIGT-QUADRATURES
             !
-            halfwidth=get_Voigt_gamma_n(Nspecies,Jf,Ji)
-            !
             intens_omp = 0
             !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp) schedule(dynamic)
             do iomp = 1,N_omp_procs
               !
               do iswap = iomp,nswap,N_omp_procs
                 !
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
+                halfwidth = gamma_ram(iswap)
                 !
                 call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth,offset,freql,dpwcoef,intens_omp(:,iomp))
                 !
@@ -1744,19 +1780,18 @@ module spectrum
             enddo
             !
         case ('VOIGT')
-            !
-            halfwidth=get_Voigt_gamma_n(Nspecies,Jf,Ji)
             intens_omp = 0
             !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp) schedule(dynamic)
             do iomp = 1,N_omp_procs
               !
               do iswap = iomp,nswap,N_omp_procs
                 !
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
+                halfwidth = gamma_ram(iswap)
                 !
-                call do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,offset,freql,bnormq,intens_omp(:,iomp))
+                call do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,offset,freql,intens_omp(:,iomp))
                 !
               enddo
               !              
@@ -2494,12 +2529,12 @@ module spectrum
      !
   end subroutine  do_Voi_Q
 
-  subroutine  do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,offset,freql,bnormq,intens)
+  subroutine  do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,offset,freql,intens)
      !
      implicit none
      !
      real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql,dpwcoef
-     real(rk),intent(in) :: freq(:),bnormq(nquad)
+     real(rk),intent(in) :: freq(:)
      real(rk),intent(out) :: intens(:)
      real(rk) :: tranfreq_i,halfwidth0
      integer(ik) :: ib,ie,ipoint
@@ -2870,7 +2905,6 @@ module spectrum
      real(rk),intent(in) :: Jf,Ji
      real(rk) :: halfwidth,gamma_,n_,f
      integer(ik) :: ispecies,Jpp,Jp
-     
      !
      halfwidth = 0
      !
