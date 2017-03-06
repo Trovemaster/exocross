@@ -1829,7 +1829,7 @@ module spectrum
             !
             do iswap = iomp,nswap,N_omp_procs
                do ipoint = 1,npoints
-                 intens(i) = max(intens_omp(ipoint,ipoint),intens(i))
+                 intens(i) = max(intens_omp(ipoint,iomp),intens(i))
                enddo
             enddo
             !
@@ -1948,7 +1948,7 @@ module spectrum
      !
      close(tunit)
      !
-     if (nswap_<nswap) exit loop_file
+     if (nswap_<nswap) cycle loop_file
      !
    enddo loop_file
    !
