@@ -13,7 +13,7 @@ module spectrum
   integer(ik),parameter :: max_transitions_to_ram = 1000000000
   integer(ik) :: N_omp_procs=1
   !
-  integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=3,ioffset = 10,iso=1
+  integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,ioffset = 10,iso=1
   real(rk)      :: temp=298.0,partfunc=-1.0,freql=-small_,freqr= 20000.0,thresh=1.0d-70,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
   real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = -25.0, pressure = 1.0_rk 
   real(rk)      :: enermax = 1e6, abscoef_thresh = 1.0d-50, abundance = 1.0d0
@@ -742,7 +742,7 @@ module spectrum
    !
    integer(ik) :: imol,nchars_,ierror_nu,ierror_S,ierror_i,ierror_f,iqn,NQn,ierror,qni,qnf
    real(rk)    :: gf,gi,mem_t
-   character(55) ch_q
+   character(55) ch_q,ch_broad
    !
    ln2=log(2.0_rk)
    ln22 = ln2*2.0_rk
@@ -775,6 +775,8 @@ module spectrum
    ! open and count number of lines (levels) in the Energy files
    !
    if (trim(enrfilename)/="none".and..not.hitran_do) then
+
+      if (verbose>=2) print('(a/)'),'Reading energies from .states ..'
       !
       write(ioname, '(a)') 'Energy file'
       call IOstart(trim(ioname),enunit)
@@ -849,8 +851,6 @@ module spectrum
       ! default, min value of number of characters for quantum numbers outputs
       !
       nchars_quanta = 3
-      !
-      if (verbose>=3) call MemoryReport
       !
       quantum_numbers = ""
       !
@@ -1077,6 +1077,8 @@ module spectrum
         !
       endif
       !
+      if (verbose>=2) print('(1x,a/)'),'... reading energies done!'
+      !
    endif  ! end of processing the states files 
    !   
    if (verbose>=2.or.(partfunc_do.and.verbose>0)) print('(1x,a,1x,es16.8/)'),'! partition function value is',partfunc
@@ -1097,6 +1099,8 @@ module spectrum
    !
    ! open and read broadening files
    !
+   if (verbose>=4.and.Nspecies>0) print('(1x,a/)'),'Reading broadening parameters.'
+   !
    do i =1,Nspecies
      !
      if ( trim(species(i)%filename)/="" ) then
@@ -1111,7 +1115,7 @@ module spectrum
        do
          !
          ! Scan and find Jmax
-         read(bunit,*,end=14) gamma_,n_,J_
+         read(bunit,*,end=14) ch_broad(1:3),gamma_,n_,J_
          !
          Jmax = max(Jmax,J_)
          !
@@ -1149,13 +1153,13 @@ module spectrum
            !
          case ('J','A0')
            !
-           read(bunit,*,end=15) gamma_,n_,J
+           read(bunit,*,end=15) ch_broad(1:3),gamma_,n_,J
            species(i)%gammaQN(J,:) = gamma_
            species(i)%nQN(J,:) = n_
            !
          case ('JJ','A1')
            !
-           read(bunit,*,end=15) gamma_,n_,Jpp,Jp
+           read(bunit,*,end=15) ch_broad(1:3),gamma_,n_,Jpp,Jp
            !
            if (abs(Jp-Jpp)>1) stop 'Jp-Jpp in broadening file'
            !
@@ -1164,7 +1168,7 @@ module spectrum
            !
          case ('JJKK-X')
            !
-           read(bunit,*,end=15) gamma_,n_,Jpp,Jp,Kp,Kpp
+           read(bunit,*,end=15) ch_broad(1:3),gamma_,n_,Jpp,Jp,Kp,Kpp
            !
            if (abs(Jp-Jpp)>1) stop 'Jp-Jpp in broadening file'
            if (Kp>Jp.or.Kpp>Jpp) stop 'K > J in broadening file'
@@ -1303,14 +1307,18 @@ module spectrum
      call ArrayStart('swap:gamma_RAM',info,size(gamma_RAM),kind(gamma_RAM))
    endif
    !
+   if (verbose>=4) call MemoryReport
+   !
    nswap = 0
    Noffset = max(nint(offset/dfreq,ik),1)
+   !
+   if (verbose>=3) print('(/"Transition files ... "/)')
    !
    loop_file : do i = 1,nfiles
      !
      open(unit=tunit,file=trim(intfilename(i)),action='read',status='old')
      !
-     if (verbose>=3) print('("Processing ",a,"...")'), trim(intfilename(i))
+     if (verbose>=3) print('("  Processing ",a,"...")'), trim(intfilename(i))
      !
      loop_tran: do
         !
@@ -1325,6 +1333,10 @@ module spectrum
            do iswap = 1,N_to_RAM
              !
              read(tunit,*,end=118) nu_ram(iswap),abscoef_RAM(iswap)
+             !
+             if (lineprofile_do) then
+               gamma_RAM(iswap)=halfwidth
+             endif
              !
              cycle
              !
@@ -1591,9 +1603,6 @@ module spectrum
         select case (trim(proftype(1:5)))
             !
         case ('STICK')
-            !
-            cutoff =  apply_HITRAN_cutoff(tranfreq)
-            if (abscoef<cutoff) cycle
             !
             call do_stick(sunit,nswap,nlines,maxitems,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nchars_quanta,quantum_numbers)
             !
@@ -2528,48 +2537,33 @@ module spectrum
      !$omp end parallel do
      !
   end subroutine  do_Voi_Q
-
-  subroutine  do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,offset,freql,intens)
+  !
+  subroutine  do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth_Lorentz,dpwcoef,offset,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql,dpwcoef
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth_Lorentz,offset,freql,dpwcoef
      real(rk),intent(in) :: freq(:)
      real(rk),intent(out) :: intens(:)
-     real(rk) :: tranfreq_i,halfwidth0
+     real(rk) :: tranfreq_i,halfwidth_doppler
      integer(ik) :: ib,ie,ipoint
       ! 
       ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
       ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
-      halfwidth0=dpwcoef*tranfreq
+      halfwidth_doppler=dpwcoef*tranfreq
       !
-      ! bnorm is due to to truncation of the wings, see Sharp and Burrows 2007 
-      !
-      !bnorm = 2.0_rk-2.0_rk/pi * atan(2.0_rk*offset/halfwidth)
-      !
-      !if (halfwidth<0.5_rk*dfreq**2) then
-      !  !
-      !  dfreq_2 = halfwidth/dfreq
-      !  !
-      !  bnorm = pi*0.25_rk*dfreq_2*(4.0_rk+dfreq_2**2)/(2.0_rk+dfreq_2**2)
-      !  !
-      !  tranfreq = min(max(nint( ( tranfreq)/dfreq )+1,1),npoints)
-      !  !
-      !endif
-      !
-      !abscoef = abscoef*bnorm
       !
       !$omp parallel do private(ipoint,tranfreq_i) shared(intens) schedule(dynamic)
       do ipoint=ib,ie
          !
          tranfreq_i = freq(ipoint)
          !
-         !intens(ipoint)=intens(ipoint)+voigt_faddeeva(tranfreq_i,tranfreq,halfwidth0,halfwidth)*abscoef
-         intens(ipoint)=intens(ipoint)+voigt_humlicek(tranfreq_i,tranfreq,halfwidth0,halfwidth)*abscoef
+         !intens(ipoint)=intens(ipoint)+voigt_faddeeva(tranfreq_i,tranfreq,halfwidth_doppler,halfwidth_Lorentz)*abscoef
+         intens(ipoint)=intens(ipoint)+voigt_humlicek(tranfreq_i,tranfreq,halfwidth_doppler,halfwidth_Lorentz)*abscoef
          !
       enddo
       !$omp end parallel do      
-
+      !
   end subroutine  do_Voigt
   !
 
@@ -2611,7 +2605,8 @@ module spectrum
      real(rk)  :: Jf,Ji,abscoef,acoef,tranfreq,energyf,energyi
      integer(ik),intent(in) :: nchars_quanta(maxitems),gtot(nlines)
      character(len=20),intent(in) :: quantum_numbers(0:maxitems,nlines)
-     integer(ik) :: nchars_,kitem,ierror_nu,iE,ierror_i,ierror,ierror_S,l,qni,qnf,ierror_f, ilevelf,ileveli,iswap
+     integer(ik) :: nchars_,kitem,ierror_nu,iE,ierror_i,ierror,ierror_S,l,qni,qnf,ierror_f,&
+                    ilevelf,ileveli,iswap
      character(9) b_fmt
      !
      !
@@ -2624,6 +2619,9 @@ module spectrum
        energyf = energies(ilevelf)
        energyi = energies(ileveli)
        tranfreq = energyf - energyi
+       !
+       jf = jrot(ilevelf)
+       ji = jrot(ileveli)
        !
        if (stick_hitran) then 
          !
