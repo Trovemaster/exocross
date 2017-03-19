@@ -1,0 +1,25 @@
+
+Temperature  1900.0
+Range 0.0  10000.0
+
+Npoints 10001.0
+
+absorption
+
+bin
+threshold -1e-25
+
+
+pressure  1.0
+
+
+mass 18.0
+
+output H2O_1900K_bin
+
+States 1H2-16O__BT2.states                                                                                                                  (Energy file)
+
+Transitions  
+1H2-16O__BT2__00000-00250.trans.10000
+end
+

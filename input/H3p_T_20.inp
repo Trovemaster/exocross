@@ -1,0 +1,17 @@
+
+Temperature  20
+Range 0.0  30000.0
+
+Npoints 1201
+
+emission
+stick
+(hwhm 1.00)
+threshold 1e-12
+
+output H3p_em_20
+
+States linelist_states_bt2.txt.sort
+
+Transitions linelist_transitions_bt2.txt.head
+

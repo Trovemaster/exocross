@@ -1,0 +1,33 @@
+Temperature  2000.0
+Range 0 100.0 
+
+Npoints 1001
+
+(hwhm 1.00)
+
+histogram
+
+pressure 10 atm
+
+species 
+ H2  gamma 0.03 n 0.2 t0 298.0 file CH4_J30_D.broad  model J  ratio 1.0
+end
+
+absorption
+voigt
+mass 16.0313
+threshold 1e-100
+
+
+output CH4_2000K_bin-histogram_1e-3_0-100
+
+NRAM 10000
+NPROCS 16
+
+
+States ch4-50.states-all.100k
+
+Transitions  
+  CH4_2000K_bin_1e-5_0-100.xsec.head
+end
+
