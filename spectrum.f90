@@ -1,4 +1,4 @@
-module spectrum
+3module spectrum
   !
   use accuracy
   use timer
@@ -28,6 +28,7 @@ module spectrum
   integer(ik)   :: intJvalue(nfiles_max)
   character(4) a_fmt
   character(9) b_fmt
+  real(rk) :: temp_vib = -1.0
   !
   type selectT
     integer(ik)  :: i = 0
@@ -58,8 +59,19 @@ module spectrum
     integer(ik) :: ierr = 0           ! Number of QN-entries
     !
   end type HitranErrorT
+
+
+  type QNT ! broadener
+    !
+    integer(ik) :: Kcol=1                ! Column with K 
+    integer(ik) :: vibcol(2)=1           ! Range of columns with vib quanta 
+    integer(ik) :: Nmodes= 1             ! Number of vib modes
+    integer(ik) :: Nsym                  ! Number of symmetries
+    !
+  end type QNT
   !
   type(selectT),save :: upper(filtermax),lower(filtermax)
+  type(QNT),save :: QN
   !
   integer(ik)    :: Nspecies = 0, Nfilters = 0
   type(speciesT),save :: species(nspecies_max)
@@ -67,7 +79,7 @@ module spectrum
   type(HitranErrorT),target,save :: HITRAN_Air,HITRAN_Self,HITRAN_N,HITRAN_Delta
   !
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
-  stick_hitran = .false.
+  stick_hitran = .false.,vibtemperature_do = .false.
   logical :: lineprofile_do = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
@@ -115,6 +127,19 @@ module spectrum
         case ("TEMPERATURE","TEMP")
           !
           call readf(temp)
+          !
+          if (Nitems>2) then 
+             !
+             call readu(w)
+             !
+             if (w(1:3)=='VIB') then
+                 call readf(temp_vib)
+                 vibtemperature_do  = .true.
+               else
+                 call report ("Illegal key, expected vib"//trim(w),.true.)
+             endif 
+             !
+          endif
           !
         case ("PRESSURE")
           !
@@ -254,8 +279,52 @@ module spectrum
           !
           if (trim(w)/="".and.trim(w)/="END") then
              !
-             write (out,"('input: wrong last line in CONTRACTION =',a)") trim(w)
-             stop 'input - illigal last line in CONTRACTION'
+             write (out,"('input: wrong last line in PARTFUNC =',a)") trim(w)
+             stop 'input - illigal last line in PARTFUNC'
+             !
+          endif
+          !
+        case ("QN","QUNTUM-NUMBERS")
+          !
+          call read_line(eof) ; if (eof) exit
+          call readu(w)
+          !
+          do while (trim(w)/="".and.trim(w)/="END")
+            !
+            select case(w)
+            !
+            case('NMODES')
+              !
+              call readi(QN%Nmodes)
+              !
+            case ("NSYM")
+              !
+              call readi(QN%Nsym)
+              !
+            case ("K")
+              !
+              call readi(QN%Kcol)
+              !
+            case ("VIB","VIBRATIONAL")
+              !
+              call readi(QN%Vibcol(1))
+              call readi(QN%Vibcol(2))
+              !
+            case default
+              !
+              call report ("Unrecognized unit name "//trim(w),.true.)
+              !
+            end select
+            !
+            call read_line(eof) ; if (eof) exit
+            call readu(w)
+            !
+          enddo
+          !
+          if (trim(w)/="".and.trim(w)/="END") then
+             !
+             write (out,"('input: wrong last line in QN =',a)") trim(w)
+             stop 'input - illigal last line in QN'
              !
           endif
           !
@@ -722,8 +791,8 @@ module spectrum
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk
    real(rk)    :: acoef_,cutoff
-   integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,Noffset,Nspecies_
-   real(rk)    :: gamma_,n_,gamma_s
+   integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib
+   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot
    character(len=cl) :: ioname
    !
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:),cooling(:)
@@ -734,6 +803,8 @@ module spectrum
    integer(ik),allocatable :: indexi_RAM(:),indexf_RAM(:)
    integer(ik),allocatable :: ileveli_RAM(:),ilevelf_RAM(:)
    integer(ik) :: nswap_,nswap,iswap,iswap_,iomp
+   real(rk),allocatable :: energies_vib(:)
+   integer(ik),allocatable :: ivib_state(:)
    !
    integer(ik),allocatable :: nchars_quanta(:)  ! max number of characters used for each quantum number
    !
@@ -788,6 +859,8 @@ module spectrum
       i = 0
       iline = 0
       maxitems = 5
+      Nvib_states = 0
+      info = 0
       !
       call input_options(echo_lines=.false.,error_flag=1)
       !
@@ -810,7 +883,24 @@ module spectrum
          !
          maxitems = max(nitems,maxitems)
          !
-         !cycle
+         if (vibtemperature_do) then 
+            call readf(dtemp)
+            call readf(ji)
+            !
+            if (info>0.and.nint(ji)==0) then
+              write(out,"('It is illegal to use not J-sorted states with vib-temperatures')")
+              stop 'States file must be ordered by J to use with Tvib'
+            endif
+            !
+            if (info>0) cycle
+            !
+            if (nint(ji)==0) then 
+              Nvib_states = Nvib_states + 1
+            else 
+              info = 1
+            endif
+            !
+         endif
          !
          !10  exit
       end do
@@ -834,6 +924,17 @@ module spectrum
       call ArrayStart('Jrot',info,size(Jrot),kind(Jrot))
       call ArrayStart('gtot',info,size(gtot),kind(gtot))
       call ArrayStart('indices',info,size(indices),kind(indices))
+      !
+      if (vibtemperature_do) then
+        write(out,"('Number of vibrational states = ',i6)") Nvib_states
+        allocate(energies_vib(Nvib_states),ivib_state(nlines),stat=info)
+        call ArrayStart('energies_vib',info,size(energies_vib),kind(energies_vib))
+        call ArrayStart('ivib_state',info,size(ivib_state),kind(ivib_state))
+        ivib_state = 1
+        energies_vib = 0
+        ivib1 = QN%vibcol(1)
+        ivib2 = QN%vibcol(2)
+      endif
       !
       if (trim(specttype)=='LIFETIME') THEN
         !
@@ -972,6 +1073,26 @@ module spectrum
          j = 2*int(jrot(i))+1
          energy = energies(i)
          !
+         if (vibtemperature_do) then
+           if (nint(jrot(i))==0) then 
+              energies_vib(i) = energy
+              ivib_state(i) = i
+              ener_vib = energy
+              ener_rot = energy-ener_vib
+           else
+              loop_vib : do ivib  = 1,Nvib_states
+                if (all(quantum_numbers(ivib1:ivib2,i)==quantum_numbers(ivib1:ivib2,ivib))) then
+                  !
+                  ivib_state(i) = ivib
+                  ener_vib = energies_vib(ivib)
+                  ener_rot = energy-ener_vib
+                  exit loop_vib
+                  !
+                endif
+              enddo loop_vib
+           endif
+         endif
+         !
          if (partfunc_do) then
            if (j/=j0) then
               !
@@ -983,7 +1104,12 @@ module spectrum
               !
            endif
            !
-           partfunc=partfunc+gtot(i)*exp(-beta*energy)
+           if (.not.vibtemperature_do) then
+              partfunc=partfunc+gtot(i)*exp(-beta*energy)
+           else 
+              ! split PF into a product of vib and rot parts 
+              partfunc=partfunc+gtot(i)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)
+           endif 
            !
            j0 = j
            !
@@ -1510,6 +1636,19 @@ module spectrum
                !
              endif
              !
+             if (vibtemperature_do) then
+                !
+                if (trim(specttype)=='ABSORPTION') then 
+                  ivib = ivib_state(ileveli)
+                  ener_vib = energies_vib(ivib)
+                  ener_rot = energyi-ener_vib
+                else
+                  ivib = ivib_state(ileveli)
+                  ener_vib = energies_vib(ivib)
+                  ener_rot = energyi-ener_vib
+                endif
+             endif
+             !
              jf = jrot(ilevelf)
              ji = jrot(ileveli)
              !
@@ -1531,13 +1670,26 @@ module spectrum
                !
              case ('ABSORPTION')
                !
-               abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+               !abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+               !
+               if (.not.vibtemperature_do) then
+                  abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+               else 
+                  ! split into a product of vib and rot parts 
+                  abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)*(1.0_rk-exp(-c2/temp_vib*tranfreq))/(tranfreq**2*partfunc)
+               endif 
                !
              case ('emission','EMISSION','EMISS','emiss')
                !
                ! emission coefficient [Ergs/mol/Sr]
                !
-               abscoef=emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-beta*energyf)*tranfreq/(partfunc)
+               if (.not.vibtemperature_do) then
+                  abscoef=emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-beta*energyf)*tranfreq/(partfunc)
+               else 
+                  ! split into a product of vib and rot parts 
+                  abscoef=emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)*tranfreq/(partfunc)
+                  !
+               endif 
                !
              case ('LIFETIME')
                !
