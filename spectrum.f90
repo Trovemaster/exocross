@@ -1484,7 +1484,7 @@
            intband = intband + sum(abscoef_RAM(1:nswap_))
            !
            if (nswap_<1) then
-              if (verbose>=3) write(out,"('... Finish swap')")
+              if (verbose>=5) write(out,"('... Finish swap')")
               exit loop_tran
            endif
            !
@@ -1594,11 +1594,13 @@
            !
            !read(tunit,*,end=20) indexf,indexi,acoef
            iswap_ = 1
+           !
+           ileveli_ram = -1
            abscoef_ram = 0
            !
-           !omp parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,ifilter,jf,ji,tranfreq,&
-           !omp& tranfreq0,offset,abscoef,cutoff)&
-           !omp&  schedule(static) reduction(+:iswap_,intband) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,Asum)
+           !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,ifilter,&
+           !$omp& ivib,ener_vib,ener_rot,jf,ji,tranfreq,tranfreq0,offset,abscoef,cutoff)&
+           !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,Asum,gamma_RAM)
            loop_swap : do iswap = 1,nswap_
              !
              indexf = indexf_RAM(iswap)
@@ -1693,12 +1695,12 @@
                !
              case ('LIFETIME')
                !
-               !omp critical
+               !$omp critical
                !
                if (Asum(ilevelf)<0) Asum(ilevelf) = 0
                !
                Asum(ilevelf) = Asum(ilevelf) + acoef
-               !omp end critical
+               !$omp end critical
                !
                !print*,ilevelf,indexf,indexi,acoef
                !
@@ -1722,26 +1724,46 @@
                cycle loop_swap
              endif
              !
-             ilevelf_ram(iswap_) = ilevelf
-             ileveli_ram(iswap_) = ileveli
-             abscoef_ram(iswap_) = abscoef
-             acoef_ram(iswap_) = acoef
+             ilevelf_ram(iswap) = ilevelf
+             ileveli_ram(iswap) = ileveli
+             abscoef_ram(iswap) = abscoef
+             acoef_ram(iswap) = acoef
              !
-             nu_ram(iswap_) = tranfreq
+             nu_ram(iswap) = tranfreq
              !
              if (lineprofile_do) then
-               gamma_RAM(iswap_)=get_Voigt_gamma_n(Nspecies,Jf,Ji)
+               gamma_RAM(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji)
              endif
              !
-             intband = intband + abscoef
-             !
              !do do_log_intensity
-             iswap_ = iswap_ + 1
              !
            enddo loop_swap
-           !omp end parallel do
+           !$omp end parallel do
            !
+           iswap_ = 1
+           !
+           do iswap = 1,nswap_
+             !
+             if (ileveli_ram(iswap)>0) then 
+                ilevelf_ram(iswap_) = ilevelf_ram(iswap)
+                ileveli_ram(iswap_) = ileveli_ram(iswap)
+                abscoef_ram(iswap_) = abscoef_ram(iswap)
+                acoef_ram(iswap_)   = acoef_ram(iswap)
+                !
+                nu_ram(iswap_) = nu_ram(iswap)
+                !
+                if (lineprofile_do) then
+                  gamma_RAM(iswap_)=gamma_RAM(iswap)
+                endif
+                !
+                iswap_ = iswap_ + 1
+                !
+             endif
+             !
+           enddo
            nswap = iswap_-1
+           !
+           intband = intband + sum(abscoef_ram(1:nswap))
            !
         endif
         !
