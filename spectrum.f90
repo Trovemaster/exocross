@@ -1,4 +1,4 @@
-3module spectrum
+module spectrum
   !
   use accuracy
   use timer
@@ -1678,7 +1678,8 @@
                   abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
                else 
                   ! split into a product of vib and rot parts 
-                  abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)*(1.0_rk-exp(-c2/temp_vib*tranfreq))/(tranfreq**2*partfunc)
+                  abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)*&
+                          (1.0_rk-exp(-c2/temp_vib*tranfreq))/(tranfreq**2*partfunc)
                endif 
                !
              case ('emission','EMISSION','EMISS','emiss')
@@ -1689,7 +1690,8 @@
                   abscoef=emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-beta*energyf)*tranfreq/(partfunc)
                else 
                   ! split into a product of vib and rot parts 
-                  abscoef=emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)*tranfreq/(partfunc)
+                  abscoef=emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-c2/temp*ener_rot)*&
+                          exp(-c2/temp_vib*ener_vib)*tranfreq/(partfunc)
                   !
                endif 
                !
