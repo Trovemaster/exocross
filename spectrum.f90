@@ -10,7 +10,7 @@
   !
   integer(ik),parameter   :: nfiles_max =1000, max_items = 1000, nspecies_max = 10, nquadmax = 101, filtermax = 100
   integer(ik),parameter :: HITRAN_max_ierr = 10            ! maximal number of QNs for error-specification in HITRAN
-  integer(ik),parameter :: max_transitions_to_ram = 1000000000
+  integer(hik),parameter :: max_transitions_to_ram = 1000000000
   integer(ik) :: N_omp_procs=1
   !
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,ioffset = 10,iso=1
@@ -22,7 +22,7 @@
   real(rk)      :: resolving_power  = 1e6,resolving_f ! using resolving_power to set up grid
   character(len=cl) :: cutoff_model = "NONE"
   integer(ik)   :: nquad = 20      ! Number of quadrature points
-  integer(ik)   :: N_to_RAM = -1000 ! Lines to keep in RAM
+  integer(hik)   :: N_to_RAM = -1000 ! Lines to keep in RAM
   !
   character(len=cl) :: specttype="absorption",enrfilename="none",intfilename(nfiles_max),proftype="DOPPL",output="output"
   integer(ik)   :: intJvalue(nfiles_max)
@@ -66,7 +66,7 @@
     integer(ik) :: Kcol=1                ! Column with K 
     integer(ik) :: vibcol(2)=1           ! Range of columns with vib quanta 
     integer(ik) :: Nmodes= 1             ! Number of vib modes
-    integer(ik) :: Nsym                  ! Number of symmetries
+    integer(ik) :: Nsym=1                ! Number of symmetries
     !
   end type QNT
   !
@@ -1412,9 +1412,9 @@
    !
    if (N_to_RAM<0) then
      !
-     mem_t = real(4*rk+4*ik,rk)/1024_rk**3
+     mem_t = real(6*rk+5*ik,rk)/1024_rk**3
      !
-     N_to_RAM = max(1,min( max_transitions_to_ram,int((memory_limit-memory_now)/mem_t,hik)))
+     N_to_RAM = max(1,min( max_transitions_to_ram,int((memory_limit-memory_now)/mem_t,hik),hik))
      !
      if (verbose>=4) print('("We can swap ",i12," transitions into RAM")'),N_to_RAM
      !
@@ -2234,7 +2234,7 @@
      !
    else
      !
-     if (verbose>=2) print('("Total intensity = ",es16.8,f18.4)'), intband,temp
+     if (verbose>=2) print('("Total intensity = ",es16.8,", T = ",f18.4)'), intband,temp
      !
    endif
    !
@@ -2947,6 +2947,8 @@
             else
               write(b_fmt,"('(1x,a',i2,')')") nchars_quanta(kitem)
             endif
+            !
+            !write(out,"(2i7,e17.4)",advance="no") ilevelf,ileveli,acoef
             !
             write(out,b_fmt,advance="no") trim(quantum_numbers(kitem,ileveli))
             !

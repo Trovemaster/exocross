@@ -30,7 +30,7 @@ module timer
   integer, parameter :: name_len   =   40 ! Max length of timer name
   !
   real(rk)           :: maxmemory   =   0 ! Maximal memory allocated
-  real(rk)           :: memory_limit =   100000.0 ! GiB
+  real(rk)           :: memory_limit =   8.0 ! GiB
   !
   type tim
     logical                 :: used       ! Slot used?
