@@ -19,7 +19,7 @@ FFLAGS =  -O3 -ip -openmp
 
 LAPACK = -static
 
-LDIR = /nfs/workspaces/exomol/syurchenko/programs/libcerf/libcerf-1.4/lib/.lib/
+#LDIR = /nfs/workspaces/exomol/syurchenko/programs/libcerf/libcerf-1.4/lib/.lib/
 LIB     =  # w_of_z.o err_fcts.o erfcx.o im_w_of_x.o   #  $(LIBDIR)libcerf.so.1.0.4 -L $LDIR 
 
 ###############################################################################
@@ -32,7 +32,7 @@ xsec.x:	$(OBJ) crosssections.o
 crosssections.o:	crosssections.f90 $(OBJ) 
 	$(FOR) -c crosssections.f90 $(FFLAGS)
 
-spectrum.o:	spectrum.f90 accuracy.o input.o  use_libcerf_mod.o
+spectrum.o:	spectrum.f90 accuracy.o input.o  
 	$(FOR) -c spectrum.f90 $(FFLAGS)
 
 accuracy.o:  accuracy.f90
@@ -43,9 +43,6 @@ timer.o:  timer.f90
 
 input.o:  input.f90
 	$(FOR) -c input.f90 $(FFLAGS)
-
-use_libcerf_mod.o:  use_libcerf_mod.f90
-	$(FOR) -c use_libcerf_mod.f90 $(FFLAGS)
 
 
 clean:
