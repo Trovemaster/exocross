@@ -344,100 +344,109 @@ module spectrum
         case ("HITRAN")
           !
           hitran_do = .true.
-          iE = 0
-          iS = 0
           !
-          call read_line(eof) ; if (eof) exit
-          !
-          call readu(w)
-          !
-          do while (trim(w)/="".and.trim(w)/="END")
-             !
-             select case(w)
+          if (nitems>1) then
+            !
+            call readu(w)
+            !
+            if (trim(w)/="WRITE") then 
+              call report ("Unrecognized unit name in HITRAN"//trim(w),.true.)
+            endif
+            !
+            hitran_do = .false.
+            stick_hitran = .true.
+            !
+            iE = 0
+            iS = 0
+            !
+            call read_line(eof) ; if (eof) exit
+            !
+            call readu(w)
+            !
+            do while (trim(w)/="".and.trim(w)/="END")
                !
-             case("WRITE")
-               !
-               hitran_do = .false.
-               stick_hitran = .true.
-               !
-             case("ERROR-E","ERROR-S")
-               !
-               if (iE>HITRAN_max_ierr.or.iS>HITRAN_max_ierr) call report &
-                  ("Too many ERROR-E/S, increase HITRAN_max_irr"//trim(w),.true.)
-               !
-               if (trim(w)=="ERROR-E") then
-                 iE = iE + 1
-                 HITRAN => HITRAN_E(iE)
-                 HITRAN_E(1)%N = iE
-               endif
-               if (trim(w)=="ERROR-S") then
-                 iS = iS + 1
-                 HITRAN => HITRAN_S(iS)
-                 HITRAN_S(1)%N = iS
-               endif
-               !
-               do while (trim(w)/="".and.item<Nitems)
+               select case(w)
                  !
-                 call readu(w)
+               case("ERROR-E","ERROR-S")
                  !
-                 select case(w)
-                   !
-                 case("QN")
-                   !
-                   call readi(HITRAN%iqn)
-                   !
-                 case ("IERR")
-                   !
-                   call readi(ierror)
-                   !
-                   if (ierror<0.or.ierror>6) &
-                      call report("Illegal error code in HITRAN options, must be within [0..6] "//trim(w),.true.)
+                 if (iE>HITRAN_max_ierr.or.iS>HITRAN_max_ierr) call report &
+                    ("Too many ERROR-E/S, increase HITRAN_max_irr"//trim(w),.true.)
+                 !
+                 if (trim(w)=="ERROR-E") then
+                   iE = iE + 1
+                   HITRAN => HITRAN_E(iE)
+                   HITRAN_E(1)%N = iE
+                 endif
+                 if (trim(w)=="ERROR-S") then
+                   iS = iS + 1
+                   HITRAN => HITRAN_S(iS)
+                   HITRAN_S(1)%N = iS
+                 endif
+                 !
+                 do while (trim(w)/="".and.item<Nitems)
                    !
                    call readu(w)
                    !
-                   if (trim(w)/="VMAX") call report("Illegal record, vmax is expected after ierr value in HITRAN"//trim(w),.true.)
-                   !
-                   call readi(hitran%error_vmax(ierror))
-                   !
-                 end select
-               enddo
-               !
-             case("ERROR-AIR","ERROR-SELF","ERROR-N","ERROR-DELTA")
-               !
-               if (trim(w)=="ERROR-AIR")   HITRAN => HITRAN_Air
-               if (trim(w)=="ERROR-SELF")  HITRAN => HITRAN_Self
-               if (trim(w)=="ERROR-N")     HITRAN => HITRAN_N
-               if (trim(w)=="ERROR-DELTA") HITRAN => HITRAN_Delta
-               !
-               do while (trim(w)/="".and.item<Nitems)
+                   select case(w)
+                     !
+                   case("QN")
+                     !
+                     call readi(HITRAN%iqn)
+                     !
+                   case ("IERR")
+                     !
+                     call readi(ierror)
+                     !
+                     if (ierror<0.or.ierror>6) &
+                        call report("Illegal error code in HITRAN options, must be within [0..6] "//trim(w),.true.)
+                     !
+                     call readu(w)
+                     !
+                     if (trim(w)/="VMAX") call report("Illegal record, vmax is expected after ierr value in HITRAN"//trim(w),.true.)
+                     !
+                     call readi(hitran%error_vmax(ierror))
+                     !
+                   end select
+                 enddo
                  !
-                 call readu(w)
+               case("ERROR-AIR","ERROR-SELF","ERROR-N","ERROR-DELTA")
                  !
-                 select case(w)
+                 if (trim(w)=="ERROR-AIR")   HITRAN => HITRAN_Air
+                 if (trim(w)=="ERROR-SELF")  HITRAN => HITRAN_Self
+                 if (trim(w)=="ERROR-N")     HITRAN => HITRAN_N
+                 if (trim(w)=="ERROR-DELTA") HITRAN => HITRAN_Delta
+                 !
+                 do while (trim(w)/="".and.item<Nitems)
                    !
-                 case ("IERR")
+                   call readu(w)
                    !
-                   call readi(HITRAN%ierr)
-                   !
-                 case default
-                   !
-                   call report ("Unrecognized unit name in HITRAN-air .. options"//trim(w),.true.)
-                   !
-                 end select
-               enddo
+                   select case(w)
+                     !
+                   case ("IERR")
+                     !
+                     call readi(HITRAN%ierr)
+                     !
+                   case default
+                     !
+                     call report ("Unrecognized unit name in HITRAN-air .. options"//trim(w),.true.)
+                     !
+                   end select
+                 enddo
+                 !
+               case default
+                 !
+                 !write(out,"('Please make sure that HITRAN is followed by a section body or an empty line')")
+                 !call report ("Unrecognized unit name in HITRAN options"//trim(w),.true.)
+                 !
+               end select
                !
-             case default
+               call read_line(eof) ; if (eof) exit
                !
-               write(out,"('Please make sure that HITRAN is followed by a section body or an empty line')")
-               call report ("Unrecognized unit name in HITRAN options"//trim(w),.true.)
+               call readu(w)
                !
-             end select
-             !
-             call read_line(eof) ; if (eof) exit
-             !
-             call readu(w)
-             !
-          enddo
+            enddo
+            !
+          endif
           !
         case ("SELECT","FILTER")
           !
@@ -1559,6 +1568,8 @@ module spectrum
            enddo
            !
            nswap = iswap_
+           !
+           intband = intband + sum(abscoef_RAM(1:nswap_))
            !
            if (nswap<1) then
               write(out,"('... Finish swap')")
