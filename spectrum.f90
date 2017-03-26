@@ -604,6 +604,15 @@ module spectrum
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
             'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX')
           !
+          if (pressure<small_.and.(w(1:3)=='VOI'.or.w(1:3)=='PSE')) then
+             ! for pressure= 0 Voigt is repalced by Doppler
+             w = 'DOPPLER'
+             !
+             write(out,"('This is P=0 atm Voigt, which will be reated as Doppler')")
+             !
+          endif
+
+          !
           proftype = trim(w)
           !
           if (trim(w(1:5))=="LOREN") ioffset = 500
@@ -824,7 +833,7 @@ module spectrum
    logical :: eof
    character(len=cl) :: w
    !
-   integer(ik) :: imol
+   integer(ik) :: imol,iostat_
    real(rk)    :: gf,gi,mem_t
    character(55) ch_q,ch_broad
    !
@@ -1458,13 +1467,22 @@ module spectrum
    !
    loop_file : do i = 1,nfiles
      !
-     open(unit=tunit,file=trim(intfilename(i)),action='read',status='old')
+     open(unit=tunit,file=trim(intfilename(i)),action='read',status='old',iostat=iostat_)
+     !
+     eof = .false. ! this will be used to control if the end of file is reached
      !
      if (verbose>=3) print('("  Processing ",a,"...")'), trim(intfilename(i))
      !
+     if (iostat_/=0) then 
+       print*,"istat is not 0, ",iostat_,"for ",trim(intfilename(i))
+       stop
+     endif
+     !
      loop_tran: do
         !
-        !   read new line from intensities file
+        ! finis this if the eof has been reached 
+        !
+        if (eof) exit loop_tran
         !
         nswap_ = N_to_RAM
         !
@@ -1474,6 +1492,7 @@ module spectrum
            !
            do iswap = 1,N_to_RAM
              !
+             !   read new line from intensities file
              read(tunit,*,end=118) nu_ram(iswap),abscoef_RAM(iswap)
              !
              if (lineprofile_do) then
@@ -1486,6 +1505,8 @@ module spectrum
              !
              nswap_ = iswap-1
              !
+             eof = .true.
+             !
              exit
              !
            enddo
@@ -1493,7 +1514,7 @@ module spectrum
            intband = intband + sum(abscoef_RAM(1:nswap_))
            !
            if (nswap_<1) then
-              if (verbose>=5) write(out,"('... Finish swap')")
+              if (verbose>=5.and.proftype(1:5)/="STICK") write(out,"('... Finish swap')")
               exit loop_tran
            endif
            !
@@ -1564,6 +1585,7 @@ module spectrum
              !
            119 continue
              nswap = iswap_-1
+             eof = .true.
              exit
            enddo
            !
@@ -1572,7 +1594,7 @@ module spectrum
            intband = intband + sum(abscoef_RAM(1:nswap_))
            !
            if (nswap<1) then
-              write(out,"('... Finish swap')")
+              if (verbose>=5) write(out,"('... Finish swap')")
               exit loop_tran
            endif
            !
@@ -1587,21 +1609,21 @@ module spectrum
            120 continue
              !
              nswap_ = iswap-1
-             !
+             eof = .true.
              exit
              !
            enddo
            !
            if (nswap_<1) then
               !
-              write(out,"('... Finish swap')")
+              if (verbose>=5) write(out,"('... Finish swap')")
               !
               exit loop_tran
               !
               stop 'Error nswap_=0'
            endif
            !
-           if (verbose>=4.and.nswap_<N_to_RAM) print('(a,i12,a)'),"Now computing ... ",nswap_," transitions..."
+           if (verbose>=5.and.nswap_<N_to_RAM.and.proftype(1:5)/="STICK") print('(a,i12,a)'),"Now computing ... ",nswap_," transitions..."
            !
            !read(tunit,*,end=20) indexf,indexi,acoef
            iswap_ = 1
@@ -1791,13 +1813,13 @@ module spectrum
             call do_stick(sunit,nswap,nlines,maxitems,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,&
                           nchars_quanta,quantum_numbers)
             !
-            cycle
+            cycle loop_tran
             !
         case ('PHOEN')
             !
             call do_gf_oscillator_strength_France(iso,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,acoef_ram)
             !
-            cycle
+            cycle loop_tran
 
         case ('COOLI')
             !
@@ -2137,8 +2159,12 @@ module spectrum
         !
         !!!indexf_ = indexf ; indexi_ = indexi ; acoef_ = acoef
         !
-        !cycle
-        ! 20  exit
+        !cycle loop_tran
+        !!
+        !333 print*,iostat_
+        !!
+        !stop
+        !
      enddo loop_tran
      !
      close(tunit)
@@ -2247,7 +2273,7 @@ module spectrum
      !
    else
      !
-     if (verbose>=2) print('("Total intensity = ",es16.8,", T = ",f18.4)'), intband,temp
+     if (verbose>=2) print('(/"Total intensity = ",es16.8,", T = ",f18.4)'), intband,temp
      !
    endif
    !
