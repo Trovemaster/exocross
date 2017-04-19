@@ -782,7 +782,7 @@ module spectrum
     endif
     !
     !   half width for Doppler profiling
-    if (proftype(1:3)=='VOI'.or.proftype(1:3)=='PSE'.or.proftype(1:3)=='LOR'.and.Nspecies>0) then
+    if (any( proftype(1:3)==(/'VOI','PSE','LOR','PHO'/)).and.Nspecies>0) then
       !
       halfwidth = 0
       !
@@ -869,7 +869,7 @@ module spectrum
    !
    if (trim(enrfilename)/="none".and..not.hitran_do) then
 
-      if (verbose>=2) print('(a/)'),'Reading energies from .states ..'
+      if (verbose>=2) print('(a,a,a/)'),'Reading energies from ',trim(enrfilename),'...'
       !
       write(ioname, '(a)') 'Energy file'
       call IOstart(trim(ioname),enunit)
@@ -1286,8 +1286,8 @@ module spectrum
          !
         else
          !
-         write(out,"('Jmax = 0 in ',a)") trim(species(i)%filename)
-         stop 'Jmax = 0 in a broadening file'
+         write(out,"('Empty .broad file or wrong format (Jmax = 0) in ',a)") trim(species(i)%filename)
+         stop 'Jmax = 0 in a broadening file, empty .broad or wrong format'
          !
        endif
        !
@@ -1654,7 +1654,7 @@ module spectrum
                write(out,"(4i12,2x,3es16.8)") ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
                stop 'wrong order of indices'
                cycle loop_swap
-             elseif (energyf-energyi<-small_) then
+             elseif (energyf-energyi<small_) then
                cycle loop_swap
              endif
              !
@@ -3010,12 +3010,10 @@ module spectrum
      !
      integer(ik),intent(in) :: iso,nswap,nlines,ilevelf_ram(nswap),ileveli_ram(nswap)
      real(rk),intent(in) :: acoef_ram(nswap),jrot(nlines),energies(nlines)
-     real(rk)  :: gf,acoef,tranfreq,energyf,energyi
+     real(rk)  :: gf,acoef,tranfreq,energyf,energyi,gamma1,gamma2,n1,ji,jf
      integer(ik),intent(in) :: gtot(nlines)
-     integer(ik) :: i,iloggf,ileveli,ilevelf
+     integer(ik) :: i,iloggf,ileveli,ilevelf,jp,jpp
      real(rk) :: lambda
-     !
-     !halfwidth=get_Voigt_gamma_n(Nspecies,Jf,Ji)
      !
      do i = 1,nswap
          !
@@ -3032,9 +3030,27 @@ module spectrum
          !
          iloggf = nint(log(gf))
          !
+         jf = jrot(ilevelf)
+         ji = jrot(ileveli)
+         !
+         gamma1 = species(1)%gamma
+         n1     = species(1)%n
+         !
+         Jpp = nint(Ji)
+         Jp  = nint(Jf)
+         !
+         if ( trim(species(1)%filename)/="" ) then
+           gamma1 = species(1)%gammaQN(Jpp,Jp-Jpp)
+           n1     = species(1)%nQN(Jpp,Jp-Jpp)
+         endif
+         !
+         if ( trim(species(2)%filename)/="" ) then
+           gamma2 = species(2)%gammaQN(Jpp,Jp-Jpp)
+         endif
+         !
          write(out,"(i12,1x,f12.6,1x,i6,1x,f12.4,1x,f11.4,1x,f11.4,1x,f11.4,'||')") &
                      iso,lambda,iloggf,energyi,&
-                     species(1)%gamma,species(2)%gamma,species(1)%n
+                     gamma1,gamma2,n1
      enddo
      !
      !ielion, wl, gf-value, xi, igr, igs, igw
