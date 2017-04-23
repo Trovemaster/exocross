@@ -135,6 +135,7 @@ module spectrum
              if (w(1:3)=='VIB') then
                  call readf(temp_vib)
                  vibtemperature_do  = .true.
+                 if (temp_vib<small_) call report ("Illegal Tvib"//trim(w),.true.)
                else
                  call report ("Illegal key, expected vib"//trim(w),.true.)
              endif 
@@ -2169,113 +2170,113 @@ module spectrum
      !
      close(tunit)
      !
+     ! print out the cross-sections after each .trans 
+     !
+     if (trim(specttype)=='LIFETIME') THEN
+       !
+       write(ioname, '(a)') 'Life times'
+       call IOstart(trim(ioname),tunit)
+       !
+       open(unit=tunit,file=trim(output)//".life",action='write',status='replace')
+       !
+       do ilevelf = 1,nlines
+         !
+         ! write to .life-file
+         !
+         write(tunit,my_fmt,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),jrot(ilevelf),1.0_rk/Asum(ilevelf)
+         !
+         do kitem = 1,maxitems
+           !
+           !l = len(trim(quantum_numbers(kitem,ilevelf)))
+           !
+           !b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
+           !
+           if (nchars_quanta(kitem)<10) then
+              write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
+           else
+              write(b_fmt,"('(1x,a',i2,')')") nchars_quanta(kitem)
+           endif
+           !
+           write(tunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ilevelf))
+           !
+         enddo
+         !
+         write(tunit,"(a1)",advance="yes") " "
+         !
+       enddo
+       !
+       close(tunit,status='keep')
+       !
+     elseif (trim(proftype)=='COOLING') then
+       !
+       write(ioname, '(a)') 'Cooling'
+       call IOstart(trim(ioname),tunit)
+       !
+       open(unit=tunit,file=trim(output)//".cooling",action='write',status='replace')
+       !
+       do itemp = 1,npoints
+         !
+         if (energy>enermax) cycle
+         !
+         temp0 = real(itemp,rk)*dtemp
+         !
+         write(tunit,"(1x,f12.3,1x,es20.8)") temp0,cooling(itemp)
+         !
+       enddo
+       !
+       close(tunit,status='keep')
+       !
+     elseif (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE'/)) ) then
+       !
+       write(ioname, '(a)') 'Cross sections or intensities'
+       call IOstart(trim(ioname),tunit)
+       !
+       open(unit=tunit,file=trim(output)//".xsec",action='write',status='replace')
+       !
+       if (microns) then
+         !
+         ! change from microns to wavenumbers
+         !
+         do ipoint =  npoints,1,-1
+           !
+           write(tunit,'(2(1x,es16.8))') 10000.0_rk/freq(ipoint),intens(ipoint)
+           !
+         enddo
+         !
+       elseif (use_resolving_power.and.trim(proftype(1:3))=='BIN') then
+         !
+         do ipoint =  1,npoints
+           !
+           tranfreq0 = real(ipoint-1,rk)*resolving_f+log(freql)
+           !
+           tranfreq0 = exp(tranfreq0)
+           !
+           write(tunit,'(2(1x,es16.8))') tranfreq0,intens(ipoint)
+           !
+         enddo
+         !
+       else
+         !
+         write(tunit,'(2(1x,es16.8))') (freq(ipoint),intens(ipoint),ipoint=1,npoints)
+         !
+       endif
+       !
+       ! no need to scale with dfreq for bin or max
+       if (any( trim(proftype(1:3))==(/'BIN','MAX'/)) ) dfreq = 1.0d0
+       !
+       if (verbose>=2) print('(/"Total intensity  (sum):",es16.8," (int):",es16.8)'), intband,sum(intens)*dfreq
+       !
+       close(tunit,status='keep')
+       !
+     endif
+     !
      if (nswap_<nswap) cycle loop_file
      !
    enddo loop_file
    !
    call IOstop(trim(ioname))
    !
-   if (trim(specttype)=='LIFETIME') THEN
-     !
-     write(ioname, '(a)') 'Life times'
-     call IOstart(trim(ioname),tunit)
-     !
-     open(unit=tunit,file=trim(output)//".life",action='write',status='replace')
-     !
-     do ilevelf = 1,nlines
-       !
-       ! write to .life-file
-       !
-       write(tunit,my_fmt,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),jrot(ilevelf),1.0_rk/Asum(ilevelf)
-       !
-       do kitem = 1,maxitems
-         !
-         !l = len(trim(quantum_numbers(kitem,ilevelf)))
-         !
-         !b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
-         !
-         if (nchars_quanta(kitem)<10) then
-            write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
-         else
-            write(b_fmt,"('(1x,a',i2,')')") nchars_quanta(kitem)
-         endif
-         !
-         write(tunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ilevelf))
-         !
-       enddo
-       !
-       write(tunit,"(a1)",advance="yes") " "
-       !
-     enddo
-     !
-     close(tunit,status='keep')
-     !
-   elseif (trim(proftype)=='COOLING') then
-     !
-     write(ioname, '(a)') 'Cooling'
-     call IOstart(trim(ioname),tunit)
-     !
-     open(unit=tunit,file=trim(output)//".cooling",action='write',status='replace')
-     !
-     do itemp = 1,npoints
-       !
-       if (energy>enermax) cycle
-       !
-       temp0 = real(itemp,rk)*dtemp
-       !
-       write(tunit,"(1x,f12.3,1x,es20.8)") temp0,cooling(itemp)
-       !
-     enddo
-     !
-     close(tunit,status='keep')
-     !
-   elseif (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE'/)) ) then
-     !
-     write(ioname, '(a)') 'Cross sections or intensities'
-     call IOstart(trim(ioname),tunit)
-     !
-     open(unit=tunit,file=trim(output)//".xsec",action='write',status='replace')
-     !
-     if (microns) then
-       !
-       ! change from microns to wavenumbers
-       !
-       do ipoint =  npoints,1,-1
-         !
-         write(tunit,'(2(1x,es16.8))') 10000.0_rk/freq(ipoint),intens(ipoint)
-         !
-       enddo
-       !
-     elseif (use_resolving_power.and.trim(proftype(1:3))=='BIN') then
-       !
-       do ipoint =  1,npoints
-         !
-         tranfreq0 = real(ipoint-1,rk)*resolving_f+log(freql)
-         !
-         tranfreq0 = exp(tranfreq0)
-         !
-         write(tunit,'(2(1x,es16.8))') tranfreq0,intens(ipoint)
-         !
-       enddo
-       !
-     else
-       !
-       write(tunit,'(2(1x,es16.8))') (freq(ipoint),intens(ipoint),ipoint=1,npoints)
-       !
-     endif
-     !
-     ! no need to scale with dfreq for bin or max
-     if (any( trim(proftype(1:3))==(/'BIN','MAX'/)) ) dfreq = 1.0d0
-     !
-     if (verbose>=2) print('(/"Total intensity  (sum):",es16.8," (int):",es16.8)'), intband,sum(intens)*dfreq
-     !
-     close(tunit,status='keep')
-     !
-   else
-     !
-     if (verbose>=2) print('(/"Total intensity = ",es16.8,", T = ",f18.4)'), intband,temp
-     !
-   endif
+   if (verbose>=2) print('(/"Total intensity = ",es16.8,", T = ",f18.4)'), intband,temp
    !
    !call IOStop(trim(ioname))
    !
