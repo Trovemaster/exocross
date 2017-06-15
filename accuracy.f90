@@ -14,7 +14,7 @@ module accuracy
                                                                  ! memory address
   integer, parameter :: drk         = selected_real_kind(12,25)  ! "Double" reals and complex (complexi? :-)
   integer, parameter :: rk          = selected_real_kind(12,25)  ! "Normal" reals and complex (complexi? :-)
-  integer, parameter :: ark         = selected_real_kind(25,32)  ! "Accurate" reals and complex (complexi? :-)
+  integer, parameter :: ark         = selected_real_kind(12,25)  ! "Accurate" reals and complex (complexi? :-)
   integer, parameter :: inp         = 5                          ! Output I/O channel
   integer, parameter :: out         = 6                          ! Output I/O channel
   integer, parameter :: nfilelegendre = 101                      ! Damp-output channel for eigenfunction 

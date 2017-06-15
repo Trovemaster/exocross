@@ -213,7 +213,7 @@ module spectrum
           !
           if (mod(npoints,2)==0) npoints = npoints + 1
           !
-        case ("ABSORPTION","LIFETIME","EMISSION")
+        case ("ABSORPTION","EMISSION")
           !
           specttype = trim(w)
           !
@@ -338,7 +338,7 @@ module spectrum
           histogram = .true.
           histogramJ = .true.
           !
-       case ("NRAM","NLINES-TO-RAM")
+       case ("NRAM","NLINES-TO-RAM","LINES-TO-CASH","NCASH")
           !
           call readi(N_to_RAM)
           !
@@ -603,7 +603,7 @@ module spectrum
           call readf(enermax)
           !
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
-            'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX')
+            'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX','LIFETIME')
           !
           if (pressure<small_.and.(w(1:3)=='VOI'.or.w(1:3)=='PSE')) then
              ! for pressure= 0 Voigt is repalced by Doppler
@@ -628,6 +628,8 @@ module spectrum
             stick_hitran = .true.
             !
           endif
+          !
+          if (trim(w)=="LIFETIME") specttype = trim(w)
           !
           if (microns) then
             ioffset = 0
@@ -955,7 +957,7 @@ module spectrum
         ivib2 = QN%vibcol(2)
       endif
       !
-      if (trim(specttype)=='LIFETIME') THEN
+      if (trim(proftype)=='LIFETIME') THEN
         !
         ! allocate the matrix for the sum of the A-coeffs
         !
@@ -1435,7 +1437,7 @@ module spectrum
      !
      N_to_RAM = max(1,min( max_transitions_to_ram,int((memory_limit-memory_now)/mem_t,hik),hik))
      !
-     if (verbose>=4) print('("We can swap ",i12," transitions into RAM")'),N_to_RAM
+     if (verbose>=4) print('("We can cash ",i12," transitions into RAM")'),N_to_RAM
      !
    endif
    !
@@ -1624,7 +1626,8 @@ module spectrum
               stop 'Error nswap_=0'
            endif
            !
-           if (verbose>=5.and.nswap_<N_to_RAM.and.proftype(1:5)/="STICK") print('(a,i12,a)'),"Now computing ... ",nswap_," transitions..."
+           if (verbose>=5.and.nswap_<N_to_RAM.and.proftype(1:5)/="STICK") print('(a,i12,a)'), &
+                                                  "Now computing ... ",nswap_," transitions..."
            !
            !read(tunit,*,end=20) indexf,indexi,acoef
            iswap_ = 1
@@ -1652,7 +1655,7 @@ module spectrum
              energyi = energies(ileveli)
              !
              if (energyf-energyi<-1e1) then
-               write(out,"(4i12,2x,3es16.8)") ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
+               write(out,"('Error:',4i12,2x,3es16.8)") ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
                stop 'wrong order of indices'
                cycle loop_swap
              elseif (energyf-energyi<small_) then
@@ -1697,6 +1700,8 @@ module spectrum
                tranfreq0 = 10000.0_rk/(tranfreq+small_)
              endif
              !
+             if (tranfreq0<freql.or.tranfreq0>freqr) cycle
+             !
              select case (trim(specttype))
                !
              case default
@@ -1731,14 +1736,12 @@ module spectrum
                !
              case ('LIFETIME')
                !
-               !$omp critical
+               ilevelf_ram(iswap) = ilevelf
+               ileveli_ram(iswap) = ileveli
+               abscoef_ram(iswap) = 0
+               acoef_ram(iswap) = acoef
                !
-               if (Asum(ilevelf)<0) Asum(ilevelf) = 0
-               !
-               Asum(ilevelf) = Asum(ilevelf) + acoef
-               !$omp end critical
-               !
-               !print*,ilevelf,indexf,indexi,acoef
+               nu_ram(iswap) = 0
                !
                cycle loop_swap
                !
@@ -1809,6 +1812,19 @@ module spectrum
         !
         select case (trim(proftype(1:5)))
             !
+        case ('LIFET')
+            !
+            do iswap = 1,nswap
+              !
+              ilevelf = ilevelf_ram(iswap)
+              acoef = acoef_ram(iswap)
+              !
+              if (Asum(ilevelf)<0) Asum(ilevelf) = 0
+              !
+              Asum(ilevelf) = Asum(ilevelf) + acoef
+              !
+            enddo
+            !
         case ('STICK')
             !
             call do_stick(sunit,nswap,nlines,maxitems,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,&
@@ -1818,7 +1834,7 @@ module spectrum
             !
         case ('PHOEN')
             !
-            call do_gf_oscillator_strength_France(iso,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,acoef_ram)
+            call do_gf_oscillator_strength_Phoenix(iso,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,acoef_ram)
             !
             cycle loop_tran
 
@@ -2442,6 +2458,8 @@ module spectrum
      ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
      ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
      !
+     if (ie<1.or.ib>npoints) return
+     !
      !abscoef=abscoef*sqrt(ln2/pi)/halfwidth
      !
      !lor = halfwidth/dfreq
@@ -3005,7 +3023,7 @@ module spectrum
 
 
 
-  subroutine do_gf_oscillator_strength_France(iso,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,acoef_ram)
+  subroutine do_gf_oscillator_strength_Phoenix(iso,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,acoef_ram)
      !
      implicit none
      !
@@ -3013,8 +3031,8 @@ module spectrum
      real(rk),intent(in) :: acoef_ram(nswap),jrot(nlines),energies(nlines)
      real(rk)  :: gf,acoef,tranfreq,energyf,energyi,gamma1,gamma2,n1,ji,jf
      integer(ik),intent(in) :: gtot(nlines)
-     integer(ik) :: i,iloggf,ileveli,ilevelf,jp,jpp
-     real(rk) :: lambda
+     integer(ik) :: i,iloggf,ileveli,ilevelf,jp,jpp,wl2ind,iener,ilog_n,ilog_gamma1,ilog_gamma2
+     real(rk) :: lambda,ratiolog,g_u
      !
      do i = 1,nswap
          !
@@ -3026,10 +3044,20 @@ module spectrum
          tranfreq = energyf - energyi
          !
          lambda = 1e7/tranfreq ! wavelength in nm
+
+
+         ratiolog = log(1.0_rk+1._rk/2000000.0_rk)
+         wl2ind = log(lambda)/ratiolog+0.5_rk
+         !
+         !g_l*fij = c2 * Aji * g_u / (c*wn)**2
+         !!!!!!gf = 1.34738e+21*acoef*g_u / (c*tranfreq)**2
          !
          gf = 1.4992e4*acoef*(lambda)**2 ! oscillator strength
          !
-         iloggf = nint(log(gf))
+         iloggf = nint(log(gf)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
+         iener  = nint(log(energyi)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
+         !
+         !iloggf = nint(log(gf))
          !
          jf = jrot(ilevelf)
          ji = jrot(ileveli)
@@ -3045,9 +3073,13 @@ module spectrum
            n1     = species(1)%nQN(Jpp,Jp-Jpp)
          endif
          !
+         ilog_gamma1 = nint(log(gamma1)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
+         ilog_n = nint(log(gamma1)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
+         !
          if ( trim(species(2)%filename)/="" ) then
            gamma2 = species(2)%gammaQN(Jpp,Jp-Jpp)
          endif
+         ilog_gamma2 = nint(log(gamma2)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
          !
          write(out,"(i12,1x,f12.6,1x,i6,1x,f12.4,1x,f11.4,1x,f11.4,1x,f11.4,'||')") &
                      iso,lambda,iloggf,energyi,&
@@ -3064,7 +3096,7 @@ module spectrum
      !igw: van der Waals damping constants.
      !igr for gamma0 and igs for n (Voigt parameters)
      !
-  end subroutine do_gf_oscillator_strength_France
+  end subroutine do_gf_oscillator_strength_Phoenix
 
 
   subroutine voi_quad(npoints,ib,ie,freq,abscoef,intens,dfreq,tranfreq,alpha,gamma,nquad,abciss,weight)
