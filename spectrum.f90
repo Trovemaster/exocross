@@ -966,7 +966,7 @@ module spectrum
         !
         Asum = -1.0_rk
         !
-        write(my_fmt,'(a)')  '(1x,i11,1x,f12.6,1x,i6,1x,f7.1,1x,es16.8,3x)'
+        write(my_fmt,'(a)')  '(1x,i11,1x,f12.6,1x,i6,1x,f7.1,1x,es12.4,3x)'
         !
       endif
       !
