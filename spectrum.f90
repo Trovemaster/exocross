@@ -908,14 +908,14 @@ module spectrum
             call readf(dtemp)
             call readf(ji)
             !
-            if (info>0.and.nint(ji)==0) then
+            if (info>0.and.int(ji)==0) then
               write(out,"('It is illegal to use not J-sorted states with vib-temperatures')")
               stop 'States file must be ordered by J to use with Tvib'
             endif
             !
             if (info>0) cycle
             !
-            if (nint(ji)==0) then 
+            if (int(ji)==0) then 
               Nvib_states = Nvib_states + 1
             else 
               info = 1
@@ -953,8 +953,8 @@ module spectrum
         call ArrayStart('ivib_state',info,size(ivib_state),kind(ivib_state))
         ivib_state = 1
         energies_vib = 0
-        ivib1 = QN%vibcol(1)
-        ivib2 = QN%vibcol(2)
+        ivib1 = QN%vibcol(1)-3
+        ivib2 = QN%vibcol(2)-3
       endif
       !
       if (trim(proftype)=='LIFETIME') THEN
@@ -1095,7 +1095,7 @@ module spectrum
          energy = energies(i)
          !
          if (vibtemperature_do) then
-           if (nint(jrot(i))==0) then 
+           if (int(jrot(i))==0) then 
               energies_vib(i) = energy
               ivib_state(i) = i
               ener_vib = energy
@@ -1682,9 +1682,9 @@ module spectrum
                   ener_vib = energies_vib(ivib)
                   ener_rot = energyi-ener_vib
                 else
-                  ivib = ivib_state(ileveli)
+                  ivib = ivib_state(ilevelf)
                   ener_vib = energies_vib(ivib)
-                  ener_rot = energyi-ener_vib
+                  ener_rot = energyf-ener_vib
                 endif
              endif
              !
