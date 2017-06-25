@@ -16,7 +16,7 @@ module spectrum
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,ioffset = 10,iso=1
   real(rk)      :: temp=298.0,partfunc=-1.0,freql=-small_,freqr= 200000.0,thresh=1.0d-70,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
   real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = -25.0, pressure = 1.0_rk
-  real(rk)      :: enermax = 1e6, abscoef_thresh = 1.0d-50, abundance = 1.0d0
+  real(rk)      :: enermax = 1e7, abscoef_thresh = 1.0d-50, abundance = 1.0d0
   real(rk)      :: S_crit = 1e-29      ! cm/molecule, HITRAN cut-off paramater
   real(rk)      :: nu_crit = 2000.0d0  ! cm-1, HITRAN cut-off paramater
   real(rk)      :: resolving_power  = 1e6,resolving_f ! using resolving_power to set up grid
@@ -37,9 +37,9 @@ module spectrum
   !
   type speciesT ! broadener
     !
-    real(rk)       :: N = 0.5_rk      ! Voigt parameter N
+    real(rk)       :: N = 0.0_rk      ! Voigt parameter N
     real(rk)       :: gamma = 0.05_rk ! Voigt parameter gamma
-    real(rk)       :: ratio = 0.9_rk  ! Ratio
+    real(rk)       :: ratio = 1.0_rk  ! Ratio
     real(rk)       :: T0    = 298_rk  ! Reference T, K
     real(rk)       :: P0    = 1.0_rk  ! Reference P, bar
     character(len=cl) :: name         ! Broadener number of quadrature points
@@ -73,7 +73,7 @@ module spectrum
   type(selectT),save :: upper(filtermax),lower(filtermax)
   type(QNT),save :: QN
   !
-  integer(ik)    :: Nspecies = 0, Nfilters = 0
+  integer(ik)    :: Nspecies = 1, Nfilters = 0
   type(speciesT),save :: species(nspecies_max)
   type(HitranErrorT),target,save :: HITRAN_E(HITRAN_max_ierr),HITRAN_S(HITRAN_max_ierr)
   type(HitranErrorT),target,save :: HITRAN_Air,HITRAN_Self,HITRAN_N,HITRAN_Delta
@@ -92,7 +92,7 @@ module spectrum
     !
     implicit none
     !
-    logical :: eof
+    logical :: eof,if_halfwidth_defined = .false., if_species_defined = .false.
     character(len=cl) :: w,v
     integer(ik)   :: i,ifilter,iE,iS,npoints0,ierror
     type(HitranErrorT),pointer :: HITRAN
@@ -612,7 +612,8 @@ module spectrum
              write(out,"('This is P=0 atm Voigt, which will be reated as Doppler')")
              !
           endif
-
+          !
+          if (any( w(1:3)==(/'VOI','PSE','LOR','PHO'/))) lineprofile_do = .true.
           !
           proftype = trim(w)
           !
@@ -639,6 +640,9 @@ module spectrum
        case ("HWHM","HALFWIDTH")
           !
           call readf(halfwidth)
+          species(1)%gamma = halfwidth
+          !
+          if_halfwidth_defined = .true.
           !
        case ("IOFFSET")
           !
@@ -659,6 +663,8 @@ module spectrum
           call read_line(eof) ; if (eof) exit
           !
           call readu(w)
+          !
+          if_species_defined = .true.
           !
           do while (trim(w)/="".and.trim(w)/="END")
             !
@@ -784,12 +790,22 @@ module spectrum
       !
     endif
     !
+    if (if_species_defined.and.if_halfwidth_defined) then
+      write(out,"('Input Error: HWHM cannot be used together with SPECIES, choose one')")
+      stop 'Input Error: HWHM cannot be used together with Species, choose one'
+    endif
+    !
     !   half width for Doppler profiling
     if (any( proftype(1:3)==(/'VOI','PSE','LOR','PHO'/)).and.Nspecies>0) then
       !
       halfwidth = 0
       !
       lineprofile_do = .true.
+      !
+      if (.not.if_species_defined.and..not.if_halfwidth_defined) then
+        write(out,"('Input Error: For ',a,' HWHM or gamma in SPECIES must be defined')") trim(proftype)
+        stop 'Input Error:either  HWHM or gamma@SPECIES must be defined for this profile type'
+      endif
       !
       do i=1,Nspecies
         !
@@ -896,7 +912,7 @@ module spectrum
          call readi(itemp)
          call readf(energy)
          !
-         if (energy>enermax) cycle
+         !if (energy>enermax) cycle
          !
          iline = iline + 1
          !
@@ -1027,11 +1043,11 @@ module spectrum
           !
           allocate(cooling(npoints),stat=info)
           call ArrayStart('cooling',info,size(cooling),kind(cooling))
+          cooling = 0
           !
         endif
         !
         pf = 0
-        cooling = 0
         !
       endif
       j0 = 0
@@ -1050,10 +1066,10 @@ module spectrum
          call readi(itemp)
          call readf(energy)
          !
-         if (energy>enermax) then
-           i = i - 1
-           cycle
-         endif
+         !if (energy>enermax) then
+         !  i = i - 1
+         !  cycle
+         !endif
          !
          energies(i) = energy
          !
@@ -1171,8 +1187,6 @@ module spectrum
         open(unit=tunit,file=trim(output)//".pf",action='write',status='replace')
         !
         do itemp = 1,npoints
-          !
-          if (energy>enermax) cycle
           !
           temp0 = real(itemp,rk)*dtemp
           !
@@ -1817,6 +1831,10 @@ module spectrum
             do iswap = 1,nswap
               !
               ilevelf = ilevelf_ram(iswap)
+              energyf = energies(ilevelf)
+              !
+              if (energyf>enermax) cycle
+              !
               acoef = acoef_ram(iswap)
               !
               if (Asum(ilevelf)<0) Asum(ilevelf) = 0
@@ -3170,6 +3188,12 @@ module spectrum
      real(rk),intent(in) :: Jf,Ji
      real(rk) :: halfwidth,gamma_,n_,f
      integer(ik) :: ispecies,Jpp,Jp
+     !
+     ! if no species are specified in input the hwm value will be used for halfwidth instead 
+     !if (Nspecies==0) then 
+     !  f = hwhm
+     !  return
+     !endif
      !
      halfwidth = 0
      !
