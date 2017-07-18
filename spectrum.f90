@@ -46,7 +46,7 @@ module spectrum
     real(rk)       :: ratio = 0.9_rk  ! Ratio
     real(rk)       :: T0    = 298_rk  ! Reference T, K
     real(rk)       :: P0    = 1.0_rk  ! Reference P, bar
-    character(len=cl) :: name         ! Broadener number of quadrature points
+    character(len=cl) :: name = "NA"         ! Broadener number of quadrature points
     character(len=cl) :: filename=""  ! File name with QN-dependent broadening parameters
     character(len=cl) :: model="const"  ! Broadening model
     real(rk),pointer  :: gammaQN(:,:) ! Voigt parameter gamma as a function of QN
@@ -341,7 +341,7 @@ module spectrum
              !
           endif
           !
-        case ("HISTOGRAM")
+        case ("HISTOGRAM","SUPER-LINE","SUPER-LINES")
           !
           histogram = .true.
           !
@@ -1489,7 +1489,7 @@ module spectrum
      !
      mem_t = real(6*rk+5*ik,rk)/1024_rk**3
      !
-     N_to_RAM = max(1,min( max_transitions_to_ram,int((memory_limit-memory_now)/mem_t,hik),hik))
+     N_to_RAM = max(100,min( max_transitions_to_ram,int((memory_limit-memory_now)/mem_t,hik),hik))
      !
      if (verbose>=4) print('("We can swap ",i12," transitions into RAM")'),N_to_RAM
      !
