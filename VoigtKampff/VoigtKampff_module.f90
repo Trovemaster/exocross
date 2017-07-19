@@ -70,7 +70,7 @@ contains
   	this%m_lorentz_cutoff = pLorentzCutoff
  	this%normalize = pNormalize
   	this%m_Npoints = int(2.0*this%m_lorentz_cutoff/this%m_res,ik);
-  	this%m_middle_point = (this%m_Npoints/2) + 1
+  	this%m_middle_point = (this%m_Npoints/2)
   	!Construct the voigt grid
   	
   	this%m_mag = 0.0
@@ -119,34 +119,36 @@ contains
   	real(rk),allocatable		::	temp_humlicek(:)
   	
   	
-  	center_point = (nu0-start_nu)/this%m_res + 1
-  	middle_shift = (center_point - middle_point) + 1
+  	center_point = (nu0-start_nu)/this%m_res
+  	middle_shift = (center_point - this%m_middle_point)
   	
-  	dist = max(DISTANCE_MAGIC_NUMBER/this%m_res +1.0,3.0);
+  	dist = max(DISTANCE_MAGIC_NUMBER/this%m_res,3.0)
   	
-  	Npoints = ie - ib + 1;
+  	Npoints = ie - ib + 1
   	
-  	ib_rel = ib - middle_shift + 1;
-	ie_rel = ie - middle_shift + 1;
+  	ib_rel = ib - middle_shift
+	ie_rel = ie - middle_shift
 	
-  	gammaD = this%m_gammaD*nu
+  	gammaD = this%m_gammaD*nu0
   	
 	
 	mag = this%m_mag
 	
-	start_dist = max(center_point - dist, ib);
-	end_dist = min(center_point + dist, ie);
+	start_dist = max(center_point - dist, ib)
+	end_dist = min(center_point + dist, ie)
 		
-	left_start = ib_rel;
-	left_end = min(middle_point - dist, ie_rel);
-	right_start = max(middle_point + dist, ib_rel);
-	right_end = ie_rel;  
+	left_start = ib_rel
+	left_end = min(this%m_middle_point - dist, ie_rel)
+	right_start = max(this%m_middle_point + dist, ib_rel)
+	right_end = ie_rel
+	
+
 	
 	!If we have any humlicek points
 	if(start_dist < end_dist) then
-		num_hum_points = ie-ib + 1
+		num_hum_points = end_dist - start_dist + 1;
 		allocate(temp_humlicek(num_hum_points))
-		
+
 		do ido=start_dist,end_dist
 			nu=freq(ido)
 			hum_res = voigt_humlicek(nu,nu0,gammaD,this%m_gammaL)
@@ -163,12 +165,12 @@ contains
 		deallocate(temp_humlicek)
   	endif
   	if(.not. this%normalize) mag = 1.0
-  	if (ib < center_point) then
+  	if (left_start < left_end ) then
   		call vectorized_voigt(intens(ib-ib_rel+left_start:ib-ib_rel+left_end),this%m_voigt_grid(left_start:left_end),(abscoef/mag))
   	
   	endif
   	
-  	if (ie >= center_point) then
+  	if (right_start < right_end ) then
   		call vectorized_voigt(intens(ib-ib_rel+right_start:ib-ib_rel+right_end),this%m_voigt_grid(right_start:right_end),(abscoef/mag))
   	endif
   	

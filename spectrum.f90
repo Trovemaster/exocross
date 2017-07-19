@@ -1386,16 +1386,16 @@ module spectrum
    	allocate(gamma_idx(0:Jmax,-1:1))
    	gamma_idx = -1
    	
-   	stop "Not yet implemented for VOI-F"
+   	!stop "Not yet implemented for VOI-F"
    	!Lets perform a precomputation of all species involved
    	write(out,"('Precomputing gamma ids for fast voigt')")
    	do i=0,Jmax
    		do j= max(0,i-1),min(Jmax,i+1)
-   			temp_gamma_n = get_Voigt_gamma_n(Nspecies,real(i,rk),real(j,rk))
+   			!temp_gamma_n = get_Voigt_gamma_n(Nspecies,real(i,rk),real(j,rk))
    			!call check_lorentzian(temp_gamma_n,voigt_index,gamma_idx(i,i-j))
    			if(gamma_idx(i,i-j) == -1) then
    				!call add_lorentzian(temp_gamma_n,voigt_index,gamma_idx(i,i-j))
-   				write(out,"('Added lorentizian: ',i8,es8.2)") gamma_idx(i,i-j),temp_gamma_n
+   				!write(out,"('Added lorentizian: ',i8,es8.2)") gamma_idx(i,i-j),temp_gamma_n
    			endif
    		enddo
    	enddo
@@ -2893,7 +2893,7 @@ module spectrum
       !
       halfwidth_doppler=dpwcoef*tranfreq
       if (halfwidth_doppler<100.0_rk*small_) return
-      ib =  max(nint( ( tranfreq-offset-freql)/dfreq +1),0)
+      ib =  max(nint( ( tranfreq-offset-freql)/dfreq +1),1)
       ie =  min(nint( ( tranfreq+offset-freql)/dfreq +1),npoints)
       !
       
