@@ -14,7 +14,7 @@ FOR  = ifort
 
 #CFLAGS = -O0 -g -std=c++0x
 
-#FFLAGS =  -O0 -g 
+#FFLAGS =  -O0 -g -traceback
  
 FFLAGS =  -O3 -xHost -openmp -traceback
 
@@ -27,7 +27,7 @@ LAPACK = -static
 
 ###############################################################################
 
-OBJ =  accuracy.o  timer.o input.o spectrum.o VoigtKampff_module.o
+OBJ =  accuracy.o  timer.o input.o spectrum.o VoigtKampff_module.o VoigtKampffCollection_module.o
 
 xsec.x:	$(OBJ) crosssections.o 
 	$(FOR) -o j-xsec$(PLAT).x $(OBJ) $(FFLAGS) crosssections.o $(LIB) -static
@@ -35,7 +35,7 @@ xsec.x:	$(OBJ) crosssections.o
 crosssections.o:	crosssections.f90 $(OBJ) 
 	$(FOR) -c crosssections.f90 $(FFLAGS)
 
-spectrum.o:	spectrum.f90 accuracy.o input.o  VoigtKampff_module.o
+spectrum.o:	spectrum.f90 accuracy.o input.o  VoigtKampff_module.o VoigtKampffCollection_module.o
 	$(FOR) -c spectrum.f90 $(FFLAGS)
 
 accuracy.o:  accuracy.f90
@@ -51,7 +51,8 @@ input.o:  input.f90
 VoigtKampff_module.o: VoigtKampff/VoigtKampff_module.f90 accuracy.o
 	$(FOR) -c VoigtKampff/VoigtKampff_module.f90 $(FFLAGS)
 
-	
+VoigtKampffCollection_module.o: VoigtKampff/VoigtKampffCollection_module.f90 accuracy.o VoigtKampff_module.o
+	$(FOR) -c VoigtKampff/VoigtKampffCollection_module.f90 $(FFLAGS)	
 
 clean:
 	rm $(OBJ) *.mod duo.o

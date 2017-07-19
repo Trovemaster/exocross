@@ -93,8 +93,8 @@ contains
 	
 	subroutine generate_indices(this,gammaL,gamma_idx,Jmax)
 		class(VoigtKampffCollection)	::	this
-		real(rk),intent(in)		::	gammaL(0:Jmax,-1:1)
-		integer(ik),intent(out)		::	gamma_idx(0:Jmax,-1:1)
+		real(rk),intent(in)		::	gammaL
+		integer(ik),intent(inout)		::	gamma_idx
 		integer(ik),intent(in)		::	Jmax
 		
 		integer(ik)			::	ido,jdo
@@ -102,18 +102,15 @@ contains
 		integer				::	idx
 		
 		!Search of the gamma value, if its similar then resue the index otherwise we add antoher voigt
-		do ido=0,Jmax
-			do jdo=-1,1
-				val = gammaL(ido,jdo)
-				idx = this%search_gamma(val)
+
+		val = gammaL
+		idx = this%search_gamma(val)
 				!If we didnt find it then add a voigt
-				if(idx==0) then
-					gamma_idx(ido,jdo) = this%add_voigt(val)
-				else
-					gamma_idx(ido,jdo) = idx
-				endif
-			enddo
-		enddo
+		if(idx==0) then
+			gamma_idx = this%add_voigt(val)
+		else
+			gamma_idx = idx
+		endif
 				
 		
 		
@@ -166,7 +163,7 @@ recursive function binarySearch_R (a, value) result (bsresult)
     type(VoigtKampff), intent(in) :: a(:)
     real(rk)	::	value
     integer          :: bsresult, mid
- 
+ 	
     mid = size(a)/2 + 1
     if (size(a) == 0) then
         bsresult = 0        ! not found

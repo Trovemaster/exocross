@@ -1,6 +1,6 @@
 module VoigtKampff_module
 	use accuracy
-
+	implicit none
 	
 	
 	public VoigtKampff
@@ -11,6 +11,7 @@ module VoigtKampff_module
 	real(rk),parameter	::	DISTANCE_MAGIC_NUMBER = 2.0
 	
 	type ::		VoigtKampff
+		private
 		integer(ik)	::	m_Npoints
 		real(rk)	::	m_res
 		real(rk)	::	m_lorentz_cutoff
@@ -20,7 +21,7 @@ module VoigtKampff_module
 		real(rk)	::	m_mag
 		logical		::	normalize
 		logical		::	constructed = .false.
-		real(rk),allocatable	::	m_voigt_grid(:)
+		real(rk),pointer	::	m_voigt_grid(:)
 	
 	
 	contains
@@ -30,6 +31,7 @@ module VoigtKampff_module
 		
 		procedure,public		::	destroy
 	
+		procedure,public	::	get_gammaL
 	
 	end type
 	
@@ -112,8 +114,8 @@ contains
   	
   	integer				::	center_point,dist
   	integer				::	middle_shift
-  	integer				::	start_dist,end_dist,left_start_left_end,right_start,right_end
-  	integer				::	ib_rel,ie_rel,num_hum_points
+  	integer				::	start_dist,end_dist,left_start,left_end,right_start,right_end
+  	integer				::	ib_rel,ie_rel,num_hum_points,ido
   	integer				::	Npoints
   	real(rk)			::	gammaD,hum_res,mag,nu
   	real(rk),allocatable		::	temp_humlicek(:)
@@ -176,6 +178,15 @@ contains
   	
   end subroutine
   			
+  real(rk) function get_gammaL(this)
+  	class(VoigtKampff),intent(in)	::	this
+  	
+  	get_gammaL = this%m_gammaL
+  	
+  	return
+  end function	
+	
+	
 	
 	
 !-----------Humlicek methods----------------------!
@@ -264,7 +275,7 @@ contains
     !
     end function humlic	
 	
-	
+   
 	
 	
 end module VoigtKampff_module	

@@ -2,7 +2,7 @@ module spectrum
   !
   use accuracy
   use timer
-  use VoigtKampff_module
+  use VoigtKampffCollection_module
   !
   implicit none
   !
@@ -85,8 +85,8 @@ module spectrum
   type(HitranErrorT),target,save :: HITRAN_Air,HITRAN_Self,HITRAN_N,HITRAN_Delta
   !
   
-  integer(rk),allocatable,save  :: gamma_idx(:,:) !Used for indexing the gamma for the fast_voigt
-  
+  integer(ik),allocatable,save  :: gamma_idx(:,:) !Used for indexing the gamma for the fast_voigt
+  real(rk),allocatable,save  :: gamma_comb(:,:) !Used for indexing the gamma for the fast_voigt
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
   stick_hitran = .false.,vibtemperature_do = .false.
   logical :: lineprofile_do = .false.
@@ -97,7 +97,7 @@ module spectrum
   logical :: completed_work = .true.
   logical :: all_done = .false.
   
-   type(VoigtKampff)	::	fast_voigt
+   type(VoigtKampffCollection)	::	fast_voigt
   
   
   !
@@ -827,7 +827,7 @@ module spectrum
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk
    real(rk)    :: acoef_,cutoff
-   integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib
+   integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll
    real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot
    character(len=cl) :: ioname
 
@@ -1272,10 +1272,10 @@ module spectrum
    	
 
    		if(trim(proftype(1:6))=='VOI-FN') then
-   			call fast_voigt%construct(dpwcoef,halfwidth,dfreq,offset,.true.)
+   			call fast_voigt%construct(dpwcoef,offset,dfreq,.true.)
    			!call initalize_voigt_kampff(dpwcoef,dfreq,offset,voigt_index,1)
    		else
-   			call fast_voigt%construct(dpwcoef,halfwidth,dfreq,offset,.false.)
+   			call fast_voigt%construct(dpwcoef,offset,dfreq,.false.)
    			!call initalize_voigt_kampff(dpwcoef,dfreq,offset,voigt_index,0)
    		endif
    		!call add_lorentzian(halfwidth,voigt_index,i)
@@ -1288,7 +1288,7 @@ module spectrum
    if (verbose>=4.and.Nspecies>0) print('(1x,a/)'),'Reading broadening parameters.'
    !
     !Used for indexing the gamma for the fast_voigt
-   
+   JmaxAll = maxval(jrot)
    do i =1,Nspecies
      !
      if ( trim(species(i)%filename)/="" ) then
@@ -1306,6 +1306,7 @@ module spectrum
          read(bunit,*,end=14) ch_broad(1:3),gamma_,n_,J_
          !
          Jmax = max(Jmax,J_)
+         JmaxAll = max(J_,JmaxAll)
          !
          cycle
          14  exit
@@ -1319,8 +1320,15 @@ module spectrum
          species(i)%gammaQN(:,:) = species(i)%gamma
          !
          allocate(species(i)%nQN(0:Jmax,-1:1),stat=info)
+         
+        
+         
          call ArrayStart('nQN',info,size(species(i)%nQN),kind(species(i)%nQN))
          species(i)%nQN(:,:) = species(i)%N
+         
+         
+         
+         
          !
         else
          !
@@ -1381,24 +1389,30 @@ module spectrum
      endif
      !
    enddo
+
    
    if(proftype(1:5) == 'VOI-F') then
-   	allocate(gamma_idx(0:Jmax,-1:1))
-   	gamma_idx = -1
+   	allocate(gamma_idx(0:JmaxAll,-1:1))
+   	gamma_idx = 1
    	
+   	 call ArrayStart('gamma_idx',info,size(gamma_idx),kind(gamma_idx))
+   	 
+	   	    !Combine all the gammas
+	   do i=0,JmaxAll
+	   	do j= max(0,i-1),min(JmaxAll,i+1) 
+	   		
+	   		call fast_voigt%generate_indices(get_Voigt_gamma_n(Nspecies,real(i,rk),real(j,rk)),gamma_idx(i,i-j),JmaxAll)
+	   	enddo
+	   enddo  
+   	 
+   	!gamma_idx = -1
+   	
+   	
+   	write(out,"('Generated ',i8,' fast voigt grids')") fast_voigt%get_size()
    	!stop "Not yet implemented for VOI-F"
    	!Lets perform a precomputation of all species involved
-   	write(out,"('Precomputing gamma ids for fast voigt')")
-   	do i=0,Jmax
-   		do j= max(0,i-1),min(Jmax,i+1)
-   			!temp_gamma_n = get_Voigt_gamma_n(Nspecies,real(i,rk),real(j,rk))
-   			!call check_lorentzian(temp_gamma_n,voigt_index,gamma_idx(i,i-j))
-   			if(gamma_idx(i,i-j) == -1) then
-   				!call add_lorentzian(temp_gamma_n,voigt_index,gamma_idx(i,i-j))
-   				!write(out,"('Added lorentizian: ',i8,es8.2)") gamma_idx(i,i-j),temp_gamma_n
-   			endif
-   		enddo
-   	enddo
+
+	
    endif
    			
    				
@@ -1846,7 +1860,7 @@ module spectrum
              !
              if (lineprofile_do) then
                gamma_RAM(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji)
-               
+               temp_gamma_n = get_Voigt_gamma_n(Nspecies_,Jf,Ji,gamma_idx_RAM(iswap))               
              endif
              !
              !do do_log_intensity
@@ -2897,7 +2911,7 @@ module spectrum
       ie =  min(nint( ( tranfreq+offset-freql)/dfreq +1),npoints)
       !
       
-       call fast_voigt%compute(freq,intens, abscoef,ib,ie,freql,tranfreq)
+       call fast_voigt%compute(freq,intens, abscoef,ib,ie,freql,tranfreq,halfwidth_Lorentz)
 
       
 
@@ -3244,15 +3258,21 @@ module spectrum
      real(rk),intent(in) :: Jf,Ji
      real(rk) :: halfwidth,gamma_,n_,f
      integer(ik) :: ispecies,Jpp,Jp
-     integer(ik),optional,intent(out)	::	idx
+     integer(ik),optional,intent(inout)	::	idx
      !
      halfwidth = 0
      Jpp = nint(Ji)
      Jp  = nint(Jf)
      if(present(idx)) then
+
      	idx = gamma_idx(Jpp,Jp-Jpp)
      	return
      endif
+     
+    ! f = gamma_comb(Jpp,Jp-Jpp)
+     !return
+     
+     
      !
      do ispecies =1,Nspecies
        !
