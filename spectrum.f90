@@ -2,6 +2,7 @@ module spectrum
   !
   use accuracy
   use timer
+  use VoigtKampff_module
   !
   implicit none
   !
@@ -95,6 +96,9 @@ module spectrum
   logical :: accepted_work = .false.
   logical :: completed_work = .true.
   logical :: all_done = .false.
+  
+   type(VoigtKampff)	::	fast_voigt
+  
   
   !
   contains
@@ -816,6 +820,7 @@ module spectrum
   subroutine intensity
    !
    use  input
+   use VoigtKampff_module
    !
    integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,k
    integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter
@@ -844,7 +849,7 @@ module spectrum
    character(len=9) :: b_fmt
    integer(hik):: Nintens(-60:60)
    !
-   
+  
    
    logical :: eof
    character(len=cl) :: w
@@ -1267,11 +1272,13 @@ module spectrum
    	
 
    		if(trim(proftype(1:6))=='VOI-FN') then
-   			call initalize_voigt_kampff(dpwcoef,dfreq,offset,voigt_index,1)
+   			call fast_voigt%construct(dpwcoef,halfwidth,dfreq,offset,.true.)
+   			!call initalize_voigt_kampff(dpwcoef,dfreq,offset,voigt_index,1)
    		else
-   			call initalize_voigt_kampff(dpwcoef,dfreq,offset,voigt_index,0)
+   			call fast_voigt%construct(dpwcoef,halfwidth,dfreq,offset,.false.)
+   			!call initalize_voigt_kampff(dpwcoef,dfreq,offset,voigt_index,0)
    		endif
-   		call add_lorentzian(halfwidth,voigt_index,i)
+   		!call add_lorentzian(halfwidth,voigt_index,i)
    endif
    
    
@@ -1378,14 +1385,16 @@ module spectrum
    if(proftype(1:5) == 'VOI-F') then
    	allocate(gamma_idx(0:Jmax,-1:1))
    	gamma_idx = -1
+   	
+   	stop "Not yet implemented for VOI-F"
    	!Lets perform a precomputation of all species involved
    	write(out,"('Precomputing gamma ids for fast voigt')")
    	do i=0,Jmax
    		do j= max(0,i-1),min(Jmax,i+1)
    			temp_gamma_n = get_Voigt_gamma_n(Nspecies,real(i,rk),real(j,rk))
-   			call check_lorentzian(temp_gamma_n,voigt_index,gamma_idx(i,i-j))
+   			!call check_lorentzian(temp_gamma_n,voigt_index,gamma_idx(i,i-j))
    			if(gamma_idx(i,i-j) == -1) then
-   				call add_lorentzian(temp_gamma_n,voigt_index,gamma_idx(i,i-j))
+   				!call add_lorentzian(temp_gamma_n,voigt_index,gamma_idx(i,i-j))
    				write(out,"('Added lorentizian: ',i8,es8.2)") gamma_idx(i,i-j),temp_gamma_n
    			endif
    		enddo
@@ -2080,7 +2089,7 @@ module spectrum
         case ('VOI-F')
 
             !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp) schedule(dynamic)
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp,fast_voigt) schedule(dynamic)
             do iomp = 1,N_omp_procs
               !
               do iswap = iomp,nswap,N_omp_procs
@@ -2090,7 +2099,7 @@ module spectrum
                
                 !
                
-                call do_Voigt_Fast(tranfreq,abscoef,dfreq,freq,gamma_idx_RAM(iswap),dpwcoef,offset,freql,intens_omp(:,iomp),voigt_index)
+                call do_Voigt_Fast(tranfreq,abscoef,dfreq,freq,gamma_idx_RAM(iswap),dpwcoef,offset,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -2871,24 +2880,24 @@ module spectrum
   end subroutine  do_Voigt
   !
 
-  subroutine  do_Voigt_Fast(tranfreq,abscoef,dfreq,freq,halfwidth_Lorentz,dpwcoef,offset,freql,intens,index)
+  subroutine  do_Voigt_Fast(tranfreq,abscoef,dfreq,freq,halfwidth_Lorentz,dpwcoef,offset,freql,intens)
      !
      implicit none
      !
      real(rk),intent(in) :: tranfreq,abscoef,dfreq,offset,freql,dpwcoef
      real(rk),intent(in) :: freq(:)
-     integer,intent(in)	 :: index,halfwidth_Lorentz
+     integer,intent(in)	 :: halfwidth_Lorentz
      real(rk),intent(out) :: intens(:)
      real(rk) :: tranfreq_i,halfwidth_doppler
      integer(ik) :: ib,ie,ipoint
       !
       halfwidth_doppler=dpwcoef*tranfreq
       if (halfwidth_doppler<100.0_rk*small_) return
-      ib =  max(nint( ( tranfreq-offset-freql)/dfreq ),0)
-      ie =  min(nint( ( tranfreq+offset-freql)/dfreq ),npoints)
+      ib =  max(nint( ( tranfreq-offset-freql)/dfreq +1),0)
+      ie =  min(nint( ( tranfreq+offset-freql)/dfreq +1),npoints)
       !
       
-       call compute_voigt(freq,intens, abscoef,ib,ie,halfwidth_Lorentz,freql,tranfreq,index)
+       call fast_voigt%compute(freq,intens, abscoef,ib,ie,freql,tranfreq)
 
       
 
