@@ -1392,6 +1392,16 @@ module spectrum
 
    allocate(gamma_idx(0:JmaxAll,-1:1))
    call ArrayStart('gamma_idx',info,size(gamma_idx),kind(gamma_idx))
+   allocate(gamma_comb(0:JmaxAll,-1:1))
+   call ArrayStart('gamma_comb',info,size(gamma_comb),kind(gamma_comb))
+   do i=0,JmaxAll
+	  do j= max(0,i-1),min(JmaxAll,i+1)    
+	  	gamma_comb(i,i-j) = get_Voigt_gamma_val(Nspecies,real(i,rk),real(j,rk))
+	  enddo
+   enddo
+   
+   
+   call ArrayStart('gamma_idx',info,size(gamma_idx),kind(gamma_idx))
    if(proftype(1:5) == 'VOI-F') then
    	
    	gamma_idx = 1
@@ -1402,7 +1412,7 @@ module spectrum
 	   do i=0,JmaxAll
 	   	do j= max(0,i-1),min(JmaxAll,i+1) 
 	   		
-	   		call fast_voigt%generate_indices(get_Voigt_gamma_n(Nspecies,real(i,rk),real(j,rk)),gamma_idx(i,i-j),JmaxAll)
+	   		call fast_voigt%generate_indices(gamma_comb(i,i-j),gamma_idx(i,i-j),JmaxAll)
 	   	enddo
 	   enddo  
    	 
@@ -3272,7 +3282,8 @@ module spectrum
      
     ! f = gamma_comb(Jpp,Jp-Jpp)
      !return
-     
+     f = gamma_comb(Jpp,Jp-Jpp)
+     return     
      
      !
      do ispecies =1,Nspecies
@@ -3299,7 +3310,49 @@ module spectrum
      f = halfwidth
      !
   end function get_Voigt_gamma_n
+ 
+  function get_Voigt_gamma_val(Nspecies,Jf,Ji) result(f)
+     !
+     implicit none
+     !
+     integer(ik),intent(in) :: Nspecies
+     real(rk),intent(in) :: Jf,Ji
+     real(rk) :: halfwidth,gamma_,n_,f
+     integer(ik) :: ispecies,Jpp,Jp
+     !
+     halfwidth = 0
+     Jpp = nint(Ji)
+     Jp  = nint(Jf)
 
+    ! f = gamma_comb(Jpp,Jp-Jpp)
+     !return
+     
+     
+     !
+     do ispecies =1,Nspecies
+       !
+       if ( trim(species(ispecies)%filename)/="" ) then
+         !
+         Jpp = nint(Ji)
+         Jp  = nint(Jf)
+         !
+         gamma_ = species(ispecies)%gammaQN(Jpp,Jp-Jpp)
+         n_     = species(ispecies)%nQN(Jpp,Jp-Jpp)
+         !
+       else
+         !
+         gamma_ = species(ispecies)%gamma
+         n_     = species(ispecies)%n
+         !
+       endif
+       !
+       halfwidth =  halfwidth + species(ispecies)%ratio*gamma_*(species(ispecies)%T0/Temp)**N_*pressure/species(ispecies)%P0
+       !
+     enddo
+     !
+     f = halfwidth
+     !
+  end function get_Voigt_gamma_val
   !
   function voigt_faddeeva(nu,nu0,alpha,gamma) result(f)
    !
