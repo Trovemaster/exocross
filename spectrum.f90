@@ -1390,12 +1390,13 @@ module spectrum
      !
    enddo
 
-   
+   allocate(gamma_idx(0:JmaxAll,-1:1))
+   call ArrayStart('gamma_idx',info,size(gamma_idx),kind(gamma_idx))
    if(proftype(1:5) == 'VOI-F') then
-   	allocate(gamma_idx(0:JmaxAll,-1:1))
+   	
    	gamma_idx = 1
    	
-   	 call ArrayStart('gamma_idx',info,size(gamma_idx),kind(gamma_idx))
+   	
    	 
 	   	    !Combine all the gammas
 	   do i=0,JmaxAll

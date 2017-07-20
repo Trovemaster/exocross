@@ -155,7 +155,7 @@ contains
 			nu=freq(ido)
 			hum_res = voigt_humlicek(nu,nu0,gammaD,this%m_gammaL)
 			temp_humlicek(ido-start_dist+1) = hum_res
-			mag = mag - this%m_voigt_grid(ido -middle_shift + 1)
+			mag = mag - this%m_voigt_grid(ido -middle_shift)
 			mag = mag + hum_res
 		enddo
 		
