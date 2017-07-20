@@ -153,25 +153,36 @@ contains
 	
 	!If we have any humlicek points
 	if(start_dist < end_dist) then
-		num_hum_points = end_dist - start_dist + 1;
-		allocate(temp_humlicek(num_hum_points))
+	
+	
+		if(this%normalize) then 
+			num_hum_points = end_dist - start_dist + 1;
+			allocate(temp_humlicek(num_hum_points))
 
-		do ido=start_dist,end_dist
-			nu=freq(ido)
-			hum_res = voigt_humlicek(nu,nu0,gammaD,this%m_gammaL)
-			temp_humlicek(ido-start_dist+1) = hum_res
-			mag = mag - this%m_voigt_grid(ido -middle_shift+1)*this%m_res
-			mag = mag + hum_res*this%m_res
-		enddo
+			do ido=start_dist,end_dist
+				nu=freq(ido)
+				hum_res = voigt_humlicek(nu,nu0,gammaD,this%m_gammaL)
+				temp_humlicek(ido-start_dist+1) = hum_res
+				mag = mag - this%m_voigt_grid(ido -middle_shift+1)*this%m_res
+				mag = mag + hum_res*this%m_res
+			enddo
 		
-		if(.not. this%normalize) mag = 1.0
 		
-		intens(start_dist:end_dist) = intens(start_dist:end_dist) + temp_humlicek(:)*abscoef/mag
+			intens(start_dist:end_dist) = intens(start_dist:end_dist) + temp_humlicek(:)*abscoef/mag
 		
-		!print *,mag
-		deallocate(temp_humlicek)
+			!print *,mag
+			deallocate(temp_humlicek)
+		else
+			do ido=start_dist,end_dist
+				nu=freq(ido)
+				intens(ido) = intens(ido) + voigt_humlicek(nu,nu0,gammaD,this%m_gammaL)*abscoef
+			enddo		
+			
+			mag = 1.0
+		
+		
+		endif
   	endif
-  	if(.not. this%normalize) mag = 1.0
   	if (left_start < left_end ) then
   		call vectorized_voigt(intens(ib-ib_rel+left_start:ib-ib_rel+left_end),this%m_voigt_grid(left_start:left_end),(abscoef/mag))
   	

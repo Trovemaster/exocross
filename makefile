@@ -16,7 +16,7 @@ FOR  = ifort
 
 #FFLAGS =  -O0 -g -traceback
  
-FFLAGS =  -O3 -xHost -openmp -traceback
+FFLAGS =  -O3 -xHost -openmp -traceback -fast
 
 #FFLAGS = -O0 -g -fpe0  -fltconsistency -stand f03 -check all -warn all -traceback -fp-stack-check  # debugging options
 #CFLAGS = -O0 -g -fpe0  -fltconsistency -traceback -fp-stack-check -std=c++0x
@@ -49,7 +49,7 @@ input.o:  input.f90
 
 
 VoigtKampff_module.o: VoigtKampff/VoigtKampff_module.f90 accuracy.o
-	$(FOR) -c VoigtKampff/VoigtKampff_module.f90 $(FFLAGS)
+	$(FOR) -c VoigtKampff/VoigtKampff_module.f90 $(FFLAGS) -vec-report3
 
 VoigtKampffCollection_module.o: VoigtKampff/VoigtKampffCollection_module.f90 accuracy.o VoigtKampff_module.o
 	$(FOR) -c VoigtKampff/VoigtKampffCollection_module.f90 $(FFLAGS)	
