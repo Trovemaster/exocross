@@ -72,7 +72,7 @@ contains
   	this%m_lorentz_cutoff = pLorentzCutoff
  	this%normalize = pNormalize
   	this%m_Npoints = int(2.0*this%m_lorentz_cutoff/this%m_res,ik);
-  	this%m_middle_point = (this%m_Npoints/2)
+  	this%m_middle_point = (this%m_Npoints/2) + 1
   	!Construct the voigt grid
   	
   	this%m_mag = 0.0
@@ -89,6 +89,8 @@ contains
   		this%m_mag = this%m_mag + this%m_voigt_grid(ido)
   		nu = nu+ this%m_res
   	enddo
+  	
+  	this%m_mag = this%m_mag*this%m_res
   	
   	this%constructed = .true.
   	
@@ -121,8 +123,10 @@ contains
   	real(rk),allocatable		::	temp_humlicek(:)
   	
   	
-  	center_point = (nu0-start_nu)/this%m_res
-  	middle_shift = (center_point - this%m_middle_point)
+  	center_point = (nu0-start_nu)/this%m_res + 1
+  	middle_shift = (center_point - this%m_middle_point) + 1
+  	
+  	
   	
   	dist = max(DISTANCE_MAGIC_NUMBER/this%m_res,3.0)
   	
@@ -136,7 +140,7 @@ contains
 	
 	mag = this%m_mag
 	
-	start_dist = max(center_point - dist, ib)
+	start_dist = max(center_point - dist + 1, ib)
 	end_dist = min(center_point + dist, ie)
 		
 	left_start = ib_rel
@@ -144,6 +148,7 @@ contains
 	right_start = max(this%m_middle_point + dist, ib_rel)
 	right_end = ie_rel
 	
+	!print *,mag
 
 	
 	!If we have any humlicek points
@@ -155,15 +160,15 @@ contains
 			nu=freq(ido)
 			hum_res = voigt_humlicek(nu,nu0,gammaD,this%m_gammaL)
 			temp_humlicek(ido-start_dist+1) = hum_res
-			mag = mag - this%m_voigt_grid(ido -middle_shift)
-			mag = mag + hum_res
+			mag = mag - this%m_voigt_grid(ido -middle_shift+1)*this%m_res
+			mag = mag + hum_res*this%m_res
 		enddo
 		
 		if(.not. this%normalize) mag = 1.0
 		
 		intens(start_dist:end_dist) = intens(start_dist:end_dist) + temp_humlicek(:)*abscoef/mag
 		
-		
+		!print *,mag
 		deallocate(temp_humlicek)
   	endif
   	if(.not. this%normalize) mag = 1.0
