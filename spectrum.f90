@@ -15,9 +15,9 @@ module spectrum
   integer(ik) :: N_omp_procs=1
   !
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,ioffset = 10,iso=1
-  real(rk)      :: temp=298.0,partfunc=-1.0,freql=-small_,freqr= 20000.0,thresh=1.0d-70,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
+  real(rk)      :: temp=298.0,partfunc=-1.0,freql=-small_,freqr= 200000.0,thresh=1.0d-70,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
   real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = -25.0, pressure = 1.0_rk
-  real(rk)      :: enermax = 1e6, abscoef_thresh = 1.0d-50, abundance = 1.0d0
+  real(rk)      :: enermax = 1e7, abscoef_thresh = 1.0d-50, abundance = 1.0d0
   real(rk)      :: S_crit = 1e-29      ! cm/molecule, HITRAN cut-off paramater
   real(rk)      :: nu_crit = 2000.0d0  ! cm-1, HITRAN cut-off paramater
   real(rk)      :: resolving_power  = 1e6,resolving_f ! using resolving_power to set up grid
@@ -44,7 +44,7 @@ module spectrum
     !
     real(rk)       :: N = 0.5_rk      ! Voigt parameter N
     real(rk)       :: gamma = 0.05_rk ! Voigt parameter gamma
-    real(rk)       :: ratio = 0.9_rk  ! Ratio
+    real(rk)       :: ratio = 1.0_rk  ! Ratio
     real(rk)       :: T0    = 298_rk  ! Reference T, K
     real(rk)       :: P0    = 1.0_rk  ! Reference P, bar
     character(len=cl) :: name = "NA"         ! Broadener number of quadrature points
@@ -79,7 +79,7 @@ module spectrum
   type(selectT),save :: upper(filtermax),lower(filtermax)
   type(QNT),save :: QN
   !
-  integer(ik)    :: Nspecies = 0, Nfilters = 0
+  integer(ik)    :: Nspecies = 1, Nfilters = 0
   type(speciesT),save :: species(nspecies_max)
   type(HitranErrorT),target,save :: HITRAN_E(HITRAN_max_ierr),HITRAN_S(HITRAN_max_ierr)
   type(HitranErrorT),target,save :: HITRAN_Air,HITRAN_Self,HITRAN_N,HITRAN_Delta
@@ -1267,10 +1267,10 @@ module spectrum
      call gauher(abciss,weight,nquad)
      !
    endif
+   !
    !Prepare VoigtKampff
    if(trim(proftype(1:5))=='VOI-F') then
-   	
-
+        !
    		if(trim(proftype(1:6))=='VOI-FN') then
    			call fast_voigt%construct(dpwcoef,offset,dfreq,.true.)
    			!call initalize_voigt_kampff(dpwcoef,dfreq,offset,voigt_index,1)
@@ -1280,8 +1280,6 @@ module spectrum
    		endif
    		!call add_lorentzian(halfwidth,voigt_index,i)
    endif
-   
-   
    !
    ! open and read broadening files
    !
@@ -1320,15 +1318,9 @@ module spectrum
          species(i)%gammaQN(:,:) = species(i)%gamma
          !
          allocate(species(i)%nQN(0:Jmax,-1:1),stat=info)
-         
-        
-         
+         !         
          call ArrayStart('nQN',info,size(species(i)%nQN),kind(species(i)%nQN))
          species(i)%nQN(:,:) = species(i)%N
-         
-         
-         
-         
          !
         else
          !
@@ -1389,7 +1381,7 @@ module spectrum
      endif
      !
    enddo
-
+   !
    allocate(gamma_idx(0:JmaxAll,-1:1))
    call ArrayStart('gamma_idx',info,size(gamma_idx),kind(gamma_idx))
    allocate(gamma_comb(0:JmaxAll,-1:1))
@@ -1399,41 +1391,32 @@ module spectrum
 	  	gamma_comb(i,i-j) = get_Voigt_gamma_val(Nspecies,real(i,rk),real(j,rk))
 	  enddo
    enddo
-   
-   
+   !
    call ArrayStart('gamma_idx',info,size(gamma_idx),kind(gamma_idx))
    if(proftype(1:5) == 'VOI-F') then
-   	
+    !   	
    	gamma_idx = 1
-   	
-   	
-   	 
-	   	    !Combine all the gammas
-	   do i=0,JmaxAll
-	   	do j= max(0,i-1),min(JmaxAll,i+1) 
-	   		
-	   		call fast_voigt%generate_indices(gamma_comb(i,i-j),gamma_idx(i,i-j),JmaxAll)
-	   	enddo
-	   enddo  
-   	 
+   	!
+	!Combine all the gammas
+	do i=0,JmaxAll
+		do j= max(0,i-1),min(JmaxAll,i+1) 
+			
+			call fast_voigt%generate_indices(gamma_comb(i,i-j),gamma_idx(i,i-j),JmaxAll)
+		enddo
+	enddo  
+    !  	
    	!gamma_idx = -1
-   	
-   	
-   	write(out,"('Generated ',i8,' fast voigt grids')") fast_voigt%get_size()
+   	!
+  	write(out,"('Generated ',i8,' fast voigt grids')") fast_voigt%get_size()
    	!stop "Not yet implemented for VOI-F"
    	!Lets perform a precomputation of all species involved
-
-	
+    !
    endif
-   			
-   				
-   
-   
    !
    ! Intensities
    !
-   intens = 0.0
-   intband = 0.0
+   intens = 0
+   intband = 0
    sunit = 0
    acoef_ = 0
    indexf_ = 0
@@ -1459,8 +1442,6 @@ module spectrum
           if (offset<0) write(out,"(10x,'Line truncated at ',f9.2/)") offset
           !
        endif
-
-       
        !
    case ('RECT','BOX')
        !
@@ -1665,7 +1646,7 @@ module spectrum
              !
              if (lineprofile_do) then
                !
-               ! The current version of ExoCross does know how to locate J-values in HITRAN-input.
+               ! The current version of ExoCross does no know how to locate J-values in HITRAN-input.
                ! Therefore we can only use the static values of Voigt-parameters together with Nspecies
                !
                Jf = 1000.0_rk
@@ -1676,10 +1657,10 @@ module spectrum
                  species(2)%gamma = gamma_s
                  species(2)%n = 0
                endif
+               !
                gamma_RAM(iswap_) = get_Voigt_gamma_n(Nspecies_,Jf,Ji)
                temp_gamma_n = get_Voigt_gamma_n(Nspecies_,Jf,Ji,gamma_idx_RAM(iswap_))
-               
-               
+               !
              endif
              !
              cycle
@@ -3275,16 +3256,14 @@ module spectrum
      Jpp = nint(Ji)
      Jp  = nint(Jf)
      if(present(idx)) then
-
+        !
      	idx = gamma_idx(Jpp,Jp-Jpp)
+        f = gamma_comb(Jpp,Jp-Jpp)
      	return
      endif
-     
-    ! f = gamma_comb(Jpp,Jp-Jpp)
-     !return
+     !     
      f = gamma_comb(Jpp,Jp-Jpp)
      return     
-     
      !
      do ispecies =1,Nspecies
        !
@@ -3323,11 +3302,6 @@ module spectrum
      halfwidth = 0
      Jpp = nint(Ji)
      Jp  = nint(Jf)
-
-    ! f = gamma_comb(Jpp,Jp-Jpp)
-     !return
-     
-     
      !
      do ispecies =1,Nspecies
        !

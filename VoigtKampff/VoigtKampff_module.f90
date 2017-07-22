@@ -101,7 +101,7 @@ contains
 	 
 	 if(.not. this%constructed)return
 	 
-	 if(allocated(this%m_voigt_grid)) then
+	 if(associated(this%m_voigt_grid)) then
 	 	deallocate(this%m_voigt_grid)
 	 endif
   end subroutine
