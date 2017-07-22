@@ -109,7 +109,7 @@ module spectrum
     !
     implicit none
     !
-    logical :: eof,if_halfwidth_defined = .false., if_species_defined = .false.
+    logical :: eof,if_halfwidth_defined = .false., if_species_defined = .false., if_QN_defined = .false.
     character(len=cl) :: w,v
     integer(ik)   :: i,ifilter,iE,iS,npoints0,ierror
     type(HitranErrorT),pointer :: HITRAN
@@ -306,6 +306,8 @@ module spectrum
           !
           call read_line(eof) ; if (eof) exit
           call readu(w)
+          !
+          if_QN_defined = .true.
           !
           do while (trim(w)/="".and.trim(w)/="END")
             !
@@ -819,6 +821,11 @@ module spectrum
     if (if_species_defined.and.if_halfwidth_defined) then
       write(out,"('Input Error: HWHM cannot be used together with SPECIES, choose one')")
       stop 'Input Error: HWHM cannot be used together with Species, choose one'
+    endif
+    !
+    if (vibtemperature_do.and..not.if_QN_defined) then 
+      write(out,"('Input Error: For non-LTE (Tvib/=Trot) QN must be defined')")
+      stop 'Input Error: For non-LTE (Tvib/=Trot) QN must be defined'
     endif
     !
     !   half width for Doppler profiling
@@ -1492,7 +1499,7 @@ module spectrum
        !
    end select
    !
-   if (Nspecies>0) then
+   if (lineprofile_do) then
       write(out,"(10x,'Pressure = ',e18.7)") pressure
       write(out,"(10x,'Voigt parameters:  gamma       n         T0            P0')")
       do i =1,Nspecies
@@ -1548,6 +1555,8 @@ module spectrum
    !
    nswap = 0
    Noffset = max(nint(offset/dfreq,ik),1)
+   !
+   if (verbose>=3) print('(/"Computing ",a," with ",a," ... "/)'), trim(specttype),trim(proftype)
    !
    if (verbose>=3) print('(/"Transition files ... "/)')
    !
