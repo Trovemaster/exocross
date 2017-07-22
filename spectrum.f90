@@ -325,7 +325,16 @@ module spectrum
             case ("VIB","VIBRATIONAL")
               !
               call readi(QN%Vibcol(1))
-              call readi(QN%Vibcol(2))
+              !
+              if (Nitems>2) then 
+                !
+                call readi(QN%Vibcol(2))
+                !
+              else
+                !
+                QN%Vibcol(2) = QN%Vibcol(1)
+                !
+              endif
               !
             case default
               !
@@ -926,14 +935,14 @@ module spectrum
             call readf(dtemp)
             call readf(ji)
             !
-            if (info>0.and.nint(ji)==0) then
+            if (info>0.and.int(ji)==0) then
               write(out,"('It is illegal to use not J-sorted states with vib-temperatures')")
               stop 'States file must be ordered by J to use with Tvib'
             endif
             !
             if (info>0) cycle
             !
-            if (nint(ji)==0) then 
+            if (int(ji)==0) then 
               Nvib_states = Nvib_states + 1
             else 
               info = 1
@@ -971,8 +980,8 @@ module spectrum
         call ArrayStart('ivib_state',info,size(ivib_state),kind(ivib_state))
         ivib_state = 1
         energies_vib = 0
-        ivib1 = QN%vibcol(1)
-        ivib2 = QN%vibcol(2)
+        ivib1 = QN%vibcol(1)-4
+        ivib2 = QN%vibcol(2)-4
       endif
       !
       if (trim(specttype)=='LIFETIME') THEN
