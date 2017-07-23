@@ -222,7 +222,7 @@ module spectrum
             !
           endif
           !
-        case ("NPOINTS","NUMBER-OF-POINTS","NTEMPS")
+        case ("NPOINTS","NUMBER-OF-POINTS","NTEMPS","NUMBER-OF-TEMPERATURES")
           !
           call readi(npoints)
           !
