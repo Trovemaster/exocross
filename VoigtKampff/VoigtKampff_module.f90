@@ -55,7 +55,7 @@ module VoigtKampff_module
 	
 contains	
   subroutine construct_voigt(this,pGammaD,pGammaL,pRes,pLorentzCutoff,pNormalize)
-  	class(VoigtKampff),intent(inout)	::	this
+  	type(VoigtKampff),intent(inout)	::	this
   	real(rk),intent(in)			::	pGammaD,pGammaL
   	real(rk),intent(in)			::	pRes
   	real(rk),intent(in)			::	pLorentzCutoff
@@ -97,7 +97,7 @@ contains
   end subroutine	
 
   subroutine destroy(this)
-	 class(VoigtKampff),intent(inout)	::	this
+	 type(VoigtKampff),intent(inout)	::	this
 	 
 	 if(.not. this%constructed)return
 	 
@@ -108,7 +108,7 @@ contains
   
   
   subroutine compute_voigt(this,freq,intens,abscoef,ib,ie,start_nu,nu0)
-  	class(VoigtKampff),intent(in)	::	this
+  	type(VoigtKampff),intent(in)	::	this
   	real(rk),intent(in)		::	freq(:),abscoef,start_nu,nu0
   	integer(ik),intent(in)		::	ib,ie
   	real(rk),intent(inout)		::	intens(:)
@@ -195,7 +195,7 @@ contains
   end subroutine
   			
   real(rk) function get_gammaL(this)
-  	class(VoigtKampff),intent(in)	::	this
+  	type(VoigtKampff),intent(in)	::	this
   	
   	get_gammaL = this%m_gammaL
   	
