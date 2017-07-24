@@ -97,7 +97,7 @@ module spectrum
   logical :: completed_work = .true.
   logical :: all_done = .false.
   
-   type(VoigtKampffCollection) :: fast_voigt
+   type(VoigtKampffCollection),save :: fast_voigt
   
   
   !
@@ -631,7 +631,8 @@ module spectrum
           call readf(enermax)
           !
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
-            'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX','LIFETIME','VOI-FAST','VOI-FNORM')
+            'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD', &
+            'PHOENIX','LIFETIME','VOI-FAST','VOI-FNORM')
           !
           if (pressure<small_.and.(w(1:3)=='VOI'.or.w(1:3)=='PSE')) then
              ! for pressure= 0 Voigt is repalced by Doppler
