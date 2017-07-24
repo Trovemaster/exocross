@@ -36,7 +36,7 @@ module VoigtKampffCollection_module
 contains
 
 	subroutine construct(this,dpwcoeff,offset,dfreq,normalize)
-		type(VoigtKampffCollection)	::	this
+		class(VoigtKampffCollection)	::	this
 		logical,intent(in)		::	normalize
 		real(rk),intent(in)		::	dpwcoeff,offset,dfreq
 		
@@ -57,7 +57,7 @@ contains
 	end subroutine
 		
 	subroutine expand_voigts(this)
-		type(VoigtKampffCollection)	::	this
+		class(VoigtKampffCollection)	::	this
 		type(VoigtKampff),allocatable	::	temp(:)
 		integer(ik)			::	old_capacity
 		
@@ -85,14 +85,14 @@ contains
 	end subroutine
 	
 	integer(ik) function get_size(this)
-		type(VoigtKampffCollection),intent(in)	::	this
+		class(VoigtKampffCollection),intent(in)	::	this
 		
 		get_size = this%n
 	end function
 	
 	
 	subroutine generate_indices(this,gammaL,gamma_idx,Jmax)
-		type(VoigtKampffCollection)	::	this
+		class(VoigtKampffCollection)	::	this
 		real(rk),intent(in)		::	gammaL
 		integer(ik),intent(inout)		::	gamma_idx
 		integer(ik),intent(in)		::	Jmax
@@ -118,7 +118,7 @@ contains
 	end subroutine
 	
 	subroutine compute_fast_voigt(this,freq,intens,abscoef,ib,ie,start_nu,nu0,index)
-	  	type(VoigtKampffCollection),intent(in)	::	this
+	  	class(VoigtKampffCollection),intent(in)	::	this
 	  	real(rk),intent(in)		::	freq(:),abscoef,start_nu,nu0
 	  	integer(ik),intent(in)		::	ib,ie
 	  	real(rk),intent(inout)		::	intens(:)
@@ -130,7 +130,7 @@ contains
 	 end subroutine
 	
 	integer(ik) function add_voigt(this,gammaL)
-		type(VoigtKampffCollection)	::	this
+		class(VoigtKampffCollection)	::	this
 		real(rk),intent(in)			::	gammaL
 		
 		this%n = this%n+1
@@ -148,7 +148,7 @@ contains
 	
 	
 	integer(ik) function search_gamma(this,gammaL)
-		type(VoigtKampffCollection)	::	this
+		class(VoigtKampffCollection)	::	this
 		real(rk),intent(in)		::	gammaL	
 		
 		search_gamma = 0
