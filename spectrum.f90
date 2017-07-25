@@ -230,7 +230,7 @@ module spectrum
           !
           if (mod(npoints,2)==0) npoints = npoints + 1
           !
-        case ("ABSORPTION","EMISSION")
+        case ("ABSORPTION","EMISSION","GF")
           !
           specttype = trim(w)
           !
@@ -242,7 +242,7 @@ module spectrum
           !
          call readi(N_omp_procs)
           !
-        case ("ISO","ISOTOPE")
+        case ("ISO","ISOTOPE","IELION")
           !
           call readi(iso)
           !
@@ -631,7 +631,8 @@ module spectrum
           call readf(enermax)
           !
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
-            'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX','LIFETIME','VOI-FAST','VOI-FNORM')
+            'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX',&
+            'LIFETIME','VOI-FAST','VOI-FNORM')
           !
           if (pressure<small_.and.(w(1:3)=='VOI'.or.w(1:3)=='PSE')) then
              ! for pressure= 0 Voigt is repalced by Doppler
@@ -855,10 +856,10 @@ module spectrum
    use  input
    use VoigtKampff_module
    !
-   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,k
+   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,k,gfunit
    integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0
-   real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk
+   real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff
    integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll
    real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot
@@ -880,9 +881,7 @@ module spectrum
    character(len=9) :: npoints_fmt  !text variable containing formats for reads/writes
    character(len=9) :: b_fmt
    integer(hik):: Nintens(-60:60)
-   !
-  
-   
+   !   
    logical :: eof
    character(len=cl) :: w
    !
@@ -896,6 +895,8 @@ module spectrum
    cmcoef=1.0_rk/(8.0_rk*pi*vellgt)
    emcoef=1.0_rk*planck*vellgt/(4.0_rk*pi)
    dfreq=(freqr-freql)/real(npoints-1,rk)
+   !
+   gfcoef=1.34738d+21 ! vellgt**3*me/(8.0_rk*pi**2*e**2) e:=4.80320427e-10*Fr; me := .9109383560e-27*g ; Fr:=cm^(3/2)*sqrt(g)/s;
    !
    ! Let's include abundance intpo the constants
    !
@@ -1357,44 +1358,64 @@ module spectrum
        !
        do
          !
+         ! read the line and check the model
+         !
+         call read_line(eof,bunit) ; if (eof) exit
+         !
+         call readu(ch_broad)
+         !
+         if (all(trim(ch_broad(1:3))/=(/'A0','A1','J','JJ'/))) then
+           write(out,"('Error, illegal model in .broad: ',a3,' inly a0 and a1 are implemented')") ch_broad(1:3)
+           stop 'Error, illegal model in .broad: '
+         endif
+         !
          ! model specific read
          !
-         select case ( trim(species(i)%model) )
+         select case ( trim(ch_broad(1:3)) )
            !
          case ('J','A0')
            !
-           read(bunit,*,end=15) ch_broad(1:3),gamma_,n_,J
+           if (nitems<4) call report ("not enough data in .broad for a0"//trim(w),.true.)
+           !
+           call readf(gamma_)
+           call readf(n_)
+           call readf(Ji)
+           !
+           ! use integer value of J
+           !
+           j = int(Ji)
+           !
            species(i)%gammaQN(J,:) = gamma_
            species(i)%nQN(J,:) = n_
            !
          case ('JJ','A1')
            !
-           read(bunit,*,end=15) ch_broad(1:3),gamma_,n_,Jpp,Jp
+           if (nitems<5) call report ("not enough data in .broad for a1"//trim(w),.true.)
            !
-           if (abs(Jp-Jpp)>1) stop 'Jp-Jpp in broadening file'
+           call readf(gamma_)
+           call readf(n_)
+           call readf(Ji)
+           call readf(Jf)
+           !
+           ! use integer value of J
+           !
+           Jp  = int(Jf)
+           Jpp = int(Ji)
+           !
+           if (abs(Jp-Jpp)>1) then 
+             write(out,'("Jp-Jpp>1 in broadening file:",2i8)') Jp,Jpp
+             stop 'Jp-Jpp>1 in broadening file'
+           endif
            !
            species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
            species(i)%nQN(Jpp,Jp-Jpp) = n_
            !
-         case ('JJKK-X')
-           !
-           read(bunit,*,end=15) ch_broad(1:3),gamma_,n_,Jpp,Jp,Kp,Kpp
-           !
-           if (abs(Jp-Jpp)>1) stop 'Jp-Jpp in broadening file'
-           if (Kp>Jp.or.Kpp>Jpp) stop 'K > J in broadening file'
-           !
-           !species(i)%gammaQN(Jpp,Jp-Jpp,Kp,Kpp) = gamma_
-           !species(i)%nQN(Jpp,Jp-Jpp,Kp,Kpp) = n_
-           !
          case default
            !
-           write(out,"('The broadening model',a,' is not implemented yet')") trim(species(i)%model)
+           write(out,"('The broadening model',a,' is not implemented yet or illegal')") trim(ch_broad(1:3))
            stop 'Illegal broadening model'
            !
          end select
-         !
-         cycle
-         15  exit
          !
        enddo
        !
@@ -1507,6 +1528,18 @@ module spectrum
       enddo
    endif
    !
+   if ( trim(proftype)=='PHOENIX' ) then
+
+     write(ioname, '(a)') 'Phoenix'
+     call IOstart(trim(ioname),gfunit)
+     !
+     open(unit=gfunit,file=trim(output)//".life",action='write',status='replace')
+
+
+      open(unit=tunit,file=trim(output)//".gf",action='write',status='replace')
+      write(tunit,"('  iel      wv      ener      gf     gamma1      gamma2     n')") 
+   endif
+   !
    if (hitran_do.and.partfunc<0.0) then
      write(out,"('For HITRAN partition function must be defined using PF or QSTAT keywords')")
      stop 'Undefined PF'
@@ -1547,7 +1580,7 @@ module spectrum
    !
    if (lineprofile_do) then
      allocate(gamma_RAM(N_to_RAM),stat=info)
-      allocate(gamma_idx_RAM(N_to_RAM),stat=info)
+     allocate(gamma_idx_RAM(N_to_RAM),stat=info)
      call ArrayStart('swap:gamma_RAM',info,size(gamma_RAM),kind(gamma_RAM))
    endif
    !
@@ -1818,7 +1851,7 @@ module spectrum
                           (1.0_rk-exp(-c2/temp_vib*tranfreq))/(tranfreq**2*partfunc)
                endif 
                !
-             case ('emission','EMISSION','EMISS','emiss')
+             case ('EMISSION')
                !
                ! emission coefficient [Ergs/mol/Sr]
                !
@@ -1830,6 +1863,12 @@ module spectrum
                           exp(-c2/temp_vib*ener_vib)*tranfreq/(partfunc)
                   !
                endif 
+               !
+             case ('GF')
+               !
+               ! oscillator strength gf
+               !
+               abscoef=gfcoef*acoef*gtot(ilevelf)/(vellgt*tranfreq)**2
                !
              case ('LIFETIME')
                !
@@ -1940,7 +1979,7 @@ module spectrum
             !
         case ('PHOEN')
             !
-            call do_gf_oscillator_strength_Phoenix(iso,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,acoef_ram)
+            call do_gf_oscillator_strength_Phoenix(iso,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,gfunit)
             !
             call TimerStop('Calc')
             cycle loop_tran
@@ -3119,41 +3158,42 @@ module spectrum
 
   end subroutine do_stick
 
-  subroutine do_gf_oscillator_strength_Phoenix(iso,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,acoef_ram)
+  subroutine do_gf_oscillator_strength_Phoenix(iso,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,gf_ram,gfunit)
      !
      implicit none
      !
      integer(ik),intent(in) :: iso,nswap,nlines,ilevelf_ram(nswap),ileveli_ram(nswap)
-     real(rk),intent(in) :: acoef_ram(nswap),jrot(nlines),energies(nlines)
+     real(rk),intent(in) :: gf_ram(nswap),jrot(nlines),energies(nlines)
      real(rk)  :: gf,acoef,tranfreq,energyf,energyi,gamma1,gamma2,n1,ji,jf
-     integer(ik),intent(in) :: gtot(nlines)
-     integer(ik) :: i,iloggf,ileveli,ilevelf,jp,jpp,wl2ind,iener,ilog_n,ilog_gamma1,ilog_gamma2
+     integer(ik),intent(in) :: gtot(nlines),gfunit
+     integer(ik) :: i,ileveli,ilevelf,jp,jpp,wl2ind,iener
      real(rk) :: lambda,ratiolog,g_u
+     real(rk),parameter :: c2value = 1.34738e+21
+     integer(kind=2) :: iloggf,ilog_n,ilog_gamma1,ilog_gamma2,ielion
+     !
+     ielion = iso
      !
      do i = 1,nswap
          !
          ilevelf = ilevelf_ram(i)
          ileveli = ileveli_ram(i)
-         acoef   = acoef_ram(i)
+         gf   = gf_ram(i)
          energyf = energies(ilevelf)
          energyi = energies(ileveli)
          tranfreq = energyf - energyi
          !
          lambda = 1e7/tranfreq ! wavelength in nm
-
-
+         !
          ratiolog = log(1.0_rk+1._rk/2000000.0_rk)
          wl2ind = log(lambda)/ratiolog+0.5_rk
          !
          !g_l*fij = c2 * Aji * g_u / (c*wn)**2
          !!!!!!gf = 1.34738e+21*acoef*g_u / (c*tranfreq)**2
          !
-         gf = 1.4992e4*acoef*(lambda)**2 ! oscillator strength
+         !gf = 1.4992e4*acoef*(lambda)**2 ! oscillator strength
          !
          iloggf = nint(log(gf)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
          iener  = nint(log(energyi)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
-         !
-         !iloggf = nint(log(gf))
          !
          jf = jrot(ilevelf)
          ji = jrot(ileveli)
@@ -3177,9 +3217,8 @@ module spectrum
          endif
          ilog_gamma2 = nint(log(gamma2)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
          !
-         write(out,"(i12,1x,f12.6,1x,i6,1x,f12.4,1x,f11.4,1x,f11.4,1x,f11.4,'||')") &
-                     iso,lambda,iloggf,energyi,&
-                     gamma1,gamma2,n1
+         write(gfunit,"(i7,6(1x,i9))") &
+                     ielion,wl2ind,iener,iloggf,ilog_gamma1,ilog_gamma2,ilog_n
      enddo
      !
      !ielion, wl, gf-value, xi, igr, igs, igw
