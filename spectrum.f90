@@ -17,7 +17,7 @@ module spectrum
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,ioffset = 10,iso=1
   real(rk)      :: temp=298.0,partfunc=-1.0,freql=-small_,freqr= 200000.0,thresh=1.0d-70,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
   real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = -25.0, pressure = 1.0_rk
-  real(rk)      :: enermax = 1e7, abscoef_thresh = 1.0d-50, abundance = 1.0d0
+  real(rk)      :: enermax = 1e7, abscoef_thresh = 1.0d-50, abundance = 1.0d0, gf_factor = 1.0d0
   real(rk)      :: S_crit = 1e-29      ! cm/molecule, HITRAN cut-off paramater
   real(rk)      :: nu_crit = 2000.0d0  ! cm-1, HITRAN cut-off paramater
   real(rk)      :: resolving_power  = 1e6,resolving_f ! using resolving_power to set up grid
@@ -246,9 +246,13 @@ module spectrum
           !
           call readi(iso)
           !
-        case ("ABUNDANCE","FACTOR")
+        case ("ABUNDANCE")
           !
           call readf(abundance)
+          !
+        case ("GF_FACTOR")
+          !
+          call readf(gf_factor)
           !
         case ("VERBOSE")
           !
@@ -906,7 +910,7 @@ module spectrum
    !
    cmcoef = cmcoef*abundance
    emcoef = emcoef*abundance
-   gfcoef = gfcoef*abundance
+   gfcoef = gfcoef*gf_factor
    !
    !   half width for Doppler profiling
    !
@@ -1876,9 +1880,10 @@ module spectrum
                !
              case ('GF')
                !
-               ! oscillator strength gf
+               ! oscillator strength gf; abscoef is to check agains the intensity thresholds 
                !
-               abscoef=gfcoef*acoef*gtot(ilevelf)/(vellgt*tranfreq)**2
+               abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+               acoef=gfcoef*acoef*gtot(ilevelf)/(vellgt*tranfreq)**2
                !
              case ('LIFETIME')
                !
@@ -1989,7 +1994,7 @@ module spectrum
             !
         case ('PHOEN')
             !
-            call do_gf_oscillator_strength_Phoenix(iso,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,gfunit)
+            call do_gf_oscillator_strength_Phoenix(iso,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,acoef_ram,abscoef_ram,gfunit)
             !
             call TimerStop('Calc')
             cycle loop_tran
@@ -3032,7 +3037,7 @@ module spectrum
            !
            if (nchars_>15) cycle
            !
-           write(out,b_fmt,advance="no") trim(quantum_numbers(kitem,ilevelf))
+           write(sunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ilevelf))
            !
          enddo
          !
@@ -3050,19 +3055,19 @@ module spectrum
            !
            if (nchars_>15) cycle
            !
-           write(out,b_fmt,advance="no") trim(quantum_numbers(kitem,ileveli))
+           write(sunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ileveli))
            !
          enddo
          !
          if ( mod(nint(2*Jf),2)==0 ) then
            !
-           write(out,'(i7,1x,a1,1x,a1)',advance="no") nint(Jf),trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
-           write(out,'(i7,1x,a1,1x,a1)',advance="no") nint(Ji),trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
+           write(sunit,'(i7,1x,a1,1x,a1)',advance="no") nint(Jf),trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
+           write(sunit,'(i7,1x,a1,1x,a1)',advance="no") nint(Ji),trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
            !
          else
            !
-           write(out,'(f7.1,1x,a1,1x,a1)',advance="no") Jf,trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
-           write(out,'(f7.1,1x,a1,1x,a1)',advance="no") Ji,trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
+           write(sunit,'(f7.1,1x,a1,1x,a1)',advance="no") Jf,trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
+           write(sunit,'(f7.1,1x,a1,1x,a1)',advance="no") Ji,trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
            !
          endif
          !
@@ -3100,18 +3105,19 @@ module spectrum
             !
          enddo
          !
-         write(out,'(1x,i1)',advance="no") ierror_nu
-         write(out,'(i1)',advance="no") ierror_S
-         write(out,'(i1)',advance="no") HITRAN_Air%ierr
-         write(out,'(i1)',advance="no") HITRAN_Self%ierr
-         write(out,'(i1)',advance="no") HITRAN_n%ierr
-         write(out,'(i1)',advance="no") HITRAN_Delta%ierr
+         write(sunit,'(1x,i1)',advance="no") ierror_nu
+         write(sunit,'(i1)',advance="no") ierror_S
+         write(sunit,'(i1)',advance="no") HITRAN_Air%ierr
+         write(sunit,'(i1)',advance="no") HITRAN_Self%ierr
+         write(sunit,'(i1)',advance="no") HITRAN_n%ierr
+         write(sunit,'(i1)',advance="no") HITRAN_Delta%ierr
          !
-         write(out,"(' 0 0 0 0 0 0 ',f7.1,f7.1)",advance="yes") real(gtot(ilevelf)),real(gtot(ileveli))
+         write(sunit,"(' 0 0 0 0 0 0 ',f7.1,f7.1)",advance="yes") real(gtot(ilevelf)),real(gtot(ileveli))
          !
        else
           !
-          !if (abscoef>thresh)  then
+          ! Not HITRAN: the main detailed stick-output is written to out and 
+          ! also a simple two-column-version into .stick 
           !
           ! write to .stick-file
           write(sunit,my_fmt) tranfreq,abscoef
@@ -3173,13 +3179,14 @@ module spectrum
 
   end subroutine do_stick
 
-  subroutine do_gf_oscillator_strength_Phoenix(iso,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,gf_ram,gfunit)
+  subroutine do_gf_oscillator_strength_Phoenix(iso,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,gf_ram,abscoeff_ram,gfunit)
      !
      implicit none
      !
      integer(ik),intent(in) :: iso,nswap,nlines,ilevelf_ram(nswap),ileveli_ram(nswap)
      real(rk),intent(in) :: gf_ram(nswap),jrot(nlines),energies(nlines)
-     real(rk)  :: gf,acoef,tranfreq,energyf,energyi,gamma1,gamma2,n1,ji,jf
+     real(rk),intent(in) :: abscoeff_ram(nswap)
+     real(rk)  :: gf,acoef,tranfreq,energyf,energyi,gamma1,gamma2,n1,ji,jf,abscoeff
      integer(ik),intent(in) :: gtot(nlines),gfunit
      integer(ik) :: i,ileveli,ilevelf,jp,jpp,wl2ind
      !
@@ -3202,6 +3209,7 @@ module spectrum
          ilevelf = ilevelf_ram(i)
          ileveli = ileveli_ram(i)
          gf   = gf_ram(i)
+         abscoeff   = abscoeff_ram(i)
          energyf = energies(ilevelf)
          energyi = energies(ileveli)
          tranfreq = energyf - energyi
@@ -3245,8 +3253,10 @@ module spectrum
          endif
          ilog_gamma2 = int(log(gamma2)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
          !
-         write(gfunit,*) &
-                     ielion,wl2ind,iener,iloggf,ilog_gamma1,ilog_gamma2,ilog_n
+         write(gfunit,*) ielion,wl2ind,iener,iloggf,ilog_gamma1,ilog_gamma2,ilog_n
+         !
+         if (verbose>=4) write(out,"(f16.6,1x,e16.6,1x,f16.6)") tranfreq,abscoeff,energyi
+         !
      enddo
      !
      !ielion, wl, gf-value, xi, igr, igs, igw
