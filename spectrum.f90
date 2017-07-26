@@ -25,7 +25,7 @@ module spectrum
   integer(ik)   :: nquad = 20      ! Number of quadrature points
   integer(hik)   :: N_to_RAM = -1000 ! Lines to keep in RAM
   !
-  character(len=cl) :: specttype="absorption",enrfilename="none",intfilename(nfiles_max),proftype="DOPPL",output="output"
+  character(len=cl) :: specttype="ABSORPTION",enrfilename="NONE",intfilename(nfiles_max),proftype="DOPPL",output="output"
   integer(ik)   :: intJvalue(nfiles_max)
   character(4) a_fmt
   character(9) b_fmt
@@ -384,6 +384,8 @@ module spectrum
             !
             hitran_do = .false.
             stick_hitran = .true.
+            proftype = 'STICK'
+            specttype = 'ABSORPTION'
             !
             iE = 0
             iS = 0
@@ -769,10 +771,8 @@ module spectrum
     enddo
     !
     if (proftype(1:3)/='BIN'.and.microns) then
-      !
       write(out,"('Microns or um is currently only working with BIN, not ',a)") proftype(1:3)
-      call report ("Illegal profile for Microns"//trim(w),.true.)
-      !
+      stop "Illegal profile for Microns"
     endif
     !
     if (proftype(1:3)=='BIN'.or.proftype(1:3)=='MAX') then
@@ -780,22 +780,26 @@ module spectrum
     endif
     !
     if (proftype(1:3)/='BIN'.and.microns) then
-      !
       write(out,"('Microns or um is currently only working with BIN, not ',a)") proftype(1:3)
-      call report ("Illegal profile for Microns"//trim(w),.true.)
-      !
+      stop "Illegal profile for Microns"
+    endif
+    !
+    if (stick_hitran.and.trim(proftype)/='STICK') then 
+      write(out,"('For HITRAN WRITE use STICK or delete ',a)") trim(proftype)
+      stop "Illegal profile for HITRAN WRITE, CHANGE TO STICK"
+    endif
+    
+    if (stick_hitran.and.trim(specttype)/='ABSORPTION') then 
+      write(out,"('For HITRAN WRITE use ABSORPTION or delete TYPE spectral type',a)") trim(specttype)
+      stop "Illegal profile for HITRAN WRITE, CHANGE TO ABSORPTION"
     endif
     !
     if (proftype(1:3)=='BIN'.and.microns) then
-      !
       proftype = 'BIN-MICRON'
-      !
     endif
     !
     if (proftype(1:3)=='BIN'.and.use_resolving_power) then
-      !
       proftype = 'BIN-R'
-      !
     endif
     !
     if (use_resolving_power) then
@@ -1309,7 +1313,7 @@ module spectrum
    !
    if (verbose>=4.and.Nspecies>0) print('(1x,a/)'),'Reading broadening parameters.'
    !
-    !Used for indexing the gamma for the fast_voigt
+   !Used for indexing the gamma for the fast_voigt
    JmaxAll = maxval(jrot)
    do i =1,Nspecies
      !
@@ -1502,8 +1506,12 @@ module spectrum
        !
        write(ioname, '(a)') 'Stick spectrum'
        call IOstart(trim(ioname),sunit)
-       open(unit=sunit,file=trim(output)//".stick",action='write',status='replace')
        !
+       if (stick_hitran) then 
+         open(unit=sunit,file=trim(output)//".par",action='write',status='replace')
+       else
+         open(unit=sunit,file=trim(output)//".stick",action='write',status='replace')
+       endif
        if (verbose>=2) then
           !
           if (cutoff_model=="HITRAN") then
@@ -1600,7 +1608,6 @@ module spectrum
      !
      open(unit=tunit,file=trim(intfilename(i)),action='read',status='old',iostat=iostat_)
      !
-     
      eof = .false. ! this will be used to control if the end of file is reached
      !
      if (verbose>=3) print('("  Processing ",a,"...")'), trim(intfilename(i))
@@ -3006,7 +3013,7 @@ module spectrum
        !
        if (stick_hitran) then
          !
-         write(out,"(i3,f12.6,e10.3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6)",advance="no") &
+         write(sunit,"(i3,f12.6,e10.3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6)",advance="no") &
                      iso,tranfreq,abscoef,acoef,&
                      species(1)%gamma,species(2)%gamma,&
                      energyi,species(1)%n,species(1)%delta
