@@ -246,7 +246,7 @@ module spectrum
           !
           call readi(iso)
           !
-        case ("ABUNDANCE")
+        case ("ABUNDANCE","FACTOR")
           !
           call readf(abundance)
           !
@@ -902,6 +902,7 @@ module spectrum
    !
    cmcoef = cmcoef*abundance
    emcoef = emcoef*abundance
+   gfcoef = gfcoef*abundance
    !
    !   half width for Doppler profiling
    !
@@ -1532,12 +1533,14 @@ module spectrum
 
      write(ioname, '(a)') 'Phoenix'
      call IOstart(trim(ioname),gfunit)
+     open(unit=gfunit,file=trim(output)//".gf",action='write',status='replace',BLOCKSIZE=65536)
+     write(gfunit,"('    iel          wv   ener     gf gamma1 gamma2      n')") 
      !
-     open(unit=gfunit,file=trim(output)//".life",action='write',status='replace')
-
-
-      open(unit=tunit,file=trim(output)//".gf",action='write',status='replace')
-      write(tunit,"('  iel      wv      ener      gf     gamma1      gamma2     n')") 
+     if (trim(specttype)/="GF") then 
+       write(out,"('Change the spectral type to GF (oscillator strength) for Phoenix'/)")
+       specttype = "GF"
+     endif
+     !
    endif
    !
    if (hitran_do.and.partfunc<0.0) then
@@ -2403,6 +2406,11 @@ module spectrum
      !
      close(tunit,status='keep')
      !
+   elseif (trim(proftype)=='PHOENIX') then
+     !
+     write(gfunit,*) int(-1,kind=2),int(-1,kind=4),int(-1,kind=2),int(-1,kind=2),int(-1,kind=2),int(-1,kind=2),int(-1,kind=2)
+     close(gfunit,status='keep')
+     !
    else
      !
      if (verbose>=2) print('(/"Total intensity = ",es16.8,", T = ",f18.4)'), intband,temp
@@ -3166,10 +3174,19 @@ module spectrum
      real(rk),intent(in) :: gf_ram(nswap),jrot(nlines),energies(nlines)
      real(rk)  :: gf,acoef,tranfreq,energyf,energyi,gamma1,gamma2,n1,ji,jf
      integer(ik),intent(in) :: gtot(nlines),gfunit
-     integer(ik) :: i,ileveli,ilevelf,jp,jpp,wl2ind,iener
+     integer(ik) :: i,ileveli,ilevelf,jp,jpp,wl2ind
+     !
      real(rk) :: lambda,ratiolog,g_u
-     real(rk),parameter :: c2value = 1.34738e+21
-     integer(kind=2) :: iloggf,ilog_n,ilog_gamma1,ilog_gamma2,ielion
+     !
+     integer(kind=2) :: iloggf,ilog_n,ilog_gamma1,ilog_gamma2,ielion,iener
+     type gausslines
+      sequence
+      integer(kind=4) :: iwl
+      integer(kind=2) :: ielion,ielo,igflog,igr,igs,igw
+     end type
+     !
+     integer, parameter :: blksize=65536
+     type(gausslines) :: oneline(blksize)
      !
      ielion = iso
      !
@@ -3182,7 +3199,7 @@ module spectrum
          energyi = energies(ileveli)
          tranfreq = energyf - energyi
          !
-         lambda = 1e7/tranfreq ! wavelength in nm
+         lambda = 1e8/tranfreq ! wavelength in Angstrom 
          !
          ratiolog = log(1.0_rk+1._rk/2000000.0_rk)
          wl2ind = log(lambda)/ratiolog+0.5_rk
@@ -3192,8 +3209,8 @@ module spectrum
          !
          !gf = 1.4992e4*acoef*(lambda)**2 ! oscillator strength
          !
-         iloggf = nint(log(gf)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
-         iener  = nint(log(energyi)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
+         iloggf = int(log(gf)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
+         iener  = int(log(energyi)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
          !
          jf = jrot(ilevelf)
          ji = jrot(ileveli)
@@ -3209,15 +3226,19 @@ module spectrum
            n1     = species(1)%nQN(Jpp,Jp-Jpp)
          endif
          !
-         ilog_gamma1 = nint(log(gamma1)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
-         ilog_n = nint(log(gamma1)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
+         ilog_gamma1 = int(log(gamma1)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
+         ilog_n = int(log(n1)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
+         !
+         gamma2 = voigt_gamma
+         !
+         if (Nspecies>1) gamma2 = species(2)%gamma
          !
          if ( trim(species(2)%filename)/="" ) then
            gamma2 = species(2)%gammaQN(Jpp,Jp-Jpp)
          endif
-         ilog_gamma2 = nint(log(gamma2)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
+         ilog_gamma2 = int(log(gamma2)*(1.0_rk/(log(10.0_rk)*0.001_rk))) + 2**14
          !
-         write(gfunit,"(i7,6(1x,i9))") &
+         write(gfunit,*) &
                      ielion,wl2ind,iener,iloggf,ilog_gamma1,ilog_gamma2,ilog_n
      enddo
      !
