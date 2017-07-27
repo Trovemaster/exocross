@@ -1,0 +1,33 @@
+Temperature 296.0 (K)
+Range 1000.0  1100.0 (cm-1)
+
+absorption
+stick
+
+iso 192
+
+gf_factor 0.5d0 (reduce by to be consistent with astro-convention)
+
+phoenix
+
+GF
+
+species 
+ H2  gamma 0.0155 n 0.41 t0 298.0 file 1H2-16O__He_a0_a1.broad ratio 1.0
+ He  gamma 0.1070 n 0.77 t0 298.0 file 1H2-16O__H2_a0_a1.broad ratio 1.0
+end
+
+threshold 1e-25
+
+NRAM 10000000
+NPROCS 8
+
+mass 18.0
+
+
+output 1H2-16O_PHOENIX
+
+States       "1H2-16O__BT2.states"
+Transitions  "1H2-16O__BT2__01000-01500.trans"
+
+verbose 4
