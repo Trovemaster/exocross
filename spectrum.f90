@@ -46,7 +46,7 @@ module spectrum
     real(rk)       :: ratio = 1.0_rk  ! Ratio
     real(rk)       :: T0    = 296_rk  ! Reference T, K
     real(rk)       :: P0    = 1.0_rk  ! Reference P, bar
-    character(len=cl) :: name = "NA"         ! Broadener number of quadrature points
+    character(len=cl) :: name = "NA"         ! Broadener name
     character(len=cl) :: filename=""  ! File name with QN-dependent broadening parameters
     character(len=cl) :: model="const"  ! Broadening model
     real(rk),pointer  :: gammaQN(:,:) ! Voigt parameter gamma as a function of QN
@@ -869,12 +869,12 @@ module spectrum
    use  input
    use VoigtKampff_module
    !
-   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,k,gfunit
+   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,gfunit
    integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff
-   integer(ik) :: Jmax,Jp,Jpp,Kp,Kpp,J_,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll
+   integer(ik) :: Jmax,Jp,Jpp,J_,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll
    real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot
    character(len=cl) :: ioname
    !
@@ -898,7 +898,7 @@ module spectrum
    logical :: eof
    character(len=cl) :: w
    !
-   integer(ik) :: imol,iostat_,irec_length_ph
+   integer(ik) :: imol,iostat_
    real(rk)    :: gf,gi,mem_t,temp_gamma_n
    character(55) ch_q,ch_broad
    !
@@ -2001,7 +2001,7 @@ module spectrum
             !
         case ('PHOEN')
             !
-            call do_gf_oscillator_strength_Phoenix(i,ichunk,iso,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,acoef_ram,abscoef_ram,gfunit)
+            call do_gf_oscillator_strength_Phoenix(i,ichunk,iso,nswap,nlines,energies,Jrot,ilevelf_ram,ileveli_ram,acoef_ram,abscoef_ram,gfunit)
             !
             call TimerStop('Calc')
             cycle loop_tran
@@ -2939,8 +2939,8 @@ module spectrum
      real(rk),intent(in) :: freq(:)
      integer,intent(in)  :: halfwidth_Lorentz
      real(rk),intent(out) :: intens(:)
-     real(rk) :: tranfreq_i,halfwidth_doppler
-     integer(ik) :: ib,ie,ipoint
+     real(rk) :: halfwidth_doppler
+     integer(ik) :: ib,ie
       !
       halfwidth_doppler=dpwcoef*tranfreq
       if (halfwidth_doppler<100.0_rk*small_) return
@@ -3176,25 +3176,20 @@ module spectrum
 
   end subroutine do_stick
 
-  subroutine do_gf_oscillator_strength_Phoenix(itrans,ichunk,iso,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,gf_ram,abscoeff_ram,gfunit)
+  subroutine do_gf_oscillator_strength_Phoenix(itrans,ichunk,iso,nswap,nlines,energies,Jrot,ilevelf_ram,ileveli_ram,gf_ram,abscoeff_ram,gfunit)
      !
      implicit none
      !
      integer(ik),intent(in) :: itrans,ichunk,iso,nswap,nlines,ilevelf_ram(nswap),ileveli_ram(nswap)
      real(rk),intent(in) :: gf_ram(nswap),jrot(nlines),energies(nlines)
      real(rk),intent(in) :: abscoeff_ram(nswap)
-     real(rk)  :: gf,acoef,tranfreq,energyf,energyi,gamma1,gamma2,n1,n2,ji,jf,abscoeff
-     integer(ik),intent(in) :: gtot(nlines),gfunit
+     real(rk)  :: gf,tranfreq,energyf,energyi,gamma1,gamma2,n1,n2,ji,jf,abscoeff
+     integer(ik),intent(in) :: gfunit
      integer(ik) :: i,ileveli,ilevelf,jp,jpp,wl2ind,il,ib,current_blk,irec_length_ph
      !
-     real(rk) :: lambda,ratiolog,g_u
+     real(rk) :: lambda,ratiolog
      !
      integer(kind=2) :: iloggf,ilog_n1,ilog_n2,ilog_gamma1,ilog_gamma2,ielion,iener
-     !type gausslines
-     ! sequence
-     ! integer(kind=4) :: iwl
-     ! integer(kind=2) :: ielion,ielo,igflog,igr,igs,igw,ign
-     !end type
      !
      integer, parameter :: blksize=65536
      type(gauss_linesT) :: oneline(blksize)
@@ -3226,7 +3221,9 @@ module spectrum
      open(unit=gfunit,file=trim(output)//trim(t_fmt)//"_"//trim(c_fmt)//".bin",action='write',status='replace',&
                       form='unformatted',access='direct',recl=irec_length_ph)
      !
-     write(gfunit,iostat=istat,rec=1) nlines_3,iblksize_3,nblock,ibsu
+     if (verbose>=3) write(gfunit,iostat=istat,rec=1) nlines_3,iblksize_3,nblock,ibsu
+     !
+     if (verbose>=3) write(out,"('lines = ',i8,' chunks = ',i8,' block = ',i5)") nswap,nswap / iblksize_3,iblksize_3
      !
      do ib = 1,nswap,blksize
        !
@@ -3239,12 +3236,18 @@ module spectrum
        oneline(:)%igw = -1
        !oneline(:)%ign = -1
        !
-       do il = 1,blksize
+       if (verbose>=4) write(out,"(' block = ',i8)") current_blk
+       !
+       loop_block :  do il = 1,blksize
          !
          if (ib+il==2) cycle
-         i = ib-2+il
          !
-         if (i>nswap) exit
+         ! the wavenumbers are sorted in increasing order, therefore we start from the last 
+         ! to get the libe list sorted with wavelength increasing 
+         !
+         i = nswap - (ib-1+il)
+         !
+         if (i<1) exit
          !
          ilevelf = ilevelf_ram(i)
          ileveli = ileveli_ram(i)
@@ -3304,12 +3307,12 @@ module spectrum
          oneline(il)%igw    = ilog_gamma2
          !oneline(il)%ign = ilog_n2
          !
-         if (verbose>=4) write(out,"(i7,i12,1x,6(1x,i7),f16.6,1x,e16.6,1x,f16.6)") ielion,wl2ind,iener,iloggf,ilog_gamma1,ilog_n1,&
-                                    ilog_gamma2,ilog_n2,tranfreq,abscoeff,energyi
+         if (verbose>=4) write(out,"(i7,i12,1x,6(1x,i7),f16.6,1x,e16.6,1x,f16.6,1x,f16.6)") ielion,wl2ind,iener,iloggf,ilog_gamma1,ilog_n1,&
+                                    ilog_gamma2,ilog_n2,tranfreq,abscoeff,energyi,lambda
          !
          !write(out,"(f16.6,1x,e16.6,1x,f16.6)") tranfreq,abscoeff,energyi
          !
-       enddo
+       enddo loop_block
        !
        current_blk = current_blk+1
        !
