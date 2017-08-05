@@ -433,6 +433,9 @@ module spectrum
                      !
                      call readi(HITRAN%iqn)
                      !
+                     ! to make the QN strt from the 5th column in .states
+                     HITRAN%iqn = HITRAN%iqn - 4
+                     !
                    case ("IERR")
                      !
                      call readi(ierror)
@@ -815,13 +818,13 @@ module spectrum
       !
       npoints0 = nint(real((log(freqr)-log(freql))/resolving_f,rk))+1
       !
-      if (npoints0>npoints) then
+      !if (npoints0>npoints) then
         write(out,"('For the resolving power of ',f15.1,' and range of',2f12.2)") resolving_power,freql,freqr
-        write(out,"('npoints(max) must be > ',i18)") npoints0
-        write(out,"('Consider increasing npoints > ',i15)") npoints
-        write(out,"('Npoints(max) = ln(nu2/nu1)/ln(1+1/R)+1')")
-        stop "Too small number of points for resolving_power and range given!"
-      endif
+        write(out,"('Npoints is',i18)") npoints0
+        !write(out,"('Consider increasing npoints > ',i15)") npoints
+        write(out,"('npoints(max) = ln(nu2/nu1)/ln(1+1/R)+1')")
+        !stop "Too small number of points for resolving_power and range given!"
+      !endif
       !
       npoints = npoints0
       !
@@ -874,8 +877,8 @@ module spectrum
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff
-   integer(ik) :: Jmax,Jp,Jpp,J_,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll
-   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot
+   integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll
+   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_
    character(len=cl) :: ioname
    !
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
@@ -935,8 +938,8 @@ module spectrum
    !
    ! open and count number of lines (levels) in the Energy files
    !
-   if (trim(enrfilename)/="none".and..not.hitran_do) then
-      if (verbose>=2) print('(a,a,a/)'),'Reading energies from ',trim(enrfilename),'...'
+   if (trim(enrfilename)/="NONE".and..not.hitran_do) then
+      if (verbose>=2) print('(/a,a,a/)'),'Reading energies from ',trim(enrfilename),'...'
       !
       write(ioname, '(a)') 'Energy file'
       call IOstart(trim(ioname),enunit)
@@ -1323,7 +1326,9 @@ module spectrum
    if (verbose>=4.and.Nspecies>0) print('(1x,a/)'),'Reading broadening parameters.'
    !
    !Used for indexing the gamma for the fast_voigt
-   JmaxAll = maxval(jrot)
+   JmaxAll = 0
+   if (allocated(jrot)) JmaxAll = nint(maxval(jrot)+0.5_rk)
+   !
    do i =1,Nspecies
      !
      if ( trim(species(i)%filename)/="" ) then
@@ -1333,15 +1338,15 @@ module spectrum
        call IOstart(trim(ioname),bunit)
        open(unit=bunit,file=trim(species(i)%filename),action='read',status='old')
        !
-       Jmax = 0
+       Jmax = JmaxAll
        !
        do
          !
          ! Scan and find Jmax
          read(bunit,*,end=14) ch_broad(1:3),gamma_,n_,J_
          !
-         Jmax = max(Jmax,J_)
-         JmaxAll = max(J_,JmaxAll)
+         Jmax = max(Jmax,nint(J_+0.5_rk))
+         JmaxAll = max(nint(J_+0.5_rk),JmaxAll)
          !
          cycle
          14  exit
@@ -1378,10 +1383,11 @@ module spectrum
          !
          call readu(ch_broad)
          !
-         if (all(trim(ch_broad(1:3))/=(/'A0','A1','J','JJ'/))) then
-           write(out,"('Error, illegal model in .broad: ',a3,' inly a0 and a1 are implemented')") ch_broad(1:3)
-           stop 'Error, illegal model in .broad: '
-         endif
+         ! Ignore all models if not implemented 
+         if (all(trim(ch_broad(1:3))/=(/'A0','A1','J','JJ'/))) cycle 
+         !  write(out,"('Error, illegal model in .broad: ',a3,' inly a0 and a1 are implemented')") ch_broad(1:3)
+         !  stop 'Error, illegal model in .broad: '
+         !endif
          !
          ! model specific read
          !
@@ -1439,17 +1445,18 @@ module spectrum
      !
    enddo
    !
-   allocate(gamma_idx(0:JmaxAll,-1:1))
+   allocate(gamma_idx(0:JmaxAll,-1:1),stat=info)
    call ArrayStart('gamma_idx',info,size(gamma_idx),kind(gamma_idx))
-   allocate(gamma_comb(0:JmaxAll,-1:1))
+   allocate(gamma_comb(0:JmaxAll,-1:1),stat=info)
    call ArrayStart('gamma_comb',info,size(gamma_comb),kind(gamma_comb))
+   !
+   gamma_idx = voigt_gamma
+   gamma_comb = -1
    do i=0,JmaxAll
      do j= max(0,i-1),min(JmaxAll,i+1)    
-      gamma_comb(i,i-j) = get_Voigt_gamma_val(Nspecies,real(i,rk),real(j,rk))
+      gamma_comb(j,i-j) = get_Voigt_gamma_val(Nspecies,real(i,rk),real(j,rk))
      enddo
    enddo
-   !
-   call ArrayStart('gamma_idx',info,size(gamma_idx),kind(gamma_idx))
    if(proftype(1:5) == 'VOI-F') then
      !    
      gamma_idx = 1
@@ -1540,7 +1547,7 @@ module spectrum
    !
    if (lineprofile_do) then
       write(out,"(10x,'Pressure = ',e18.7)") pressure
-      write(out,"(10x,'Voigt parameters:  gamma       n         T0            P0')")
+      write(out,"(10x,'Voigt parameters:   gamma       n         T0            P0')")
       do i =1,Nspecies
         write(out,"(21x,a,4f12.4)") trim(species(i)%name),species(i)%gamma,species(i)%n,species(i)%t0,species(i)%p0
       enddo
@@ -2461,9 +2468,9 @@ module spectrum
    !
    call ArrayStop('frequency')
    call ArrayStop('intens')
-   if (trim(enrfilename)/="none") call ArrayStop('energies')
-   if (trim(enrfilename)/="none") call ArrayStop('Jrot')
-   if (trim(enrfilename)/="none") call ArrayStop('gtot')
+   if (allocated(energies)) call ArrayStop('energies')
+   if (allocated(Jrot)) call ArrayStop('Jrot')
+   if (allocated(gtot)) call ArrayStop('gtot')
    if (specttype(1:4)=='PART') call ArrayStop('pf')
    !
   end subroutine intensity
@@ -3124,7 +3131,7 @@ module spectrum
           !
           ! printing the line width
           !
-          if (Nspecies>0) then
+          if (lineprofile_do) then
             !
             write(out,"(f12.5)",advance="no") halfwidth
             !
