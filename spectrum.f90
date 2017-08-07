@@ -1557,7 +1557,7 @@ module spectrum
      !
      write(ioname, '(a)') 'Phoenix'
      call IOstart(trim(ioname),gfunit)
-     write(out,"('    iel          wv   ener     gf gamma1     n1 gamma2     n2')") 
+     if (verbose>=4) write(out,"('    iel          wv   ener     gf gamma1     n1 gamma2     n2')") 
      !
      if (trim(specttype)/="GF") then 
        write(out,"('Change the spectral type to GF (oscillator strength) for Phoenix'/)")
@@ -1836,13 +1836,13 @@ module spectrum
              if (vibtemperature_do) then
                 !
                 if (trim(specttype)=='ABSORPTION') then 
-                  ivib = ivib_state(ilevelf)
-                  ener_vib = energies_vib(ivib)
-                  ener_rot = energyf-ener_vib
-                else
                   ivib = ivib_state(ileveli)
                   ener_vib = energies_vib(ivib)
                   ener_rot = energyi-ener_vib
+                else
+                  ivib = ivib_state(ilevelf)
+                  ener_vib = energies_vib(ivib)
+                  ener_rot = energyf-ener_vib
                 endif
              endif
              !
