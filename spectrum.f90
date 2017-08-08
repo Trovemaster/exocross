@@ -3,6 +3,7 @@ module spectrum
   use accuracy
   use timer
   use VoigtKampffCollection_module
+  use Phoenix
   !
   implicit none
   !
@@ -74,13 +75,6 @@ module spectrum
     integer(ik) :: Nsym=1                ! Number of symmetries
     !
   end type QNT
-  !
-  ! Phoenix type
-  type gauss_linesT
-   sequence
-   integer(kind=4) :: iwl
-   integer(kind=2) :: ielion,ielo,igflog,igr,igs,igw
-  end type gauss_linesT
   !
   type(selectT),save :: upper(filtermax),lower(filtermax)
   type(QNT),save :: QN
@@ -646,7 +640,7 @@ module spectrum
           !
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
             'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX',&
-            'LIFETIME','VOI-FAST','VOI-FNORM')
+            'LIFETIME','VOI-FAST','VOI-FNORM','VOI-916')
           !
           if (pressure<small_.and.(w(1:3)=='VOI'.or.w(1:3)=='PSE')) then
              ! for pressure= 0 Voigt is repalced by Doppler
@@ -872,7 +866,7 @@ module spectrum
    use  input
    use VoigtKampff_module
    !
-   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems,gfunit
+   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems
    integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
@@ -1457,6 +1451,7 @@ module spectrum
       gamma_comb(j,i-j) = get_Voigt_gamma_val(Nspecies,real(i,rk),real(j,rk))
      enddo
    enddo
+   !
    if(proftype(1:5) == 'VOI-F') then
      !    
      gamma_idx = 1
@@ -1493,7 +1488,7 @@ module spectrum
    !
    select case (trim(proftype(1:5)))
        !
-   case ('GAUSS','DOPPL','LOREN','GAUS0','DOPP0','VOIGT','PSEUD','PSE-R','PSE-L','VOI-Q','VOI-F')
+   case ('GAUSS','DOPPL','LOREN','GAUS0','DOPP0','VOIGT','PSEUD','PSE-R','PSE-L','VOI-Q','VOI-F','VOI-9')
        !
        if (verbose>=2) then
           !
@@ -1555,8 +1550,6 @@ module spectrum
    !
    if ( trim(proftype)=='PHOENIX' ) then
      !
-     write(ioname, '(a)') 'Phoenix'
-     call IOstart(trim(ioname),gfunit)
      if (verbose>=4) write(out,"('    iel          wv   ener     gf gamma1     n1 gamma2     n2')") 
      !
      if (trim(specttype)/="GF") then 
@@ -2008,7 +2001,13 @@ module spectrum
             !
         case ('PHOEN')
             !
-            call do_gf_oscillator_strength_Phoenix(i,ichunk,iso,nswap,nlines,energies,Jrot,ilevelf_ram,ileveli_ram,acoef_ram,abscoef_ram,gfunit)
+            if (Nspecies/=2) then 
+              write(out,"('Phoenix-Error: illegal Nspecies must be 2 not ',i4)") Nspecies
+              stop 'Phoenix-Error: illegal Nspecies '
+            endif
+            !
+            call do_gf_oscillator_strength_Phoenix(i,ichunk,iso,nswap,nlines,energies,Jrot,ilevelf_ram,ileveli_ram,acoef_ram,abscoef_ram,& 
+                                                   jmax,species(1)%gammaQN,species(1)%nQN,species(2)%gammaQN,species(2)%nQN,output)
             !
             call TimerStop('Calc')
             cycle loop_tran
@@ -2150,6 +2149,24 @@ module spectrum
                 halfwidth = gamma_ram(iswap)
                 !
                 call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth,offset,freql,dpwcoef,intens_omp(:,iomp))
+                !
+              enddo
+              !
+            enddo
+            !$omp end parallel do
+            !
+        case ('VOI-9') ! VOIGT-Alg-916
+            !
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                halfwidth = gamma_ram(iswap)
+                !
+                call do_Voigt_916(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,offset,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -2923,7 +2940,6 @@ module spectrum
       ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
       ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
       !
-      !
       !$omp parallel do private(ipoint,tranfreq_i) shared(intens) schedule(dynamic)
       do ipoint=ib,ie
          !
@@ -2954,15 +2970,40 @@ module spectrum
       ib =  max(nint( ( tranfreq-offset-freql)/dfreq +1),1)
       ie =  min(nint( ( tranfreq+offset-freql)/dfreq +1),npoints)
       !
-      
-       call fast_voigt%compute(freq,intens, abscoef,ib,ie,freql,tranfreq,halfwidth_Lorentz)
-
-      
-
+      call fast_voigt%compute(freq,intens, abscoef,ib,ie,freql,tranfreq,halfwidth_Lorentz)
       !
   end subroutine  do_Voigt_Fast
-
-
+  !
+  !
+  subroutine  do_Voigt_916(tranfreq,abscoef,dfreq,freq,halfwidth_Lorentz,dpwcoef,offset,freql,intens)
+     !
+     implicit none
+     !
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth_Lorentz,offset,freql,dpwcoef
+     real(rk),intent(in) :: freq(:)
+     real(rk),intent(out) :: intens(:)
+     real(rk) :: tranfreq_i,halfwidth_doppler
+     integer(ik) :: ib,ie,ipoint
+      !
+      stop 'do_Voigt_916 is not working yet'
+      !
+      halfwidth_doppler=dpwcoef*tranfreq
+      if (halfwidth_doppler<100.0_rk*small_) return
+      ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
+      ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+      !
+      !$omp parallel do private(ipoint,tranfreq_i) shared(intens) schedule(dynamic)
+      do ipoint=ib,ie
+         !
+         tranfreq_i = freq(ipoint)
+         !
+         !intens(ipoint)=intens(ipoint)+voigt_humlicek(tranfreq_i,tranfreq,halfwidth_doppler,halfwidth_Lorentz)*abscoef
+         !
+      enddo
+      !$omp end parallel do
+      !
+  end subroutine  do_Voigt_916
+  !
 
   subroutine  do_rect(tranfreq,abscoef,dfreq,freq,offset,freql,intens)
      !
@@ -3183,177 +3224,6 @@ module spectrum
 
   end subroutine do_stick
 
-  subroutine do_gf_oscillator_strength_Phoenix(itrans,ichunk,iso,nswap,nlines,energies,Jrot,ilevelf_ram,ileveli_ram,gf_ram,abscoeff_ram,gfunit)
-     !
-     implicit none
-     !
-     integer(ik),intent(in) :: itrans,ichunk,iso,nswap,nlines,ilevelf_ram(nswap),ileveli_ram(nswap)
-     real(rk),intent(in) :: gf_ram(nswap),jrot(nlines),energies(nlines)
-     real(rk),intent(in) :: abscoeff_ram(nswap)
-     real(rk)  :: gf,tranfreq,energyf,energyi,gamma1,gamma2,n1,n2,ji,jf,abscoeff
-     integer(ik),intent(in) :: gfunit
-     integer(ik) :: i,ileveli,ilevelf,jp,jpp,wl2ind,il,ib,current_blk,irec_length_ph
-     !
-     real(rk) :: lambda,ratiolog
-     !
-     integer(kind=2) :: iloggf,ilog_n1,ilog_n2,ilog_gamma1,ilog_gamma2,ielion,iener
-     !
-     integer, parameter :: blksize=65536
-     type(gauss_linesT) :: oneline(blksize)
-     !
-     character(len=9) :: c_fmt,t_fmt
-     !
-     integer(ik) :: iblksize_3,nlines_3,nblock,ibsu,istat
-     !
-     ielion = iso
-     !
-     ! for Phoemix conversion a new .bin will be used for each .trans
-     !
-     inquire(iolength=irec_length_ph) oneline
-     !
-     write(t_fmt,'(i5.5)') itrans
-     write(c_fmt,'(i5.5)') ichunk
-     !
-     current_blk = 1
-     iblksize_3 = 65536
-     nlines_3 = nswap
-     nblock =  nswap / iblksize_3
-     if (nswap>nblock*iblksize_3) nblock = nblock + 1
-     !
-     ibsu = 262144 ! value for PIOFS ...
-     !
-     ratiolog = log(1.0_rk+1._rk/2000000.0_rk)
-     !
-     !open(13,file=trim(outfile),form='unformatted',access='direct',recl=irec_length_3,action='write')
-     open(unit=gfunit,file=trim(output)//trim(t_fmt)//"_"//trim(c_fmt)//".bin",action='write',status='replace',&
-                      form='unformatted',access='direct',recl=irec_length_ph)
-     !
-     if (verbose>=3) write(gfunit,iostat=istat,rec=1) nlines_3,iblksize_3,nblock,ibsu
-     !
-     if (verbose>=3) write(out,"('lines = ',i8,' chunks = ',i8,' block = ',i5)") nswap,nswap / iblksize_3,iblksize_3
-     !
-     do ib = 1,nswap,blksize
-       !
-       oneline(:)%iwl = -1
-       oneline(:)%ielion = -1
-       oneline(:)%ielo = -1
-       oneline(:)%igflog = -1
-       oneline(:)%igr = -1
-       oneline(:)%igs = -1
-       oneline(:)%igw = -1
-       !oneline(:)%ign = -1
-       !
-       if (verbose>=4) write(out,"(' block = ',i8)") current_blk
-       !
-       loop_block :  do il = 1,blksize
-         !
-         if (ib+il==2) cycle
-         !
-         ! the wavenumbers are sorted in increasing order, therefore we start from the last 
-         ! to get the libe list sorted with wavelength increasing 
-         !
-         i = nswap - (ib-1+il)
-         !
-         if (i<1) exit
-         !
-         ilevelf = ilevelf_ram(i)
-         ileveli = ileveli_ram(i)
-         gf   = gf_ram(i)
-         abscoeff   = abscoeff_ram(i)
-         energyf = energies(ilevelf)
-         energyi = energies(ileveli)
-         tranfreq = energyf - energyi
-         !
-         lambda = 1e7/tranfreq ! wavelength in nm 
-         !
-         wl2ind = int(log(lambda)/ratiolog+0.5_rk)
-         !
-         !g_l*fij = c2 * Aji * g_u / (c*wn)**2
-         !gf = 1.34738e+21*acoef*g_u / (c*tranfreq)**2
-         !
-         iloggf = int(log(gf)*(1.0_rk/(log(10.0_rk)*0.001_rk)),kind=2) + 2**14
-         iener  = int(log(energyi)*(1.0_rk/(log(10.0_rk)*0.001_rk)),kind=2) + 2**14
-         !
-         jf = jrot(ilevelf)
-         ji = jrot(ileveli)
-         !
-         gamma1 = species(1)%gamma
-         n1     = species(1)%n
-         !
-         Jpp = nint(Ji)
-         Jp  = nint(Jf)
-         !
-         if ( trim(species(1)%filename)/="" ) then
-           gamma1 = species(1)%gammaQN(Jpp,Jp-Jpp)
-           n1     = species(1)%nQN(Jpp,Jp-Jpp)
-         endif
-         !
-         ilog_gamma1 = int(log(gamma1)*(1.0_rk/(log(10.0_rk)*0.001_rk)),kind=2) + 2**14
-         ilog_n1 = int(log(n1)*(1.0_rk/(log(10.0_rk)*0.001_rk)),kind=2) + 2**14
-         !
-         gamma2 = voigt_gamma
-         !
-         if (Nspecies>1) then 
-            gamma2 = species(2)%gamma
-            !
-            if ( trim(species(2)%filename)/="" ) then
-              gamma2 = species(2)%gammaQN(Jpp,Jp-Jpp)
-              n2     = species(2)%nQN(Jpp,Jp-Jpp)
-            endif
-         endif
-         !
-         ilog_gamma2 = int(log(gamma2)*(1.0_rk/(log(10.0_rk)*0.001_rk)),kind=2) + 2**14
-         ilog_n2 = int(log(n2)*(1.0_rk/(log(10.0_rk)*0.001_rk)),kind=2) + 2**14
-         !
-         oneline(il)%iwl    = wl2ind
-         oneline(il)%ielion = ielion
-         oneline(il)%ielo   = iener
-         oneline(il)%igflog = iloggf
-         oneline(il)%igr    = ilog_gamma1
-         oneline(il)%igs    = ilog_n1
-         oneline(il)%igw    = ilog_gamma2
-         !oneline(il)%ign = ilog_n2
-         !
-         if (verbose>=4) write(out,"(i7,i12,1x,6(1x,i7),f16.6,1x,e16.6,1x,f16.6,1x,f16.6)") ielion,wl2ind,iener,iloggf,ilog_gamma1,ilog_n1,&
-                                    ilog_gamma2,ilog_n2,tranfreq,abscoeff,energyi,lambda
-         !
-         !write(out,"(f16.6,1x,e16.6,1x,f16.6)") tranfreq,abscoeff,energyi
-         !
-       enddo loop_block
-       !
-       current_blk = current_blk+1
-       !
-       write(gfunit,rec=current_blk) oneline
-       !
-     enddo
-     !
-     oneline(:)%iwl = -1
-     oneline(:)%ielion = -1
-     oneline(:)%ielo = -1
-     oneline(:)%igflog = -1
-     oneline(:)%igr = -1
-     oneline(:)%igs = -1
-     oneline(:)%igw = -1
-     !
-     current_blk = current_blk+1
-     !
-     write(gfunit,rec=current_blk) oneline
-     !
-     !write(gfunit,rec=ib) int(-1,kind=2),int(-1,kind=4),int(-1,kind=2),int(-1,kind=2),int(-1,kind=2),int(-1,kind=2),int(-1,kind=2)
-     !
-     close(gfunit,status='keep')
-     !
-     !ielion, wl, gf-value, xi, igr, igs, igw
-     !where ielion: internal code of the molecule for Phoenix,
-     !wl:wavelength,
-     !xi:lower state energy,
-     !gf-value: log gf coded in integer format,
-     !igr: natural width constant,
-     !igs: Stark broadening constant,
-     !igw: van der Waals damping constants.
-     !igr for gamma0 and igs for n (Voigt parameters)
-     !
-  end subroutine do_gf_oscillator_strength_Phoenix
 
 
   subroutine voi_quad(npoints,ib,ie,freq,abscoef,intens,dfreq,tranfreq,alpha,gamma,nquad,abciss,weight)
@@ -3541,7 +3411,7 @@ module spectrum
    !w = exp(-z**2)*(1.0_rk-erfc(z))
    !
   end function voigt_faddeeva
-
+  !
   function voigt_humlicek(nu,nu0,alpha,gamma) result(f)
    !
    real(rk),intent(in) :: nu,nu0,alpha,gamma
