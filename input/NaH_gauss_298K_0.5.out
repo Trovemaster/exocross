@@ -1,0 +1,65 @@
+Read the input
+Temperature  296.0
+Range 0.0  25000.0
+
+
+Npoints 25001
+
+
+absorption
+
+
+Gaussian
+
+
+HWHM 0.5 (cm-1)
+
+
+output NaH_abs_gauss_0.5
+
+
+States 23Na-1H__Rivlin.states
+
+
+Transitions 23Na-1H__Rivlin.trans
+Reading energies from 23Na-1H__Rivlin.states...
+
+ ... reading energies done!
+
+ ! partition function value is   3.46604492E+02
+
+
+Cross-sections using GAUSSIAN profile with HWHM =        0.50000000
+          Number of grid points =    25001
+          Range =          0.0000000-     25000.0000000
+          Temperature =        296.0000000
+          Partition function =          346.6045
+          Spectrum type = ABSORPTION
+
+
+Total intensity  (sum):  3.44610299E-14 (int):  3.44610299E-14
+
+
+ Memory Report:
+ Active Arrays                                        size (GiB)
+ indices                                                 0.000012                
+ quantum_numbers                                         0.000012                
+ gamma_idx                                               0.000003                
+ gamma_comb                                              0.000003                
+ swap:intens_omp                                         0.000186                
+ Total memory   =                                     0.00022043 GiB
+ Maximal memory =                                     0.00065517 GiB (             8.0)
+
+ (       13 arrays contributing less than 1% are not shown)
+
+
+              Timing data at 2017/08/05 01:04:14
+
+                                            Total time (seconds)  Self time (seconds)
+ Timer                               Calls  --------------------  -------------------
+ -----                               -----       Real       CPU        Real       CPU
+
+ Spectrum                               1.        2.1       2.1         1.4       1.4
+ Calc                                 799.        0.7       0.7         0.7       0.7
+
+Press any key to continue . . . 

@@ -1,0 +1,12 @@
+Temperature 1000.0 (K)
+Range 100.  10000.0 (cm-1)
+
+R 50000
+
+absorption
+bin
+
+Output 14N-16O__NOname_1000K_R100K
+
+States       14N-16O__NOname.states
+Transitions  14N-16O__NOname.trans

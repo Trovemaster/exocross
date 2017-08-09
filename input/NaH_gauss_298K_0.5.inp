@@ -1,0 +1,16 @@
+Temperature  296.0
+Range 0.0  25000.0
+
+Npoints 25001
+
+absorption
+
+Gaussian
+
+HWHM 0.5 (cm-1)
+
+output NaH_abs_gauss_0.5
+
+States 23Na-1H__Rivlin.states
+
+Transitions 23Na-1H__Rivlin.trans

@@ -1,0 +1,27 @@
+Temperature 1000.0 (K)
+Range 0.  10000.0 (cm-1)
+
+Npoints 10001
+
+
+absorption
+voigt 
+
+pressure  10.0 (bar)
+
+mass 40. 
+
+offset 25.0
+
+species
+ air   gamma 0.045  n 0.70 t0 296.0 file 14N-16O__air.broad  delta 0.000
+end
+
+Ncache 100
+
+
+
+Output 14N-16O_SL_1000K_Voigt_P10
+
+States       14N-16O__NOname.states
+Transitions  14N-16O__NOname.trans

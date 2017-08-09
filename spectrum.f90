@@ -2997,7 +2997,7 @@ module spectrum
          !
          tranfreq_i = freq(ipoint)
          !
-         !intens(ipoint)=intens(ipoint)+voigt_humlicek(tranfreq_i,tranfreq,halfwidth_doppler,halfwidth_Lorentz)*abscoef
+         intens(ipoint)=intens(ipoint)+voigt_humlicek(tranfreq_i,tranfreq,halfwidth_doppler,halfwidth_Lorentz)*abscoef
          !
       enddo
       !$omp end parallel do

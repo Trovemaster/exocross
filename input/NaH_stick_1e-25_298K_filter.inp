@@ -1,0 +1,16 @@
+Temperature 296 
+Range 0.0  25000.0
+
+absorption
+stick
+threshold 1e-28
+
+filter 
+ lower  6  X  upper  6  A
+end
+
+
+Output NaH_298K_1e-25_filter
+
+States 23Na-1H__Rivlin.states
+Transitions 23Na-1H__Rivlin.trans

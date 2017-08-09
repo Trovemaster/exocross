@@ -1,0 +1,12 @@
+Temperature 296 
+Range 0.0  5000.0
+
+absorption
+stick
+threshold 1e-25
+
+
+output 40Ca-1H__Yadin_296K
+
+States 40Ca-1H__Yadin.states
+Transitions 40Ca-1H__Yadin.trans

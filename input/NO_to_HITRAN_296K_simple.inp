@@ -1,0 +1,9 @@
+Temperature 296.0 (K)
+Range 0.  30000.0 (cm-1)
+
+HITRAN write
+
+Output 14N-16O__NOname_simple
+
+States       14N-16O__NOname.states
+Transitions  14N-16O__NOname.trans
