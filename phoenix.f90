@@ -22,7 +22,8 @@ module Phoenix
   contains
 
 
-  subroutine do_gf_oscillator_strength_Phoenix(itrans,ichunk,iso,nswap,nlines,energies,Jrot,ilevelf_ram,ileveli_ram,gf_ram,abscoeff_ram,jmax,gamma_1,n_1,gamma_2,n_2,output)
+  subroutine do_gf_oscillator_strength_Phoenix(itrans,ichunk,iso,nswap,nlines,energies,Jrot,ilevelf_ram,ileveli_ram,gf_ram,&
+             abscoeff_ram,jmax,gamma_1,n_1,gamma_2,n_2,output)
      !
      implicit none
      !
@@ -73,7 +74,7 @@ module Phoenix
      !
      write(gfunit,iostat=istat,rec=1) nlines_3,iblksize_3,nblock,ibsu
      !
-     if (verbose>=3) write(out,"('lines = ',i8,' chunks = ',i8,' block = ',i5)") nswap,nswap / iblksize_3,iblksize_3
+     if (verbose>=3) write(out,"('lines = ',i8,' chunks = ',i8,' block = ',i5)") nswap,nswap/iblksize_3,iblksize_3
      !
      do ib = 1,nswap,blksize
        !
@@ -151,7 +152,8 @@ module Phoenix
          oneline(il)%igw    = ilog_gamma2
          !oneline(il)%ign = ilog_n2
          !
-         if (verbose>=4) write(out,"(i7,i12,1x,6(1x,i7),f16.6,1x,e16.6,1x,f16.6,1x,f16.6)") ielion,wl2ind,iener,iloggf,ilog_gamma1,ilog_n1,&
+         if (verbose>=4) write(out,"(i7,i12,1x,6(1x,i7),f16.6,1x,e16.6,1x,f16.6,1x,f16.6)") ielion,wl2ind,iener,& 
+                                    iloggf,ilog_gamma1,ilog_n1,&
                                     ilog_gamma2,ilog_n2,tranfreq,abscoeff,energyi,lambda
          !
          !write(out,"(f16.6,1x,e16.6,1x,f16.6)") tranfreq,abscoeff,energyi

@@ -2006,8 +2006,9 @@ module spectrum
               stop 'Phoenix-Error: illegal Nspecies '
             endif
             !
-            call do_gf_oscillator_strength_Phoenix(i,ichunk,iso,nswap,nlines,energies,Jrot,ilevelf_ram,ileveli_ram,acoef_ram,abscoef_ram,& 
-                                                   jmax,species(1)%gammaQN,species(1)%nQN,species(2)%gammaQN,species(2)%nQN,output)
+            call do_gf_oscillator_strength_Phoenix(i,ichunk,iso,nswap,nlines,energies,Jrot,ilevelf_ram,ileveli_ram,&
+                                                   acoef_ram,abscoef_ram,jmax,species(1)%gammaQN,&
+                                                   species(1)%nQN,species(2)%gammaQN,species(2)%nQN,output)
             !
             call TimerStop('Calc')
             cycle loop_tran
