@@ -1,0 +1,14 @@
+Temperature 2000.0 (K)
+Range 0.  35000.0 (cm-1)
+
+absorption (type)
+Gaussian    (line profile)
+
+hwhm 0.1 (half-width at half-maximum cm-1)
+
+offset 25 (cm-1)
+
+output VO_1500K
+
+States       51V-16O__VOMYT.states
+Transitions  51V-16O__VOMYT__30000-35000.trans

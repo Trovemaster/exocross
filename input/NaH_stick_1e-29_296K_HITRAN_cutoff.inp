@@ -1,0 +1,12 @@
+Temperature 296 
+Range 0.0  30000.0
+
+absorption
+stick
+
+cutoff HITRAN (I_crit) 1e-29  nu_crit 2000
+
+Output NaH_298K_1e-25_Icrit
+
+States 23Na-1H__Rivlin.states
+Transitions 23Na-1H__Rivlin.trans

@@ -1,0 +1,26 @@
+Temperature 296.0 (K)
+Range 0.  30000.0 (cm-1)
+
+iso 81
+pressure  1.0
+
+HITRAN write
+
+species
+ air   gamma 0.045  n 0.70 t0 296.0 file 14N-16O__air.broad  delta 0.000
+end
+
+
+HITRAN  write
+ error-E  qn 10 ierr 4  vmax  10 ierr 3  vmax  20 ierr 2  vmax  30  ierr 1 vmax 100
+ error-S  qn 10 ierr 5  vmax  10 ierr 4  vmax  20 ierr 3  vmax  100
+ error-Air   ierr 4
+ error-self  ierr 4
+ error-n     ierr 4
+ error-delta ierr 0
+end
+
+Output 14N-16O__NOname
+
+States       14N-16O__NOname.states
+Transitions  14N-16O__NOname.trans

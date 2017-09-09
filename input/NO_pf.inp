@@ -1,0 +1,8 @@
+partfunc
+ tempmax 2000
+ ntemps  200
+end
+
+output 14N16O_2000K
+
+States       14N-16O__NOname.states

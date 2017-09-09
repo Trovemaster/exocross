@@ -1,0 +1,26 @@
+Temperature  1500.0
+Range 0.0   1000.0
+Npoints  10001
+
+emission
+doppler
+mass 16.0313
+
+abundance 0.97
+
+output dop_emiss_1500
+
+States  12C-1H4__YT10to10.states
+
+Transitions
+  12C-1H4__YT10to10__00000-00100.trans
+  12C-1H4__YT10to10__00100-00200.trans
+  12C-1H4__YT10to10__00200-00300.trans
+  12C-1H4__YT10to10__00300-00400.trans
+  12C-1H4__YT10to10__00400-00500.trans
+  12C-1H4__YT10to10__00500-00600.trans
+  12C-1H4__YT10to10__00600-00700.trans
+  12C-1H4__YT10to10__00700-00800.trans
+  12C-1H4__YT10to10__00800-00900.trans
+  12C-1H4__YT10to10__00900-01000.trans
+end

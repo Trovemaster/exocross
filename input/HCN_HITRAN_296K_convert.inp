@@ -1,0 +1,20 @@
+Temperature 296.0
+Range 0.  10000.0
+
+iso 231
+pressure  1.0
+
+HITRAN write
+
+species
+ air   gamma 0.0155 n 0.41 t0 296.0 file 1H-12C-14N__air.broad  delta 0.000
+ self  gamma 0.1070 n 0.77 t0 296.0                             delta 0.000
+end
+
+output HCN_HITRAN_296K
+
+abundance 0.97
+
+
+States 1H-12C-14N__Harris.states
+Transitions 1H-12C-14N__Harris.trans
