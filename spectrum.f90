@@ -53,7 +53,7 @@ module spectrum
     real(rk),pointer  :: gammaQN(:,:) ! Voigt parameter gamma as a function of QN
     real(rk),pointer  :: nQN(:,:)     ! Voigt parameter n as a function of QN
     real(rk)          :: delta = 0    ! Pressure shift induced by air, referred to p=1 atm
-
+    logical           :: if_defined = .false. ! used to check if this broadenerer is taken fron SPECIES
     !
   end type speciesT
 
@@ -70,7 +70,8 @@ module spectrum
   type QNT ! broadener
     !
     integer(ik) :: Kcol=1                ! Column with K 
-    integer(ik) :: vibcol(2)=1           ! Range of columns with vib quanta 
+    integer(ik) :: statecol=7            ! State column
+    integer(ik) :: vibcol(2)=8           ! Range of columns with vib quanta 
     integer(ik) :: Nmodes= 1             ! Number of vib modes
     integer(ik) :: Nsym=1                ! Number of symmetries
     !
@@ -341,6 +342,10 @@ module spectrum
                 QN%Vibcol(2) = QN%Vibcol(1)
                 !
               endif
+              !
+            case ("STATE","STATES")
+              !
+              call readi(QN%statecol)
               !
             case default
               !
@@ -721,6 +726,8 @@ module spectrum
                 !
                 call readf(species(i)%gamma)
                 !
+                species(i)%if_defined = .true.
+                !
               case ("N")
                 !
                 call readf(species(i)%N)
@@ -747,6 +754,8 @@ module spectrum
                 !
                 species(i)%filename = trim(w)
                 call upcase(w)
+                !
+                species(i)%if_defined = .true.
                 !
               case ("MODEL")
                 !
@@ -830,8 +839,13 @@ module spectrum
     endif
     !
     if (if_species_defined.and.if_halfwidth_defined) then
-      write(out,"('Input Error: HWHM cannot be used together with SPECIES, choose one')")
-      stop 'Input Error: HWHM cannot be used together with Species, choose one'
+      write(out,"('Input Error: HWHM cannot be used together with SPECIES')")
+      stop 'Input Error: HWHM cannot be used together with Species'
+    endif
+    !
+    if (if_species_defined.and.trim(proftype)=="VOI-FAST") then
+      write(out,"('Input Error: VOI-FAST cannot be used together with SPECIES')")
+      stop 'Input Error: VOI-FAST cannot be used together with Species'
     endif
     !
     if (vibtemperature_do.and..not.if_QN_defined) then 
@@ -1444,7 +1458,7 @@ module spectrum
    allocate(gamma_comb(0:JmaxAll,-1:1),stat=info)
    call ArrayStart('gamma_comb',info,size(gamma_comb),kind(gamma_comb))
    !
-   gamma_idx = voigt_gamma
+   gamma_idx = 1
    gamma_comb = -1
    do i=0,JmaxAll
      do j= max(0,i-1),min(JmaxAll,i+1)    
@@ -1459,7 +1473,6 @@ module spectrum
      !Combine all the gammas
      do i=0,JmaxAll
       do j= max(0,i-1),min(JmaxAll,i+1) 
-       
        call fast_voigt%generate_indices(gamma_comb(i,i-j),gamma_idx(i,i-j),JmaxAll)
       enddo
      enddo  
@@ -1640,31 +1653,40 @@ module spectrum
            !
            ! using pre-computed integrated intensities for a given Temperature and bin
            !
-           do iswap = 1,N_to_RAM
+           iswap_ = 0
+           !
+           do while(iswap_<N_to_RAM)
              !
              !   read new line from intensities file
-             read(tunit,*,end=118) nu_ram(iswap),abscoef_RAM(iswap)
+             read(tunit,*,end=118) tranfreq,abscoef
+             !
+             if (tranfreq<small_) cycle
+             !
+             if (tranfreq<freql.or.tranfreq>freqr) cycle
+             !
+             iswap_ = iswap_ + 1
+             !
+             nu_ram(iswap_) = tranfreq
+             abscoef_RAM(iswap_) = abscoef
              !
              if (lineprofile_do) then
-               gamma_RAM(iswap)=halfwidth
-               gamma_idx_RAM(iswap) = 0
+               gamma_RAM(iswap_)=halfwidth
+               gamma_idx_RAM(iswap_) = 0
              endif
              !
              cycle
              !
            118 continue
-             !
-             nswap_ = iswap-1
-             !
+             nswap = iswap_-1
              eof = .true.
-             !
              exit
-             !
            enddo
            !
-           intband = intband + sum(abscoef_RAM(1:nswap_))
+           nswap = iswap_
            !
-           if (nswap_<1) then
+           intband = intband + sum(abscoef_RAM(1:nswap))
+           !
+           if (nswap<1) then
               if (verbose>=5.and.proftype(1:5)/="STICK") write(out,"('... Finish swap')")
               exit loop_tran
            endif
@@ -1675,8 +1697,6 @@ module spectrum
              Ji = IntJvalue(i)
              Jf = Ji
            endif
-           !
-           nswap = nswap_
            !
         elseif (hitran_do) then
            !
@@ -1708,6 +1728,8 @@ module spectrum
              !
              if (tranfreq<small_) cycle
              !
+             if (tranfreq<freql.or.tranfreq>freqr) cycle
+             !
              iswap_ = iswap_ + 1
              !
              abscoef_ram(iswap_)=cmcoef*acoef*gf*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
@@ -1723,15 +1745,12 @@ module spectrum
                !
                Jf = 1000.0_rk
                Ji = 1000.0_rk
-               if (Nspecies==0) then
-                 species(1)%gamma = gamma_
-                 species(1)%n = n_
-                 species(2)%gamma = gamma_s
-                 species(2)%n = 0
-               endif
+               species(1)%gamma = gamma_
+               species(1)%n = n_
+               species(2)%gamma = gamma_s
+               species(2)%n = 0
                !
                gamma_RAM(iswap_) = get_Voigt_gamma_n(Nspecies_,Jf,Ji)
-               temp_gamma_n = get_Voigt_gamma_n(Nspecies_,Jf,Ji,gamma_idx_RAM(iswap_))
                !
              endif
              !
@@ -1745,7 +1764,7 @@ module spectrum
            !
            nswap = iswap_
            !
-           intband = intband + sum(abscoef_RAM(1:nswap_))
+           intband = intband + sum(abscoef_RAM(1:nswap))
            !
            if (nswap<1) then
               if (verbose>=5) write(out,"('... Finish swap')")
@@ -1877,10 +1896,10 @@ module spectrum
                ! emission coefficient [Ergs/mol/Sr]
                !
                if (.not.vibtemperature_do) then
-                  abscoef=emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-beta*energyf)*tranfreq/(partfunc)
+                  abscoef=emcoef*acoef*gtot(ilevelf)*exp(-beta*energyf)*tranfreq/(partfunc)
                else 
                   ! split into a product of vib and rot parts 
-                  abscoef=emcoef*acoef*gtot(ilevelf)/real(2*ji+1,rk)*real(2*jf+1,rk)*exp(-c2/temp*ener_rot)*&
+                  abscoef=emcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*&
                           exp(-c2/temp_vib*ener_vib)*tranfreq/(partfunc)
                   !
                endif 
@@ -2869,6 +2888,8 @@ module spectrum
      ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
      ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
      !
+     if (ie<=ib) return
+     !
      alpha = halfwidth0
      gamma = halfwidth
      !
@@ -2940,6 +2961,8 @@ module spectrum
       if (halfwidth_doppler<100.0_rk*small_) return
       ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
       ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+      !
+      if (ie<=ib) return
       !
       !$omp parallel do private(ipoint,tranfreq_i) shared(intens) schedule(dynamic)
       do ipoint=ib,ie
@@ -3299,42 +3322,38 @@ module spectrum
      real(rk) :: halfwidth,gamma_,n_,f
      integer(ik) :: ispecies,Jpp,Jp
      integer(ik),optional,intent(inout) :: idx
-     !
-     halfwidth = 0
      Jpp = nint(Ji)
      Jp  = nint(Jf)
-     if(present(idx)) then
-        !
-      idx = gamma_idx(Jpp,Jp-Jpp)
-        f = gamma_comb(Jpp,Jp-Jpp)
-      return
-     endif
-     !     
-     f = gamma_comb(Jpp,Jp-Jpp)
-     return     
      !
-     do ispecies =1,Nspecies
+     if (species(1)%if_defined) then
        !
-       if ( trim(species(ispecies)%filename)/="" ) then
-         !
-         Jpp = nint(Ji)
-         Jp  = nint(Jf)
-         !
-         gamma_ = species(ispecies)%gammaQN(Jpp,Jp-Jpp)
-         n_     = species(ispecies)%nQN(Jpp,Jp-Jpp)
-         !
-       else
-         !
-         gamma_ = species(ispecies)%gamma
-         n_     = species(ispecies)%n
-         !
+       if(present(idx)) then
+          !
+          idx = gamma_idx(Jpp,Jp-Jpp)
+          f   = gamma_comb(Jpp,Jp-Jpp)
+          return
+          !
        endif
+       !     
+       f = gamma_comb(Jpp,Jp-Jpp)
+       return
        !
-       halfwidth =  halfwidth + species(ispecies)%ratio*gamma_*(species(ispecies)%T0/Temp)**N_*pressure/species(ispecies)%P0
+     else
        !
-     enddo
-     !
-     f = halfwidth
+       halfwidth = 0
+       !
+       do ispecies =1,Nspecies
+           !
+           gamma_ = species(ispecies)%gamma
+           n_     = species(ispecies)%n
+           !
+           halfwidth =  halfwidth + species(ispecies)%ratio*gamma_*(species(ispecies)%T0/Temp)**N_*pressure/species(ispecies)%P0
+           !
+       enddo
+       !
+       f = halfwidth
+       !
+     endif
      !
   end function get_Voigt_gamma_n
  
