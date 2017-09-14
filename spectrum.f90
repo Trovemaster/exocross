@@ -96,7 +96,7 @@ module spectrum
   logical :: completed_work = .true.
   logical :: all_done = .false.
   
-   type(VoigtKampffCollection) :: fast_voigt
+   type(VoigtKampffCollection),save :: fast_voigt
   
   
   !
