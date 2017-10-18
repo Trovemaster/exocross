@@ -27,7 +27,7 @@ LAPACK = -static
 
 ###############################################################################
 
-OBJ =  accuracy.o  timer.o input.o spectrum.o  VoigtKampffCollection_module.o
+OBJ =  accuracy.o  timer.o input.o spectrum.o  VoigtKampff.o
 
 xsec.x:	$(OBJ) crosssections.o 
 	$(FOR) -o j-xsec$(PLAT).x $(OBJ) $(FFLAGS) crosssections.o $(LIB) -static
@@ -35,7 +35,7 @@ xsec.x:	$(OBJ) crosssections.o
 crosssections.o:	crosssections.f90 $(OBJ) 
 	$(FOR) -c crosssections.f90 $(FFLAGS)
 
-spectrum.o:	spectrum.f90 accuracy.o input.o  VoigtKampffCollection_module.o
+spectrum.o:	spectrum.f90 accuracy.o input.o  VoigtKampff.o
 	$(FOR) -c spectrum.f90 $(FFLAGS)
 
 accuracy.o:  accuracy.f90
@@ -47,8 +47,8 @@ timer.o:  timer.f90
 input.o:  input.f90
 	$(FOR) -c input.f90 $(FFLAGS)
 
-VoigtKampffCollection_module.o: VoigtKampff/VoigtKampffCollection_module.f90 accuracy.o
-	$(FOR) -c VoigtKampff/VoigtKampffCollection_module.f90 $(FFLAGS)	
+VoigtKampff.o: VoigtKampff.f90 accuracy.o
+	$(FOR) -c VoigtKampff.f90 $(FFLAGS)	
 
 clean:
 	rm $(OBJ) *.mod duo.o

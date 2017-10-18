@@ -26,7 +26,7 @@ module spectrum
   integer(ik)   :: nquad = 20      ! Number of quadrature points
   integer(hik)   :: N_to_RAM = -1000 ! Lines to keep in RAM
   !
-  character(len=cl) :: specttype="ABSORPTION",enrfilename="NONE",intfilename(nfiles_max),proftype="DOPPL",output="output"
+  character(len=cl) :: specttype="ABSORPTION",enrfilename="NONE",intfilename(nfiles_max),proftype="DOPPL",output="output",pffilename="NONE"
   integer(ik)   :: intJvalue(nfiles_max)
   character(4) a_fmt
   character(9) b_fmt
@@ -143,7 +143,15 @@ module spectrum
           !
         case ("TEMPERATURE","TEMP")
           !
+          if (Nitems<2) then
+              call report ("Temperatue value is not given"//trim(w),.true.)
+          endif 
+          !
           call readf(temp)
+          !
+          if (temp<small_) then
+              call report ("Illegal Temperatue (must be positive>0)"//trim(w),.true.)
+          endif 
           !
           if (Nitems>2) then 
              !
@@ -556,6 +564,10 @@ module spectrum
           !
           write(my_fmt,'(a,a4,a,a4,a)')  '(1x,2es16.8,1x,f5.1,1x,f12.4," <- ",f5.1,1x,f12.4,5x,',a_fmt,'," <-  ",',a_fmt,'))'
           !
+       case ("PFFILE")
+          !
+          call reada(pffilename)
+          !
        case ("STATES","STATESFILE","STATEFILE","STATES_FILE","STATES-FILE")
           !
           call reada(enrfilename)
@@ -880,13 +892,13 @@ module spectrum
    use  input
    use VoigtKampff_module
    !
-   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems
+   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems
    integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff
    integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll
-   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_
+   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,h,a,b
    character(len=cl) :: ioname
    !
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
@@ -1114,6 +1126,35 @@ module spectrum
       ! start reading the energies
       !
       if (verbose>=4) write(out,'(/"|",5x,"J",5x," Parition function")')
+      !
+      if (trim(pffilename)/='NONE'.and.proftype(1:4)/='PART') then 
+        if (verbose>=2) print('(/a,a,a/)'),'Reading pf from ',trim(pffilename),'...'
+        !
+        write(ioname, '(a)') 'PF file'
+        call IOstart(trim(ioname),pfunit)
+        open(unit=pfunit,file=trim(pffilename),action='read',status='old')
+        !
+        pf_1 = 0
+        pf_2 = 0
+        T_1 = 0
+        T_2 = 0
+        do while (T_2<Temp)
+         T_1 = T_2 ; pf_1 = pf_2
+         read(pfunit,*,end=31) t_2,pf_2
+        enddo
+        !
+        31 continue
+        !
+        ! From Numerical Recipes in Fortran 77
+        h=T_2-T_1
+        if (h==0._rk) stop 'bad xa input in splint'
+        a=(T_2-temp)/h
+        b=(temp-T_1)/h
+        partfunc=a*pf_1+b*pf_2+((a**3-a)*pf_1+(b**3-b)*pf_2)*(h**2)/6._rk
+        !
+        partfunc_do = .false.
+        !
+      endif
       !
       do
          !
@@ -1824,14 +1865,6 @@ module spectrum
              energyf = energies(ilevelf)
              energyi = energies(ileveli)
              !
-             if (energyf-energyi<-1e1) then
-               write(out,"('Error Ei>Ef: i,f,indi,indf,Aif,Ef,Ei = ',4i12,2x,3es16.8)") ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
-               stop 'wrong order of indices'
-               cycle loop_swap
-             elseif (energyf-energyi<small_) then
-               cycle loop_swap
-             endif
-             !
              if (filter) then
                !
                do ifilter = 1,Nfilters
@@ -1871,6 +1904,14 @@ module spectrum
              endif
              !
              if (tranfreq0<freql.or.tranfreq0>freqr) cycle
+             !
+             if (energyf-energyi<-1e1) then
+               write(out,"('Error Ei>Ef: i,f,indi,indf,Aif,Ef,Ei = ',4i12,2x,3es16.8)") ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
+               stop 'wrong order of indices'
+               cycle loop_swap
+             elseif (energyf-energyi<small_) then
+               cycle loop_swap
+             endif
              !
              select case (trim(specttype))
                !
