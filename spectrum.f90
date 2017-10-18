@@ -1125,37 +1125,6 @@ module spectrum
       !
       ! start reading the energies
       !
-      if (verbose>=4) write(out,'(/"|",5x,"J",5x," Parition function")')
-      !
-      if (trim(pffilename)/='NONE'.and.proftype(1:4)/='PART') then 
-        if (verbose>=2) print('(/a,a,a/)'),'Reading pf from ',trim(pffilename),'...'
-        !
-        write(ioname, '(a)') 'PF file'
-        call IOstart(trim(ioname),pfunit)
-        open(unit=pfunit,file=trim(pffilename),action='read',status='old')
-        !
-        pf_1 = 0
-        pf_2 = 0
-        T_1 = 0
-        T_2 = 0
-        do while (T_2<Temp)
-         T_1 = T_2 ; pf_1 = pf_2
-         read(pfunit,*,end=31) t_2,pf_2
-        enddo
-        !
-        31 continue
-        !
-        ! From Numerical Recipes in Fortran 77
-        h=T_2-T_1
-        if (h==0._rk) stop 'bad xa input in splint'
-        a=(T_2-temp)/h
-        b=(temp-T_1)/h
-        partfunc=a*pf_1+b*pf_2+((a**3-a)*pf_1+(b**3-b)*pf_2)*(h**2)/6._rk
-        !
-        partfunc_do = .false.
-        !
-      endif
-      !
       do
          !
          call read_line(eof,enunit) ; if (eof) exit
@@ -1340,6 +1309,39 @@ module spectrum
       if (verbose>=2) print('(1x,a/)'),'... reading energies done!'
       !
    endif  ! end of processing the states files
+   !
+   if (trim(pffilename)/='NONE'.and.proftype(1:4)/='PART') then 
+     if (verbose>=2) print('(/a,a,a/)'),'Reading pf from ',trim(pffilename),'...'
+     !
+     write(ioname, '(a)') 'PF file'
+     call IOstart(trim(ioname),pfunit)
+     open(unit=pfunit,file=trim(pffilename),action='read',status='old')
+     !
+     pf_2 = 1.0_rk
+     if (trim(enrfilename)/="NONE") pf_2 = gtot(1)
+     T_1 = 0
+     T_2 = 0
+     do while (T_2<Temp)
+      T_1 = T_2 ; pf_1 = pf_2
+      read(pfunit,*,end=31) t_2,pf_2
+      !
+      cycle
+      !
+      31 continue
+      !
+      write(out,"('The tempreture requested ',f12.4,' is > Tmax=',f9.2,'K of ',a)") Temp,t_2,trim(pffilename)
+      write(out,"('The PF-file is not applicable, consider providing the PF value (keyword PF) explicitly or letting exocross do it (no PF keyword needed).')")
+      stop 'The PF-file is not applicable'
+     enddo
+     !
+     ! From Numerical Recipes in Fortran 77
+     h=T_2-T_1
+     if (h==0._rk) stop 'bad xa input in splint'
+     a=(T_2-temp)/h
+     b=(temp-T_1)/h
+     partfunc=a*pf_1+b*pf_2+((a**3-a)*pf_1+(b**3-b)*pf_2)*(h**2)/6._rk
+     !
+   endif
    !
    if (verbose>=2.or.(partfunc_do.and.verbose>0)) print('(1x,a,1x,es16.8/)'),'! partition function value is',partfunc
    !
