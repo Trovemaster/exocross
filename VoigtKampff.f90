@@ -1,4 +1,4 @@
-module VoigtKampffCollection_module
+module VoigtKampff
     use accuracy
     implicit none
 
@@ -11,7 +11,7 @@ module VoigtKampffCollection_module
     real(rk),parameter    ::    REFERENCE_NU0 = 1.0
     real(rk),parameter    ::    DISTANCE_MAGIC_NUMBER = 2.0
 
-    type ::        VoigtKampff
+    type ::        VoigtKampffT
         private
         integer(ik)    ::    m_Npoints
         real(rk)    ::    m_res
@@ -40,7 +40,7 @@ module VoigtKampffCollection_module
     
     type ::	 VoigtKampffCollection
 
-        type(VoigtKampff),allocatable :: fast_voigts(:)
+        type(VoigtKampffT),allocatable :: fast_voigts(:)
         integer(ik) :: capacity
         integer(ik) :: n
         logical     :: normalize
@@ -82,7 +82,7 @@ contains
 
     subroutine expand_voigts(this)
         class(VoigtKampffCollection) :: this
-        type(VoigtKampff),allocatable :: temp(:)
+        type(VoigtKampffT),allocatable :: temp(:)
         integer(ik) :: old_capacity
 
         if(this%capacity == 0) then
@@ -177,7 +177,7 @@ contains
     end function
 
 recursive function binarySearch_R (a, value) result (bsresult)
-    type(VoigtKampff), intent(in) :: a(:)
+    type(VoigtKampffT), intent(in) :: a(:)
     real(rk)	::	value
     integer          :: bsresult, mid
  
@@ -207,7 +207,7 @@ end function binarySearch_R
 
 
   subroutine construct_voigt(this,pGammaD,pGammaL,pRes,pLorentzCutoff,pNormalize)
-      class(VoigtKampff),intent(inout)    ::    this
+      class(VoigtKampffT),intent(inout)    ::    this
       real(rk),intent(in)            ::    pGammaD,pGammaL
       real(rk),intent(in)            ::    pRes
       real(rk),intent(in)            ::    pLorentzCutoff
@@ -249,7 +249,7 @@ end function binarySearch_R
   end subroutine
 
   subroutine destroy(this)
-     class(VoigtKampff),intent(inout)    ::    this
+     class(VoigtKampffT),intent(inout)    ::    this
      
      if(.not. this%constructed)return
      
@@ -260,7 +260,7 @@ end function binarySearch_R
 
   
   subroutine compute_voigt(this,freq,intens,abscoef,ib,ie,start_nu,nu0)
-      class(VoigtKampff),intent(in)    ::    this
+      class(VoigtKampffT),intent(in)    ::    this
       real(rk),intent(in)        ::    freq(:),abscoef,start_nu,nu0
       integer(ik),intent(in)        ::    ib,ie
       real(rk),intent(inout)        ::    intens(:)
@@ -347,7 +347,7 @@ end function binarySearch_R
   end subroutine
           
   real(rk) function get_gammaL(this)
-      class(VoigtKampff),intent(in)    ::    this
+      class(VoigtKampffT),intent(in)    ::    this
 
       get_gammaL = this%m_gammaL
 
@@ -441,6 +441,4 @@ end function binarySearch_R
     end function humlic
 
 
-
-
-end module VoigtKampffCollection_module
+end module VoigtKampff

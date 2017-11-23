@@ -2,7 +2,7 @@ module spectrum
   !
   use accuracy
   use timer
-  use VoigtKampffCollection_module
+  use VoigtKampff
   use Phoenix
   !
   implicit none
@@ -890,7 +890,7 @@ module spectrum
   subroutine intensity
    !
    use  input
-   use VoigtKampff_module
+   !
    !
    integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems
    integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter
