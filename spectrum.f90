@@ -856,8 +856,8 @@ module spectrum
     endif
     !
     if (if_species_defined.and.trim(proftype)=="VOI-FAST") then
-      write(out,"('Input Error: VOI-FAST cannot be used together with SPECIES')")
-      stop 'Input Error: VOI-FAST cannot be used together with Species'
+      write(out,"('Warning: VOI-FAST is now used together with SPECIES')")
+      !stop 'Input Error: VOI-FAST cannot be used together with Species'
     endif
     !
     if (vibtemperature_do.and..not.if_QN_defined) then 
@@ -1361,7 +1361,7 @@ module spectrum
    !
    !Prepare VoigtKampff
    if(trim(proftype(1:5))=='VOI-F') then
-        !
+     !
      if(trim(proftype(1:6))=='VOI-FN') then
       call fast_voigt%construct(dpwcoef,offset,dfreq,.true.)
       !call initalize_voigt_kampff(dpwcoef,dfreq,offset,voigt_index,1)
@@ -3111,7 +3111,7 @@ module spectrum
      integer(ik),intent(in) :: nchars_quanta(maxitems),gtot(nlines)
      character(len=20),intent(in) :: quantum_numbers(0:maxitems,nlines)
      integer(ik) :: nchars_,kitem,ierror_nu,iE,ierror_i,ierror,ierror_S,l,qni,qnf,ierror_f,&
-                    ilevelf,ileveli,iswap
+                    ilevelf,ileveli,iswap,nchars_tot
      character(9) b_fmt
      !
      !
@@ -3136,18 +3136,18 @@ module spectrum
                      energyi,species(1)%n,species(1)%delta
          !
          nchars_ = 0
+         nchars_tot = 0
          !
          do kitem = 3,maxitems
            !
            l = len(trim(quantum_numbers(kitem,ilevelf)))
            !
-           b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
-           !
-           write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
+           write(b_fmt,"('(a',i1,')')") nchars_quanta(kitem)
            !
            nchars_  = nchars_ + nchars_quanta(kitem)
            !
-           if (nchars_>15) cycle
+           if (nchars_>21) cycle
+           nchars_tot = nchars_tot + nchars_quanta(kitem)
            !
            write(sunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ilevelf))
            !
@@ -3161,25 +3161,33 @@ module spectrum
            !
            !b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
            !
-           write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
+           write(b_fmt,"('(a',i1,')')") nchars_quanta(kitem)
            !
            nchars_  = nchars_ + nchars_quanta(kitem)
            !
-           if (nchars_>15) cycle
+           if (nchars_>21) cycle
+           nchars_tot = nchars_tot + nchars_quanta(kitem)
            !
            write(sunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ileveli))
            !
          enddo
          !
+         ! topup to 44
+         do kitem = nchars_tot+1,42
+           !
+           write(sunit,'(1x)',advance="no")
+           !
+         enddo
+         !
          if ( mod(nint(2*Jf),2)==0 ) then
            !
-           write(sunit,'(i7,1x,a1,1x,a1)',advance="no") nint(Jf),trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
-           write(sunit,'(i7,1x,a1,1x,a1)',advance="no") nint(Ji),trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
+           write(sunit,'(i4,1x,a1,1x,a1)',advance="no") nint(Jf),trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
+           write(sunit,'(1x,i4,1x,a1,1x,a1)',advance="no") nint(Ji),trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
            !
          else
            !
-           write(sunit,'(f7.1,1x,a1,1x,a1)',advance="no") Jf,trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
-           write(sunit,'(f7.1,1x,a1,1x,a1)',advance="no") Ji,trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
+           write(sunit,'(f4.1,1x,a1,1x,a1)',advance="no") Jf,trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
+           write(sunit,'(f4.1,1x,a1,1x,a1)',advance="no") Ji,trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
            !
          endif
          !
