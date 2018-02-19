@@ -9,7 +9,7 @@ checkin:
 
 FPATH = 
 
-PLAT = _2310_gf
+PLAT = 
 FOR  = ifort
 
 #FOR = gfortran
@@ -36,7 +36,7 @@ FFLAGS2  =  #-vec-report3
 OBJ =  accuracy.o  timer.o input.o spectrum.o VoigtKampff.o  phoenix.o
 
 xsec.x:	$(OBJ) crosssections.o 
-	$(FOR) -o j-xsec$(PLAT).x $(OBJ) $(FFLAGS) crosssections.o $(LIB) -static
+	$(FOR) -o xcross.exe $(OBJ) $(FFLAGS) crosssections.o $(LIB) -static
 
 crosssections.o:	crosssections.f90 $(OBJ) 
 	$(FOR) -c crosssections.f90 $(FFLAGS)
