@@ -15,7 +15,7 @@ module spectrum
   integer(hik),parameter :: max_transitions_to_ram = 1000000000
   integer(ik) :: N_omp_procs=1
   !
-  integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,ioffset = 10,iso=1
+  integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,ioffset = 10,iso=-1
   real(rk)      :: temp=298.0,partfunc=-1.0,freql=-small_,freqr= 200000.0,thresh=1.0d-70,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
   real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = -25.0, pressure = 1.0_rk
   real(rk)      :: enermax = 1e7, abscoef_thresh = 1.0d-50, abundance = 1.0d0, gf_factor = 1.0d0
@@ -284,7 +284,7 @@ module spectrum
               !
               if (maxtemp<small_) call report ("Illegal Max Temperature maxtem=0 "//trim(w),.true.)
               !
-            case ("NTEMPS","NPOINTS")
+            case ("NTEMPS","NPOINTS","NSTEPS")
               !
               call readi(npoints)
               !
@@ -821,6 +821,16 @@ module spectrum
       stop "Illegal profile for HITRAN WRITE, CHANGE TO ABSORPTION"
     endif
     !
+    if (proftype(1:3)=='GAU'.and.halfwidth<small_) then 
+      write(out,"('Error-Gaussian: HWHM is too small = ',g12.4)") halfwidth
+      stop 'Error-Gaussian: Illegal value of HWHM'
+    endif
+    !
+    if (hitran_do.and.iso<0) then 
+      write(out,"('Error-HITRAN: iso is illegal (negative) on undefined, use e.g. ISO 11 for water')") 
+      stop 'Error-HITRAN: illegal iso'
+    endif
+    !
     if (proftype(1:3)=='BIN'.and.microns) then
       proftype = 'BIN-MICRON'
     endif
@@ -872,7 +882,7 @@ module spectrum
       !
       lineprofile_do = .true.
       !
-      if (.not.if_species_defined.and..not.if_halfwidth_defined) then
+      if (.not.if_species_defined.and..not.if_halfwidth_defined.and..not.hitran_do) then
         write(out,"('Input Error: For ',a,' HWHM or gamma in SPECIES must be defined')") trim(proftype)
         stop 'Input Error:either  HWHM or gamma@SPECIES must be defined for this profile type'
       endif
@@ -994,7 +1004,7 @@ module spectrum
             call readf(ji)
             !
             if (info>0.and.int(ji)==0) then
-              write(out,"('It is illegal to use not J-sorted states with vib-temperatures')")
+              write(out,"('It is illegal to use not J-sorted states with vib-temperatures, E=',f14.6)") energy
               stop 'States file must be ordered by J to use with Tvib'
             endif
             !
@@ -1677,8 +1687,8 @@ module spectrum
      if (verbose>=3) print('("  Processing ",a,"...")'), trim(intfilename(i))
      !
      if (iostat_/=0) then 
-       print*,"istat is not 0, ",iostat_,"for ",trim(intfilename(i))
-       stop
+       print*,"Error opening .trans file (istat is not 0, ",iostat_,")  ",trim(intfilename(i))
+       stop 'Error opening .trans file'
      endif
      !
      ichunk = 0
@@ -1786,12 +1796,12 @@ module spectrum
                ! The current version of ExoCross does no know how to locate J-values in HITRAN-input.
                ! Therefore we can only use the static values of Voigt-parameters together with Nspecies
                !
-               Jf = 1000.0_rk
-               Ji = 1000.0_rk
+               Jf = 0.0_rk
+               Ji = 0.0_rk
                species(1)%gamma = gamma_
                species(1)%n = n_
                species(2)%gamma = gamma_s
-               species(2)%n = 0
+               species(2)%n = n_
                !
                gamma_RAM(iswap_) = get_Voigt_gamma_n(Nspecies_,Jf,Ji)
                !
@@ -2638,6 +2648,8 @@ module spectrum
      real(rk),intent(inout) :: intens(npoints)
      real(rk) :: dfreq_,de,xp,xm,ln2,x0
      integer(ik) :: ib,ie,ipoint
+     !
+     if (halfwidth<small_) return 
      !
      ln2=log(2.0_rk)
      !
