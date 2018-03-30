@@ -230,7 +230,7 @@ module spectrum
             !
           endif
           !
-        case ("NPOINTS","NUMBER-OF-POINTS","NTEMPS","NUMBER-OF-TEMPERATURES")
+        case ("NPOINTS","NUMBER-OF-POINTS")
           !
           call readi(npoints)
           !
@@ -284,7 +284,7 @@ module spectrum
               !
               if (maxtemp<small_) call report ("Illegal Max Temperature maxtem=0 "//trim(w),.true.)
               !
-            case ("NTEMPS","NPOINTS","NSTEPS")
+            case ("NTEMPS","NPOINTS","NSTEPS","NUMBER-OF-TEMPERATURES")
               !
               call readi(npoints)
               !
