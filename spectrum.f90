@@ -657,7 +657,7 @@ module spectrum
           !
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
             'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX',&
-            'LIFETIME','VOI-FAST','VOI-FNORM','VOI-916')
+            'LIFETIME','LIFETIMES','VOI-FAST','VOI-FNORM','VOI-916')
           !
           if (pressure<small_.and.(w(1:3)=='VOI'.or.w(1:3)=='PSE')) then
              ! for pressure= 0 Voigt is repalced by Doppler
@@ -684,7 +684,9 @@ module spectrum
             !
           endif
           !
-          if (trim(w)=="LIFETIME") specttype = trim(w)
+          if (trim(w)=="LIFETIME".or.trim(w)=="LIFETIMES") then 
+            specttype = "LIFETIME"
+          endif
           !
           if (microns) then
             ioffset = 0
@@ -811,14 +813,22 @@ module spectrum
       stop "Illegal profile for Microns"
     endif
     !
-    if (stick_hitran.and.trim(proftype)/='STICK') then 
-      write(out,"('For HITRAN WRITE use STICK or delete ',a)") trim(proftype)
-      stop "Illegal profile for HITRAN WRITE, CHANGE TO STICK"
-    endif
-    
-    if (stick_hitran.and.trim(specttype)/='ABSORPTION') then 
-      write(out,"('For HITRAN WRITE use ABSORPTION or delete TYPE spectral type',a)") trim(specttype)
-      stop "Illegal profile for HITRAN WRITE, CHANGE TO ABSORPTION"
+    if (stick_hitran) then
+      if (trim(proftype)/='STICK') then 
+        write(out,"('For HITRAN WRITE use STICK or delete ',a)") trim(proftype)
+        stop "Illegal profile for HITRAN WRITE, CHANGE TO STICK"
+      endif
+      !    
+      if (trim(specttype)/='ABSORPTION') then 
+        write(out,"('For HITRAN WRITE use ABSORPTION or delete TYPE spectral type ',a)") trim(specttype)
+        stop "Illegal profile for HITRAN WRITE, CHANGE TO ABSORPTION"
+      endif
+      !    
+      if (Nspecies/=2) then 
+        write(out,"('For HITRAN WRITE the broadening parameters must be provided for two species, not ',i4)") trim(specttype),nspecies
+        stop "Illegal number of species for HITRAN WRITE, must be 2"
+      endif
+      !
     endif
     !
     if (proftype(1:3)=='GAU'.and.halfwidth<small_) then 
@@ -3125,6 +3135,8 @@ module spectrum
      integer(ik) :: nchars_,kitem,ierror_nu,iE,ierror_i,ierror,ierror_S,l,qni,qnf,ierror_f,&
                     ilevelf,ileveli,iswap,nchars_tot
      character(9) b_fmt
+     integer(ik) :: Jpp,Jp
+     real(rk)    :: gamma1,gamma2,n1
      !
      !
      do iswap = 1,nswap
@@ -3142,10 +3154,17 @@ module spectrum
        !
        if (stick_hitran) then
          !
+         Jp  = int(Jf)
+         Jpp = int(Ji)
+         !
+         gamma1 = species(1)%gammaQN(Jpp,Jp-Jpp)
+         gamma2 = species(2)%gammaQN(Jpp,Jp-Jpp)
+         n1 = species(1)%nQN(Jpp,Jp-Jpp)
+         !
          write(sunit,"(i3,f12.6,e10.3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6)",advance="no") &
                      iso,tranfreq,abscoef,acoef,&
-                     species(1)%gamma,species(2)%gamma,&
-                     energyi,species(1)%n,species(1)%delta
+                     gamma1,gamma2,&
+                     energyi,n1,species(1)%delta
          !
          nchars_ = 0
          nchars_tot = 0
@@ -3198,8 +3217,8 @@ module spectrum
            !
          else
            !
-           write(sunit,'(f4.1,1x,a1,1x,a1)',advance="no") Jf,trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
-           write(sunit,'(f4.1,1x,a1,1x,a1)',advance="no") Ji,trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
+           write(sunit,'(f5.1,1x,a1,a1)',advance="no") Jf,trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
+           write(sunit,'(f5.1,1x,a1,a1)',advance="no") Ji,trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
            !
          endif
          !
