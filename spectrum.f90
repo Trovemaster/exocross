@@ -26,7 +26,8 @@ module spectrum
   integer(ik)   :: nquad = 20      ! Number of quadrature points
   integer(hik)   :: N_to_RAM = -1000 ! Lines to keep in RAM
   !
-  character(len=cl) :: specttype="ABSORPTION",enrfilename="NONE",intfilename(nfiles_max),proftype="DOPPL",output="output",pffilename="NONE"
+  character(len=cl) :: specttype="ABSORPTION",enrfilename="NONE",intfilename(nfiles_max),proftype="DOPPL",output="output"
+  character(len=cl) :: pffilename="NONE"
   integer(ik)   :: intJvalue(nfiles_max)
   character(4) a_fmt
   character(9) b_fmt
@@ -2012,7 +2013,7 @@ module spectrum
              !
              if (lineprofile_do) then
                gamma_RAM(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji)
-               temp_gamma_n = get_Voigt_gamma_n(Nspecies_,Jf,Ji,gamma_idx_RAM(iswap))               
+               temp_gamma_n = get_Voigt_gamma_n(Nspecies,Jf,Ji,gamma_idx_RAM(iswap))               
              endif
              !
              !do do_log_intensity
@@ -2447,7 +2448,12 @@ module spectrum
        !
        ! write to .life-file
        !
-       write(tunit,my_fmt,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),jrot(ilevelf),1.0_rk/Asum(ilevelf)
+       if ( mod(nint(2.0_rk*jrot(ilevelf)),2)==0 ) then 
+         write(my_fmt,'(a)')  '(1x,i11,1x,f12.6,1x,i6,1x,f7.1,1x,es12.4,3x)'
+         write(tunit,my_fmt,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),nint(jrot(ilevelf)),1.0_rk/Asum(ilevelf)
+       else
+         write(tunit,my_fmt,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),jrot(ilevelf),1.0_rk/Asum(ilevelf)
+       endif
        !
        do kitem = 1,maxitems
          !
