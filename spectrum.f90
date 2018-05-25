@@ -89,7 +89,7 @@ module spectrum
   integer(ik),allocatable,save  :: gamma_idx(:,:) !Used for indexing the gamma for the fast_voigt
   real(rk),allocatable,save  :: gamma_comb(:,:) !Used for indexing the gamma for the fast_voigt
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
-  stick_hitran = .false.,vibtemperature_do = .false.
+             stick_hitran = .false.,vibtemperature_do = .false.
   logical :: lineprofile_do = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
