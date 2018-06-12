@@ -75,6 +75,7 @@ module spectrum
     integer(ik) :: vibcol(2)=8           ! Range of columns with vib quanta 
     integer(ik) :: Nmodes= 1             ! Number of vib modes
     integer(ik) :: Nsym=1                ! Number of symmetries
+    integer(ik) :: Rotcol(2)=(/5,6/)     ! Columns with Rot-QNs
     !
   end type QNT
   !
@@ -89,7 +90,7 @@ module spectrum
   integer(ik),allocatable,save  :: gamma_idx(:,:) !Used for indexing the gamma for the fast_voigt
   real(rk),allocatable,save  :: gamma_comb(:,:) !Used for indexing the gamma for the fast_voigt
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
-             stick_hitran = .false.,vibtemperature_do = .false.
+             stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false.
   logical :: lineprofile_do = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
@@ -114,6 +115,7 @@ module spectrum
     character(len=cl) :: w,v
     integer(ik)   :: i,ifilter,iE,iS,npoints0,ierror
     type(HitranErrorT),pointer :: HITRAN
+    real(rk) :: f_t
     ! -----------------------------------------------------------
     !
     write(out,"('Read the input')")
@@ -338,6 +340,20 @@ module spectrum
               !
               call readi(QN%Kcol)
               !
+            case ("ROT")
+              !
+              call readi(QN%rotcol(1))
+              !
+              if (Nitems>2) then 
+                !
+                call readi(QN%Rotcol(2))
+                !
+              else
+                !
+                QN%Rotcol(2) = QN%Rotcol(1)
+                !
+              endif
+              !
             case ("VIB","VIBRATIONAL")
               !
               call readi(QN%Vibcol(1))
@@ -385,13 +401,20 @@ module spectrum
           !
        case ("NRAM","NLINES-TO-RAM","LINES-TO-CACHE","NCACHE")
           !
-          call readi(N_to_RAM)
+          call readf(f_t)
+          N_to_RAM = int(f_t,hik)
           !
-        case ("HITRAN")
+        case ("HITRAN","OXFORD")
           !
           hitran_do = .true.
           !
           if (nitems>1) then
+            !
+            stick_hitran = .true.
+            if (trim(w)=="OXFORD") then 
+               stick_hitran = .false.
+               stick_oxford = .true.
+            endif
             !
             call readu(w)
             !
@@ -400,7 +423,6 @@ module spectrum
             endif
             !
             hitran_do = .false.
-            stick_hitran = .true.
             proftype = 'STICK'
             specttype = 'ABSORPTION'
             !
@@ -679,7 +701,7 @@ module spectrum
           !
           if (trim(w(1:5))=="STICK".and.Nitems>1) then
             call readu(w)
-            if (trim(w)=="HITRAN") call report ("Illegal keyord for stick, HITRAN expected not "//trim(w),.true.)
+            if (trim(w)=="HITRAN") call report ("Illegal keyord for stick, HITRAN is no expected "//trim(w),.true.)
             !
             stick_hitran = .true.
             !
@@ -826,8 +848,26 @@ module spectrum
       endif
       !    
       if (Nspecies/=2) then 
-        write(out,"('For HITRAN WRITE the broadening parameters must be provided for two species, not ',i4)") trim(specttype),nspecies
+        write(out,"('For HITRAN WRITE the broadening parameters must be provided for two species, not ',i4)") nspecies
         stop "Illegal number of species for HITRAN WRITE, must be 2"
+      endif
+      !
+    endif
+    !
+    if (stick_oxford) then
+      if (trim(proftype)/='STICK') then 
+        write(out,"('For OXFORD WRITE use STICK or delete ',a)") trim(proftype)
+        stop "Illegal profile for OXFORD WRITE, CHANGE TO STICK"
+      endif
+      !    
+      if (trim(specttype)/='ABSORPTION') then 
+        write(out,"('For OXFORD WRITE use ABSORPTION or delete TYPE spectral type ',a)") trim(specttype)
+        stop "Illegal profile for OXFORD WRITE, CHANGE TO ABSORPTION"
+      endif
+      !    
+      if (Nspecies/=3) then 
+        write(out,"('For OXFORD WRITE the broadening parameters must be provided for 3 species, not ',i4)") nspecies
+        stop "Illegal number of species for OXFORD WRITE, must be 3"
       endif
       !
     endif
@@ -838,8 +878,8 @@ module spectrum
     endif
     !
     if (hitran_do.and.iso<0) then 
-      write(out,"('Error-HITRAN: iso is illegal (negative) on undefined, use e.g. ISO 11 for water')") 
-      stop 'Error-HITRAN: illegal iso'
+      write(out,"('Error-HITRAN/Oxford: iso is illegal (negative) on undefined, use e.g. ISO 11 for water')") 
+      stop 'Error-HITRAN/Oxford: illegal iso'
     endif
     !
     if (proftype(1:3)=='BIN'.and.microns) then
@@ -980,6 +1020,7 @@ module spectrum
    ! open and count number of lines (levels) in the Energy files
    !
    if (trim(enrfilename)/="NONE".and..not.hitran_do) then
+      !
       if (verbose>=2) print('(/a,a,a/)'),'Reading energies from ',trim(enrfilename),'...'
       !
       write(ioname, '(a)') 'Energy file'
@@ -1513,6 +1554,19 @@ module spectrum
        !
        close(bunit)
        !
+    elseif (stick_hitran.or.stick_oxford) then
+       !
+       Jmax = JmaxAll
+       !
+       allocate(species(i)%gammaQN(0:Jmax,-1:1),stat=info)
+       call ArrayStart('gammaQN',info,size(species(i)%gammaQN),kind(species(i)%gammaQN))
+       species(i)%gammaQN(:,:) = species(i)%gamma
+       !
+       allocate(species(i)%nQN(0:Jmax,-1:1),stat=info)
+       !         
+       call ArrayStart('nQN',info,size(species(i)%nQN),kind(species(i)%nQN))
+       species(i)%nQN(:,:) = species(i)%N
+       !
      endif
      !
    enddo
@@ -1595,7 +1649,7 @@ module spectrum
        write(ioname, '(a)') 'Stick spectrum'
        call IOstart(trim(ioname),sunit)
        !
-       if (stick_hitran) then 
+       if (stick_hitran.or.stick_oxford) then 
          open(unit=sunit,file=trim(output)//".par",action='write',status='replace')
        else
          open(unit=sunit,file=trim(output)//".stick",action='write',status='replace')
@@ -1637,7 +1691,7 @@ module spectrum
    endif
    !
    if (hitran_do.and.partfunc<0.0) then
-     write(out,"('For HITRAN partition function must be defined using PF or QSTAT keywords')")
+     write(out,"('For HITRAN/OXFORD partition function must be defined using PF or QSTAT keywords')")
      stop 'Undefined PF'
    endif
    !
@@ -1778,6 +1832,8 @@ module spectrum
            !
            Nspecies_ = max(Nspecies,2)
            !
+           if (stick_oxford) Nspecies_ = max(Nspecies,3)
+           !
            iswap_ = 0
            !
            do while(iswap_<N_to_RAM)
@@ -1812,7 +1868,7 @@ module spectrum
                species(1)%gamma = gamma_
                species(1)%n = n_
                species(2)%gamma = gamma_s
-               species(2)%n = n_
+               !species(2)%n = n_
                !
                gamma_RAM(iswap_) = get_Voigt_gamma_n(Nspecies_,Jf,Ji)
                !
@@ -3141,8 +3197,8 @@ module spectrum
      integer(ik) :: nchars_,kitem,ierror_nu,iE,ierror_i,ierror,ierror_S,l,qni,qnf,ierror_f,&
                     ilevelf,ileveli,iswap,nchars_tot
      character(9) b_fmt
-     integer(ik) :: Jpp,Jp
-     real(rk)    :: gamma1,gamma2,n1
+     integer(ik) :: Jpp,Jp,i
+     real(rk)    :: gamma1,gamma2,gamma3,n1,n2,n3
      !
      !
      do iswap = 1,nswap
@@ -3270,6 +3326,152 @@ module spectrum
          write(sunit,'(i1)',advance="no") HITRAN_Delta%ierr
          !
          write(sunit,"(' 0 0 0 0 0 0 ',f7.1,f7.1)",advance="yes") real(gtot(ilevelf)),real(gtot(ileveli))
+         !
+       elseif (stick_oxford) then
+         !
+         Jp  = int(Jf)
+         Jpp = int(Ji)
+         !
+         gamma1 = species(1)%gammaQN(Jpp,Jp-Jpp)
+         gamma2 = species(2)%gammaQN(Jpp,Jp-Jpp)
+         gamma3 = species(3)%gammaQN(Jpp,Jp-Jpp)
+         n1 = species(1)%nQN(Jpp,Jp-Jpp)
+         n2 = species(2)%nQN(Jpp,Jp-Jpp)
+         n3 = species(3)%nQN(Jpp,Jp-Jpp)
+         !
+         write(sunit,"(i3,f12.6,e10.3,3(f5.4,f4.2),f10.4,1x)",advance="no") &
+                     iso,tranfreq,abscoef,&
+                     gamma1,n1,gamma2,n2,gamma3,n3,&
+                     energyi
+         !
+         nchars_tot = 1
+         nchars_ = 1
+         !
+         do i = QN%Vibcol(1),QN%Vibcol(2)
+           !
+           kitem=i-4
+           !
+           !l = len(trim(quantum_numbers(kitem,ilevelf)))
+           !
+           write(b_fmt,"('(a',i1,')')") nchars_quanta(kitem)
+           !
+           nchars_  = nchars_ + nchars_quanta(kitem)
+           !
+           if (nchars_>21) cycle
+           nchars_tot = nchars_tot + nchars_quanta(kitem)
+           !
+           write(sunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ilevelf))
+           !
+         enddo
+         !
+         write(sunit,'(1x)',advance="no")
+         !
+         nchars_tot = nchars_tot + 1
+         !
+         nchars_ = 1
+         do i = QN%Vibcol(1),QN%Vibcol(2)
+           !
+           kitem=i-4
+           !
+           write(b_fmt,"('(a',i1,')')") nchars_quanta(kitem)
+           !
+           nchars_  = nchars_ + nchars_quanta(kitem)
+           !
+           if (nchars_>21) cycle
+           nchars_tot = nchars_tot + nchars_quanta(kitem)
+           !
+           write(sunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ileveli))
+           !
+         enddo
+         !
+         ! topup to 42
+         do kitem = nchars_tot+1,42
+           !
+           write(sunit,'(1x)',advance="no")
+           !
+         enddo
+         !
+         write(sunit,'(1x)',advance="no")
+         !
+         if ( mod(nint(2*Jf),2)==0 ) then
+           !
+           write(sunit,'(i4,1x)',advance="no") nint(Jf)
+           nchars_ = 5
+           do i = 1,2
+             kitem=QN%Rotcol(i)-4
+             !
+             write(b_fmt,"('(a',i1,')')") nchars_quanta(kitem)
+             nchars_  = nchars_ + nchars_quanta(kitem)
+             !
+             if (nchars_>9) cycle
+             nchars_tot = nchars_tot + nchars_quanta(kitem)
+             !
+             write(sunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ilevelf))
+             !
+           enddo
+           !
+           write(sunit,'(i4,1x)',advance="no") nint(Ji)
+           nchars_ = 5
+           do i = 1,2
+             kitem=QN%Rotcol(i)-4
+             !
+             write(b_fmt,"('(a',i1,')')") nchars_quanta(kitem)
+             nchars_  = nchars_ + nchars_quanta(kitem)
+             !
+             if (nchars_>9) cycle
+             nchars_tot = nchars_tot + nchars_quanta(kitem)
+             !
+             write(sunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ileveli))
+             !
+           enddo
+             !
+         else
+           !
+           write(sunit,'(f5.1,1x,a1,a1)',advance="no") Jf,trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
+           write(sunit,'(f5.1,1x,a1,a1)',advance="no") Ji,trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
+           !
+         endif
+         !
+         ierror_nu = 0
+         !
+         do iE = 1,HITRAN_E(1)%N
+            !
+            read(quantum_numbers(HITRAN_E(iE)%iqn,ileveli),*) qni
+            read(quantum_numbers(HITRAN_E(iE)%iqn,ilevelf),*) qnf
+            !
+            ierror_i = 0
+            do ierror = 0,6
+              if (qni<=HITRAN_E(iE)%error_vmax(ierror)) ierror_i = ierror
+              if (qnf<=HITRAN_E(iE)%error_vmax(ierror)) ierror_f = ierror
+            enddo
+            !
+            ierror_nu = max(ierror_i,ierror_f)
+            !
+         enddo
+         !
+         ierror_S = 0
+         !
+         do iE = 1,HITRAN_S(1)%N
+            !
+            read(quantum_numbers(HITRAN_S(iE)%iqn,ileveli),*) qni
+            read(quantum_numbers(HITRAN_S(iE)%iqn,ilevelf),*) qnf
+            !
+            ierror_i = 0
+            do ierror = 0,6
+              if (qni<=HITRAN_S(iE)%error_vmax(ierror)) ierror_i = ierror
+              if (qnf<=HITRAN_S(iE)%error_vmax(ierror)) ierror_f = ierror
+            enddo
+            !
+            ierror_S = max(ierror_i,ierror_f)
+            !
+         enddo
+         !
+         write(sunit,'(1x,i1)',advance="no") ierror_nu
+         write(sunit,'(i1)',advance="no") ierror_S
+         write(sunit,'(i1)',advance="no") HITRAN_Air%ierr
+         write(sunit,'(i1)',advance="no") HITRAN_Self%ierr
+         write(sunit,'(i1)',advance="no") HITRAN_n%ierr
+         write(sunit,'(i1)',advance="yes") HITRAN_Delta%ierr
          !
        else
           !
