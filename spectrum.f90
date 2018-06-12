@@ -3339,7 +3339,7 @@ module spectrum
          n2 = species(2)%nQN(Jpp,Jp-Jpp)
          n3 = species(3)%nQN(Jpp,Jp-Jpp)
          !
-         write(sunit,"(i3,f12.6,e10.3,3(f5.4,f4.2),f10.4,1x)",advance="no") &
+         write(sunit,"(i3,f12.6,e10.3,3(f5.4,f4.2),f10.4)",advance="no") &
                      iso,tranfreq,abscoef,&
                      gamma1,n1,gamma2,n2,gamma3,n3,&
                      energyi
@@ -3357,14 +3357,14 @@ module spectrum
            !
            nchars_  = nchars_ + nchars_quanta(kitem)
            !
-           if (nchars_>21) cycle
+           if (nchars_>22) cycle
            nchars_tot = nchars_tot + nchars_quanta(kitem)
            !
            write(sunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ilevelf))
            !
          enddo
          !
-         write(sunit,'(1x)',advance="no")
+         !write(sunit,'(1x)',advance="no")
          !
          nchars_tot = nchars_tot + 1
          !
@@ -3377,7 +3377,7 @@ module spectrum
            !
            nchars_  = nchars_ + nchars_quanta(kitem)
            !
-           if (nchars_>21) cycle
+           if (nchars_>22) cycle
            nchars_tot = nchars_tot + nchars_quanta(kitem)
            !
            write(sunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ileveli))
@@ -3385,7 +3385,7 @@ module spectrum
          enddo
          !
          ! topup to 42
-         do kitem = nchars_tot+1,42
+         do kitem = nchars_tot+1,44
            !
            write(sunit,'(1x)',advance="no")
            !
@@ -3403,7 +3403,7 @@ module spectrum
              write(b_fmt,"('(a',i1,')')") nchars_quanta(kitem)
              nchars_  = nchars_ + nchars_quanta(kitem)
              !
-             if (nchars_>9) cycle
+             if (nchars_>10) cycle
              nchars_tot = nchars_tot + nchars_quanta(kitem)
              !
              write(sunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ilevelf))
@@ -3418,7 +3418,7 @@ module spectrum
              write(b_fmt,"('(a',i1,')')") nchars_quanta(kitem)
              nchars_  = nchars_ + nchars_quanta(kitem)
              !
-             if (nchars_>9) cycle
+             if (nchars_>10) cycle
              nchars_tot = nchars_tot + nchars_quanta(kitem)
              !
              write(sunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ileveli))
