@@ -1314,7 +1314,7 @@ module spectrum
           !
           temp0 = real(itemp,rk)*dtemp
           !
-          write(tunit,"(1x,f12.3,1x,es20.8)") temp0,pf(0,itemp)
+          write(tunit,"(f9.1,1x,es15.4)") temp0,pf(0,itemp)
           !
         enddo
         !
