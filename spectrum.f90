@@ -933,9 +933,18 @@ module spectrum
       !
       lineprofile_do = .true.
       !
+      if (if_species_defined.and..not.if_halfwidth_defined.and..not.hitran_do) then
+        do i=1,Nspecies
+          if (.not.species(i)%if_defined) then 
+            write(out,"('Input Error: For ',i4,'-species gamma or .broad is undefined, add gamma 0.05 or name of .broad')") i
+            stop 'Input Error: default gamma or .broad-file must be defined in SPECIES'
+          endif
+        enddo
+      endif
+      !
       if (.not.if_species_defined.and..not.if_halfwidth_defined.and..not.hitran_do) then
-        write(out,"('Input Error: For ',a,' HWHM or gamma in SPECIES must be defined')") trim(proftype)
-        stop 'Input Error:either  HWHM or gamma@SPECIES must be defined for this profile type'
+        write(out,"('Input Error: For ',a,' either HWHM or gamma@species must be defined, e.g. HWHM 0.05')") trim(proftype)
+        stop 'Input Error: either  HWHM or gamma@SPECIES must be defined for this profile type'
       endif
       !
       do i=1,Nspecies
@@ -954,7 +963,7 @@ module spectrum
    !
    !
    integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems
-   integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter
+   integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff
@@ -1392,7 +1401,8 @@ module spectrum
       31 continue
       !
       write(out,"('The tempreture requested ',f12.4,' is > Tmax=',f9.2,'K of ',a)") Temp,t_2,trim(pffilename)
-      write(out,"('The PF-file is not applicable, consider providing the PF value (keyword PF) explicitly or letting exocross do it (no PF keyword needed).')")
+      write(out,"('The PF-file is not applicable, consider providing PF value (keyword PF) explicitly ... ')")
+      write(out,"('... or let exocross do re-compute pf using eneegies (no PF keyword needed).')")
       stop 'The PF-file is not applicable'
      enddo
      !
@@ -1458,6 +1468,8 @@ module spectrum
          ! Scan and find Jmax
          read(bunit,*,end=14) ch_broad(1:3),gamma_,n_,J_
          !
+         if (all(trim(ch_broad(1:2))/=(/'A0','A1','J ','JJ'/))) cycle 
+         !
          Jmax = max(Jmax,nint(J_+0.5_rk))
          JmaxAll = max(nint(J_+0.5_rk),JmaxAll)
          !
@@ -1488,6 +1500,8 @@ module spectrum
        !
        ! read in the QN-dependent broadening parameters
        !
+       Jmax = 0
+       !
        do
          !
          ! read the line and check the model
@@ -1497,7 +1511,7 @@ module spectrum
          call readu(ch_broad)
          !
          ! Ignore all models if not implemented 
-         if (all(trim(ch_broad(1:3))/=(/'A0','A1','J','JJ'/))) cycle 
+         if (all(trim(ch_broad(1:2))/=(/'A0','A1','J ','JJ'/))) cycle 
          !  write(out,"('Error, illegal model in .broad: ',a3,' inly a0 and a1 are implemented')") ch_broad(1:3)
          !  stop 'Error, illegal model in .broad: '
          !endif
@@ -1517,6 +1531,7 @@ module spectrum
            ! use integer value of J
            !
            j = int(Ji)
+           Jmax = max(Jmax,J)
            !
            species(i)%gammaQN(J,:) = gamma_
            species(i)%nQN(J,:) = n_
@@ -1535,6 +1550,8 @@ module spectrum
            Jp  = int(Jf)
            Jpp = int(Ji)
            !
+           Jmax = max(Jmax,min(Jp,Jpp))
+           !
            if (abs(Jp-Jpp)>1) then 
              write(out,'("Jp-Jpp>1 in broadening file:",2i8)') Jp,Jpp
              stop 'Jp-Jpp>1 in broadening file'
@@ -1551,6 +1568,10 @@ module spectrum
          end select
          !
        enddo
+       ! using the gamma(Jmax) value for all gamms for J>Jmax
+       !
+       forall(k=-1:1) species(i)%gammaQN(Jmax+1:,k) = species(i)%gammaQN(Jmax,k)
+       forall(k=-1:1) species(i)%nQN(Jmax+1:,k) = species(i)%nQN(Jmax,k)
        !
        close(bunit)
        !
@@ -1985,7 +2006,8 @@ module spectrum
              if (tranfreq0<freql.or.tranfreq0>freqr) cycle
              !
              if (energyf-energyi<-1e1) then
-               write(out,"('Error Ei>Ef: i,f,indi,indf,Aif,Ef,Ei = ',4i12,2x,3es16.8)") ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
+               write(out,"('Error Ei>Ef+10: i,f,indi,indf,Aif,Ef,Ei = ',4i12,2x,3es16.8)") & 
+                    ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
                stop 'wrong order of indices'
                cycle loop_swap
              elseif (energyf-energyi<small_) then
@@ -3275,7 +3297,8 @@ module spectrum
          if ( mod(nint(2*Jf),2)==0 ) then
            !
            write(sunit,'(i4,1x,a1,1x,a1)',advance="no") nint(Jf),trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
-           write(sunit,'(1x,i4,1x,a1,1x,a1)',advance="no") nint(Ji),trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
+           write(sunit,'(1x,i4,1x,a1,1x,a1)',advance="no") nint(Ji),trim(quantum_numbers(1,ileveli)),&
+                                                           trim(quantum_numbers(2,ileveli))
            !
          else
            !

@@ -336,12 +336,13 @@ end function binarySearch_R
         endif
       endif
       if (left_start < left_end ) then
-          call vectorized_voigt(intens(ib-ib_rel+left_start:ib-ib_rel+left_end),this%m_voigt_grid(left_start:left_end),(abscoef/mag))
-
+          call vectorized_voigt(intens(ib-ib_rel+left_start:ib-ib_rel+left_end),&
+               this%m_voigt_grid(left_start:left_end),(abscoef/mag))
       endif
 
       if (right_start < right_end ) then
-          call vectorized_voigt(intens(ib-ib_rel+right_start:ib-ib_rel+right_end),this%m_voigt_grid(right_start:right_end),(abscoef/mag))
+          call vectorized_voigt(intens(ib-ib_rel+right_start:ib-ib_rel+right_end),&
+          this%m_voigt_grid(right_start:right_end),(abscoef/mag))
       endif
 
   end subroutine
