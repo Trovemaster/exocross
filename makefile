@@ -1,4 +1,4 @@
-goal:   xsec.x
+goal:   xcross.exe
 
 tarball:
 	tar cf duo.tar makefile *.f90
@@ -10,13 +10,13 @@ checkin:
 FPATH = 
 
 PLAT = 
+
 FOR  = ifort
+FFLAGS =  -O3 -openmp -traceback  -ip 
 
 #FOR = gfortran
-#FLAGS = -O2 -std=f2008 -fsyntax-only
+#FFLAGS = -O2 -fopenmp -std=f2008
 
-
-FFLAGS =  -O3 -openmp -traceback  -ip 
 
 #FFLAGS = -O0 -g -fpe0  -fltconsistency -stand f03 -check all -warn all -traceback -fp-stack-check  # debugging options
 
@@ -61,4 +61,4 @@ VoigtKampff.o:  VoigtKampff.f90 accuracy.o
 
 
 clean:
-	rm $(OBJ) *.mod duo.o
+	rm $(OBJ) *.mod crosssections.o xcross.exe

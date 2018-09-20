@@ -892,6 +892,11 @@ module spectrum
     !
     if (use_resolving_power) then
       !
+      if (trim(proftype) /= 'BIN-R') then 
+        write(out,"(/'Warning: The RESOLVING option has not been tested for ',a,', only for BIN')") trim(proftype)
+        !stop "The RESOLVING option can be used with BIN onle"
+      endif
+      !
       npoints0 = nint(real((log(freqr)-log(freql))/resolving_f,rk))+1
       !
       !if (npoints0>npoints) then
@@ -1025,6 +1030,18 @@ module spectrum
    intens = 0
    !
    forall(ipoint=1:npoints) freq(ipoint)=freql+real(ipoint-1,rk)*dfreq
+   !   
+   if (use_resolving_power) then
+     !
+     do ipoint =  1,npoints
+       !
+       tranfreq0 = real(ipoint-1,rk)*resolving_f+log(freql)
+       !
+       tranfreq0 = exp(tranfreq0)
+       freq(ipoint) = tranfreq0
+     enddo
+     !
+   endif   
    !
    ! open and count number of lines (levels) in the Energy files
    !
@@ -1468,7 +1485,7 @@ module spectrum
          ! Scan and find Jmax
          read(bunit,*,end=14) ch_broad(1:3),gamma_,n_,J_
          !
-         if (all(trim(ch_broad(1:2))/=(/'A0','A1','J ','JJ'/))) cycle 
+         if (all(trim(ch_broad(1:2))/=(/'A0','A1'/))) cycle 
          !
          Jmax = max(Jmax,nint(J_+0.5_rk))
          JmaxAll = max(nint(J_+0.5_rk),JmaxAll)

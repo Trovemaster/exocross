@@ -222,7 +222,7 @@ end function binarySearch_R
       this%m_gammaD = pGammaD
       this%m_gammaL = pGammaL
       this%m_lorentz_cutoff = pLorentzCutoff
-     this%normalize = pNormalize
+      this%normalize = pNormalize
       this%m_Npoints = int(2.0*this%m_lorentz_cutoff/this%m_res,ik);
       this%m_middle_point = (this%m_Npoints/2) + 1
       !Construct the voigt grid
@@ -273,40 +273,34 @@ end function binarySearch_R
       integer                ::    Npoints
       real(rk)            ::    gammaD,hum_res,mag,nu
       real(rk),allocatable        ::    temp_humlicek(:)
-
-  
+      !
       center_point = (nu0-start_nu)/this%m_res + 1
       middle_shift = (center_point - this%m_middle_point) + 1
-
-  
-
-      dist = max(DISTANCE_MAGIC_NUMBER/this%m_res,3.0)
-
+      !
+      dist = max(DISTANCE_MAGIC_NUMBER/this%m_res,3.0_rk)
+      !
       Npoints = ie - ib + 1
-
+      !
       ib_rel = ib - middle_shift
-    ie_rel = ie - middle_shift
-
+      ie_rel = ie - middle_shift
+      !
       gammaD = this%m_gammaD*nu0
-
-
-    mag = this%m_mag
-
-    start_dist = max(center_point - dist + 1, ib)
-    end_dist = min(center_point + dist, ie)
-    
-    left_start = ib_rel
-    left_end = min(this%m_middle_point - dist, ie_rel)
-    right_start = max(this%m_middle_point + dist, ib_rel)
-    right_end = ie_rel
-
-    !print *,mag
-
-
-    !If we have any humlicek points
-    if(start_dist < end_dist) then
-
-
+      !
+      mag = this%m_mag
+      !
+      start_dist = max(center_point - dist + 1, ib)
+      end_dist = min(center_point + dist, ie)
+      !
+      left_start = ib_rel
+      left_end = min(this%m_middle_point - dist, ie_rel)
+      right_start = max(this%m_middle_point + dist, ib_rel)
+      right_end = ie_rel
+      !
+      !print *,mag
+      !
+      !If we have any humlicek points
+      if(start_dist < end_dist) then
+        !
         if(this%normalize) then 
             num_hum_points = end_dist - start_dist + 1;
             allocate(temp_humlicek(num_hum_points))
@@ -318,10 +312,9 @@ end function binarySearch_R
                 mag = mag - this%m_voigt_grid(ido -middle_shift+1)*this%m_res
                 mag = mag + hum_res*this%m_res
             enddo
-    
-    
+            !
             intens(start_dist:end_dist) = intens(start_dist:end_dist) + temp_humlicek(:)*abscoef/mag
-    
+            !
             !print *,mag
             deallocate(temp_humlicek)
         else
@@ -329,29 +322,30 @@ end function binarySearch_R
                 nu=freq(ido)
                 intens(ido) = intens(ido) + voigt_humlicek(nu,nu0,gammaD,this%m_gammaL)*abscoef
             enddo    
-        
+            !
             mag = 1.0
-    
-    
+            !
         endif
+        !
       endif
+      !
       if (left_start < left_end ) then
           call vectorized_voigt(intens(ib-ib_rel+left_start:ib-ib_rel+left_end),&
                this%m_voigt_grid(left_start:left_end),(abscoef/mag))
       endif
-
+      !
       if (right_start < right_end ) then
           call vectorized_voigt(intens(ib-ib_rel+right_start:ib-ib_rel+right_end),&
           this%m_voigt_grid(right_start:right_end),(abscoef/mag))
       endif
-
+      !
   end subroutine
           
   real(rk) function get_gammaL(this)
       class(VoigtKampffT),intent(in)    ::    this
-
+      !
       get_gammaL = this%m_gammaL
-
+      !
       return
   end function
 
