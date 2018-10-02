@@ -12,7 +12,7 @@ FPATH =
 PLAT = 
 
 FOR  = ifort
-FFLAGS =  -O3 -openmp -traceback  -ip 
+FFLAGS =  -O3 -qopenmp -traceback  -ip 
 
 #FOR = gfortran
 #FFLAGS = -O2 -fopenmp -std=f2008
@@ -35,7 +35,7 @@ FFLAGS2  =  #-vec-report3
 
 OBJ =  accuracy.o  timer.o input.o spectrum.o VoigtKampff.o  phoenix.o
 
-xsec.x:	$(OBJ) crosssections.o 
+xcross.exe:	$(OBJ) crosssections.o 
 	$(FOR) -o xcross.exe $(OBJ) $(FFLAGS) crosssections.o $(LIB) -static
 
 crosssections.o:	crosssections.f90 $(OBJ) 

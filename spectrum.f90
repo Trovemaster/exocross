@@ -973,7 +973,7 @@ module spectrum
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff
    integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll
-   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,h,a,b
+   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2
    character(len=cl) :: ioname
    !
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
@@ -1424,11 +1424,8 @@ module spectrum
      enddo
      !
      ! From Numerical Recipes in Fortran 77
-     h=T_2-T_1
-     if (h==0._rk) stop 'bad xa input in splint'
-     a=(T_2-temp)/h
-     b=(temp-T_1)/h
-     partfunc=a*pf_1+b*pf_2+((a**3-a)*pf_1+(b**3-b)*pf_2)*(h**2)/6._rk
+     if (T_1 == T_2) stop 'Duplicate temperature in partition file'
+     partfunc = pf_1 + (temp - T_1) * (pf_2 - pf_1)/(T_2 - T_1)
      !
    endif
    !
