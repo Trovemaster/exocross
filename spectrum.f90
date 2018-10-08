@@ -969,7 +969,7 @@ module spectrum
    !
    integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems
    integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k
-   real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0
+   real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff
    integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll
@@ -1874,9 +1874,10 @@ module spectrum
            do while(iswap_<N_to_RAM)
              !
              !read(tunit,*,end=119) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
-             read(tunit,"(i3,f12.6,e10.3,e10.3,f5.4,f5.3,f10.4,f4.2,8x,a55,23x,2f7.1)",end=119) &
-                  imol,tranfreq,abscoef,acoef,gamma_,gamma_s,energyi,n_,ch_q,gf,gi
+             read(tunit,"(i3,f12.6,e10.3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6,a55,23x,2f7.1)",end=119) &
+                  imol,tranfreq,abscoef,acoef,gamma_,gamma_s,energyi,n_,delta_air,ch_q,gf,gi
              !
+             tranfreq = tranfreq + delta_air * pressure
              energyf = tranfreq + energyi
              !
              if (imol/=iso) cycle
@@ -1905,7 +1906,8 @@ module spectrum
                species(2)%gamma = gamma_s
                !species(2)%n = n_
                !
-               gamma_RAM(iswap_) = get_Voigt_gamma_n(Nspecies_,Jf,Ji)
+               gamma_RAM(iswap_) = gamma_ * pressure * (296.0/temp)**n_
+               gamma_idx_RAM(iswap_) = fast_voigt%get_size()
                !
              endif
              !
@@ -2104,8 +2106,8 @@ module spectrum
              nu_ram(iswap) = tranfreq
              !
              if (lineprofile_do) then
-               gamma_RAM(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji)
-               temp_gamma_n = get_Voigt_gamma_n(Nspecies,Jf,Ji,gamma_idx_RAM(iswap))               
+                gamma_RAM(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji)
+                temp_gamma_n = get_Voigt_gamma_n(Nspecies,Jf,Ji,gamma_idx_RAM(iswap))
              endif
              !
              !do do_log_intensity
@@ -2360,6 +2362,7 @@ module spectrum
                 tranfreq = nu_ram(iswap)
                 halfwidth = gamma_ram(iswap)
                 !
+                !write(*,*) "abscoef, tranfreq, halfwidth", abscoef, tranfreq, halfwidth
                 call do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,offset,freql,intens_omp(:,iomp))
                 !
               enddo
@@ -2600,7 +2603,7 @@ module spectrum
        ! change from microns to wavenumbers
        !
        do ipoint =  npoints,1,-1
-         !
+          !
          write(tunit,'(2(1x,es16.8))') 10000.0_rk/freq(ipoint),intens(ipoint)
          !
        enddo
@@ -2619,7 +2622,7 @@ module spectrum
        !
      else
        !
-       write(tunit,'(2(1x,es16.8))') (freq(ipoint),intens(ipoint),ipoint=1,npoints)
+       write(tunit,'(2(1x,es16.8E3))') (freq(ipoint),intens(ipoint),ipoint=1,npoints)
        !
      endif
      !
