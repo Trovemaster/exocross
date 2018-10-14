@@ -2363,7 +2363,7 @@ module spectrum
                 halfwidth = gamma_ram(iswap)
                 !
                 !write(*,*) "abscoef, tranfreq, halfwidth", abscoef, tranfreq, halfwidth
-                call do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,offset,freql,intens_omp(:,iomp))
+                call do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth,dpwcoef,offset,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3113,25 +3113,39 @@ module spectrum
      !
   end subroutine  do_Voi_Q
   !
-  subroutine  do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth_Lorentz,dpwcoef,offset,freql,intens)
+  subroutine  do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth_Lorentz,dpwcoef,offset,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth_Lorentz,offset,freql,dpwcoef
+     real(rk),intent(in) :: tranfreq,abscoef,halfwidth_Lorentz,offset,freql,dpwcoef
      real(rk),intent(in) :: freq(:)
      real(rk),intent(out) :: intens(:)
-     real(rk) :: tranfreq_i,halfwidth_doppler
+     real(rk) :: tranfreq_i,halfwidth_doppler,d_freq, d_ln_freq
      integer(ik) :: ib,ie,ipoint
+     logical, intent(in) :: use_resolving_power
       !
       halfwidth_doppler=dpwcoef*tranfreq
       if (halfwidth_doppler<100.0_rk*small_) return
-      ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
-      ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
-      !
+
+      if (use_resolving_power) then
+         d_ln_freq = log(freq(2)) - log(freq(1))
+         ib = nint((log(tranfreq - offset) - log(freql))/d_ln_freq) + 1
+         ib = max(ib, 1)
+         
+         ie = nint((log(tranfreq + offset) - log(freql))/d_ln_freq) + 1
+         ie = min(ie, npoints)
+      else
+         d_freq = freq(2) - freq(1)
+         ib =  max(nint( ( tranfreq-offset-freql)/d_freq )+1,1)
+         ie =  min(nint( ( tranfreq+offset-freql)/d_freq )+1,npoints)
+      endif
+
+      !write(*,*) ie, ib, tranfreq
       if (ie<=ib) return
+      
       !
       !$omp parallel do private(ipoint,tranfreq_i) shared(intens) schedule(dynamic)
-      do ipoint=ib,ie
+      do ipoint = ib, ie
          !
          tranfreq_i = freq(ipoint)
          !
