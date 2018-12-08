@@ -17,7 +17,7 @@ module spectrum
   !
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,ioffset = 10,iso=-1
   real(rk)      :: temp=298.0,partfunc=-1.0,freql=-small_,freqr= 200000.0,thresh=1.0d-70,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
-  real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = -25.0, pressure = 1.0_rk
+  real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = 25.0, pressure = 1.0_rk
   real(rk)      :: enermax = 1e7, abscoef_thresh = 1.0d-50, abundance = 1.0d0, gf_factor = 1.0d0
   real(rk)      :: S_crit = 1e-29      ! cm/molecule, HITRAN cut-off paramater
   real(rk)      :: nu_crit = 2000.0d0  ! cm-1, HITRAN cut-off paramater
@@ -91,7 +91,7 @@ module spectrum
   real(rk),allocatable,save  :: gamma_comb(:,:) !Used for indexing the gamma for the fast_voigt
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
              stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false.
-  logical :: lineprofile_do = .false.
+  logical :: lineprofile_do = .false., use_width_offset = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
   logical :: ready_for_work = .false.
@@ -697,7 +697,7 @@ module spectrum
           if (trim(w(1:5))=="LOREN") ioffset = 500
           if (trim(w(1:))=="VOI") ioffset = 500
           if (trim(w(1:3))=="PSE") ioffset = 500
-          offset = 25.0_rk
+          !offset = 25.0_rk
           !
           if (trim(w(1:5))=="STICK".and.Nitems>1) then
             call readu(w)
@@ -729,7 +729,15 @@ module spectrum
           !
        case ("OFFSET")
           !
-          call readf(offset)
+          call readf(offset) 
+          if (nitems<4) then
+            call readu(w)
+            if (trim(w)/='HWHM') then
+              write(out,"('illegal units of offset ',a,' must be HWHM')") trim(w)
+              stop "Illegal units of offset"
+            endif
+            use_width_offset = .true.
+          endif
           !
        case ("MASS")
           !
@@ -997,7 +1005,7 @@ module spectrum
    character(len=cl) :: w
    !
    integer(ik) :: imol,iostat_
-   real(rk)    :: gf,gi,mem_t,temp_gamma_n
+   real(rk)    :: gf,gi,mem_t,temp_gamma_n,offset_
    character(55) ch_q,ch_broad
    !
    ln2=log(2.0_rk)
@@ -1451,11 +1459,14 @@ module spectrum
    !Prepare VoigtKampff
    if(trim(proftype(1:5))=='VOI-F') then
      !
+     offset_ = offset
+     if ( use_width_offset ) offset_ = max(offset*halfwidth,25._rk)
+     !
      if(trim(proftype(1:6))=='VOI-FN') then
-      call fast_voigt%construct(dpwcoef,offset,dfreq,.true.)
+      call fast_voigt%construct(dpwcoef,offset_,dfreq,.true.)
       !call initalize_voigt_kampff(dpwcoef,dfreq,offset,voigt_index,1)
      else
-      call fast_voigt%construct(dpwcoef,offset,dfreq,.false.)
+      call fast_voigt%construct(dpwcoef,offset_,dfreq,.false.)
       !call initalize_voigt_kampff(dpwcoef,dfreq,offset,voigt_index,0)
      endif
      !call add_lorentzian(halfwidth,voigt_index,i)
@@ -2379,8 +2390,9 @@ module spectrum
                 !
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
+                halfwidth = gamma_ram(iswap)
                 !
-                call do_Voigt_Fast(tranfreq,abscoef,dfreq,freq,gamma_idx_RAM(iswap),dpwcoef,offset,freql,intens_omp(:,iomp))
+                call do_Voigt_Fast(tranfreq,abscoef,dfreq,freq,halfwidth,gamma_idx_RAM(iswap),dpwcoef,offset,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -2722,13 +2734,16 @@ module spectrum
      real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,freql
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
-     real(rk) :: alpha,abscoef,dfreq_,de,ln2
+     real(rk) :: alpha,abscoef,dfreq_,de,ln2,offset_
      integer(ik) :: ib,ie,ipoint
      !
      if (halfwidth<small_) return
      !
-     ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+     offset_ = offset
+     if ( use_width_offset ) offset_ = offset*halfwidth
+     !
+     ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+offset_-freql)/dfreq )+1,npoints)
      !
      ln2=log(2.0_rk)
      alpha = -ln2/halfwidth**2
@@ -2757,7 +2772,7 @@ module spectrum
      real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
-     real(rk) :: dfreq_,de,xp,xm,ln2,x0
+     real(rk) :: dfreq_,de,xp,xm,ln2,x0,offset_
      integer(ik) :: ib,ie,ipoint
      !
      if (halfwidth<small_) return 
@@ -2766,8 +2781,11 @@ module spectrum
      !
      x0 = sqrt(ln2)/halfwidth*dfreq*0.5_rk
      !
-     ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+     offset_ = offset
+     if ( use_width_offset ) offset_ = offset*halfwidth
+     !
+     ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+offset_-freql)/dfreq )+1,npoints)
      !
      !omp parallel do private(ipoint,dfreq_,xp,xm,de) shared(intens) schedule(dynamic)
      do ipoint=ib,ie
@@ -2794,10 +2812,13 @@ module spectrum
      real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
-     real(rk) :: dfreq_,de,xp,xm,b,dnu_half
+     real(rk) :: dfreq_,de,xp,xm,b,dnu_half,offset_
      integer(ik) :: ib,ie,ipoint
      !
-     ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
+     offset_ = offset
+     if ( use_width_offset ) offset_ = offset*halfwidth
+     !
+     ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
      ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
      !
      !abscoef=abscoef*sqrt(ln2/pi)/halfwidth
@@ -2847,15 +2868,18 @@ module spectrum
      real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql,dpwcoef
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
-     real(rk) :: dfreq_,de,xp,xm,ln2,dnu_half,bnorm,f,eta1,eta2,intens2,halfwidth0,x0,intens1
+     real(rk) :: dfreq_,de,xp,xm,ln2,dnu_half,bnorm,f,eta1,eta2,intens2,halfwidth0,x0,intens1,offset_
      integer(ik) :: ib,ie,ipoint
 
       !
       halfwidth0=dpwcoef*tranfreq
       x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
       !
-      ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
-      ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+      offset_ = offset
+      if ( use_width_offset ) offset_ = offset*max(halfwidth0,halfwidth)
+      !
+      ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
+      ie =  min(nint( ( tranfreq+offset_-freql)/dfreq )+1,npoints)
       !
       !abscoef=abscoef*sqrt(ln2/pi)/halfwidth
       !
@@ -2911,14 +2935,17 @@ module spectrum
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
      real(rk) :: dfreq_,de,xp,xm,ln2,dnu_half,bnorm,eta1,eta2,intens2,halfwidth0,x0,a,wg,va0
-     real(rk) :: gammaV,intens1
+     real(rk) :: gammaV,intens1,offset_
      integer(ik) :: ib,ie,ipoint
      !
      halfwidth0=dpwcoef*tranfreq
      x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
      !
-     ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+     offset_ = offset
+     if ( use_width_offset ) offset_ = offset*max(halfwidth0,halfwidth)
+     !
+     ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+offset_-freql)/dfreq )+1,npoints)
      !
      dfreq_=freq(ib)-tranfreq
      !
@@ -2977,15 +3004,17 @@ module spectrum
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
      real(rk) :: dfreq_,de,xp,xm,ln2,bnorm,eta1,eta2,intens2,halfwidth0
-     real(rk) :: d,x0,intens1,dnu_half
+     real(rk) :: d,x0,intens1,dnu_half,offset_
      integer(ik) :: ib,ie,ipoint
      !
      halfwidth0=dpwcoef*tranfreq
      x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
      !
+     offset_ = offset
+     if ( use_width_offset ) offset_ = offset*max(halfwidth0,halfwidth)
      !
-     ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+     ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+offset_-freql)/dfreq )+1,npoints)
      !
      dfreq_=freq(ib)-tranfreq
      !
@@ -3041,18 +3070,21 @@ module spectrum
      real(rk),intent(in) :: freq(npoints),abciss(nquad),weight(nquad)
      real(rk),intent(inout) :: intens(npoints)
      real(rk) :: alpha,ln2,halfwidth0,gamma,xp
-     real(rk) :: ln22,y,dx2,x0,sigma,xi,x1,x2,l1,l2,bnormq(1:nquad),Lorentz(nquad),dxp,voigt_
+     real(rk) :: ln22,y,dx2,x0,sigma,xi,x1,x2,l1,l2,bnormq(1:nquad),Lorentz(nquad),dxp,voigt_,offset_
      integer(ik) :: ib,ie,ipoint,iquad
      !
      halfwidth0=dpwcoef*tranfreq
      if (halfwidth0<100.0_rk*small_) return
      !
+     offset_ = offset
+     if ( use_width_offset ) offset_ = offset*max(halfwidth0,halfwidth)
+     !
      ln2=log(2.0_rk)
      ln22 = ln2*2.0_rk
      x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
      !
-     ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+     ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+offset_-freql)/dfreq )+1,npoints)
      !
      if (ie<=ib) return
      !
@@ -3120,13 +3152,17 @@ module spectrum
      real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth_Lorentz,offset,freql,dpwcoef
      real(rk),intent(in) :: freq(:)
      real(rk),intent(out) :: intens(:)
-     real(rk) :: tranfreq_i,halfwidth_doppler
+     real(rk) :: tranfreq_i,halfwidth_doppler,offset_
      integer(ik) :: ib,ie,ipoint
       !
       halfwidth_doppler=dpwcoef*tranfreq
       if (halfwidth_doppler<100.0_rk*small_) return
-      ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
-      ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+      !
+      offset_ = offset
+      if ( use_width_offset ) offset_ = offset*max(halfwidth_Lorentz,halfwidth_doppler)
+      !
+      ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
+      ie =  min(nint( ( tranfreq+offset_-freql)/dfreq )+1,npoints)
       !
       if (ie<=ib) return
       !
@@ -3144,23 +3180,27 @@ module spectrum
   end subroutine  do_Voigt
   !
 
-  subroutine  do_Voigt_Fast(tranfreq,abscoef,dfreq,freq,halfwidth_Lorentz,dpwcoef,offset,freql,intens)
+  subroutine  do_Voigt_Fast(tranfreq,abscoef,dfreq,freq,halfwidth_Lorentz,index_Lorentz,dpwcoef,offset,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,offset,freql,dpwcoef
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,offset,freql,dpwcoef,halfwidth_Lorentz
      real(rk),intent(in) :: freq(:)
-     integer,intent(in)  :: halfwidth_Lorentz
+     integer,intent(in)  :: index_Lorentz
      real(rk),intent(out) :: intens(:)
-     real(rk) :: halfwidth_doppler
+     real(rk) :: halfwidth_doppler,offset_
      integer(ik) :: ib,ie
       !
       halfwidth_doppler=dpwcoef*tranfreq
       if (halfwidth_doppler<100.0_rk*small_) return
+      !
+      offset_ = offset
+      if ( use_width_offset ) offset_ = offset*max(halfwidth_doppler,halfwidth_Lorentz)
+      !
       ib =  max(nint( ( tranfreq-offset-freql)/dfreq +1),1)
       ie =  min(nint( ( tranfreq+offset-freql)/dfreq +1),npoints)
       !
-      call fast_voigt%compute(freq,intens, abscoef,ib,ie,freql,tranfreq,halfwidth_Lorentz)
+      call fast_voigt%compute(freq,intens, abscoef,ib,ie,freql,tranfreq,index_Lorentz)
       !
   end subroutine  do_Voigt_Fast
   !
