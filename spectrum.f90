@@ -900,9 +900,9 @@ module spectrum
     !
     if (use_resolving_power) then
       !
-      if (trim(proftype) /= 'BIN-R') then 
-        write(out,"(/'Warning: The RESOLVING option has not been tested for ',a,', only for BIN')") trim(proftype)
-        !stop "The RESOLVING option can be used with BIN onle"
+      if (trim(proftype) /= 'BIN-R' .and. trim(proftype) /= 'VOIGT') then 
+        write(out,"(/'Warning: The RESOLVING option has not been tested for ',a,', only for BIN and VOIGT')") trim(proftype)
+        !stop "The RESOLVING option can be used with BIN only"
       endif
       !
       npoints0 = nint(real((log(freqr)-log(freql))/resolving_f,rk))+1
@@ -975,13 +975,14 @@ module spectrum
    use  input
    !
    !
+   real(rk)    :: hitran_Tref = 296_rk
    integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems
    integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k
-   real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0
+   real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff
    integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll
-   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,h,a,b
+   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2
    character(len=cl) :: ioname
    !
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
@@ -1432,11 +1433,8 @@ module spectrum
      enddo
      !
      ! From Numerical Recipes in Fortran 77
-     h=T_2-T_1
-     if (h==0._rk) stop 'bad xa input in splint'
-     a=(T_2-temp)/h
-     b=(temp-T_1)/h
-     partfunc=a*pf_1+b*pf_2+((a**3-a)*pf_1+(b**3-b)*pf_2)*(h**2)/6._rk
+     if (T_1 == T_2) stop 'Duplicate temperature in partition file'
+     partfunc = pf_1 + (temp - T_1) * (pf_2 - pf_1)/(T_2 - T_1)
      !
    endif
    !
@@ -1778,9 +1776,9 @@ module spectrum
    call ArrayStart('swap:ilevelf_RAM',info,size(ilevelf_RAM),kind(ilevelf_RAM))
    !
    if (lineprofile_do) then
-     allocate(gamma_RAM(N_to_RAM),stat=info)
+     allocate(gamma_ram(N_to_RAM),stat=info)
      allocate(gamma_idx_RAM(N_to_RAM),stat=info)
-     call ArrayStart('swap:gamma_RAM',info,size(gamma_RAM),kind(gamma_RAM))
+     call ArrayStart('swap:gamma_ram',info,size(gamma_ram),kind(gamma_ram))
    endif
    !
    if (verbose>=4) call MemoryReport
@@ -1837,7 +1835,7 @@ module spectrum
              abscoef_RAM(iswap_) = abscoef
              !
              if (lineprofile_do) then
-               gamma_RAM(iswap_)=halfwidth
+               gamma_ram(iswap_)=halfwidth
                gamma_idx_RAM(iswap_) = 0
              endif
              !
@@ -1888,9 +1886,10 @@ module spectrum
            do while(iswap_<N_to_RAM)
              !
              !read(tunit,*,end=119) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
-             read(tunit,"(i3,f12.6,e10.3,e10.3,f5.4,f5.3,f10.4,f4.2,8x,a55,23x,2f7.1)",end=119) &
-                  imol,tranfreq,abscoef,acoef,gamma_,gamma_s,energyi,n_,ch_q,gf,gi
+             read(tunit,"(i3,f12.6,e10.3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6,a55,23x,2f7.1)",end=119) &
+                  imol,tranfreq,abscoef,acoef,gamma_,gamma_s,energyi,n_,delta_air,ch_q,gf,gi
              !
+             tranfreq = tranfreq + delta_air * pressure
              energyf = tranfreq + energyi
              !
              if (imol/=iso) cycle
@@ -1919,7 +1918,11 @@ module spectrum
                species(2)%gamma = gamma_s
                !species(2)%n = n_
                !
-               gamma_RAM(iswap_) = get_Voigt_gamma_n(Nspecies_,Jf,Ji)
+               gamma_ram(iswap_) = gamma_ * pressure * (hitran_Tref/temp)**n_
+
+               !Below: probably not correct, but gamma_idx_RAM definitely needs
+               !to be initialized somehow
+               gamma_idx_RAM(iswap_) = fast_voigt%get_size()
                !
              endif
              !
@@ -1976,7 +1979,7 @@ module spectrum
            !
            !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,ifilter,&
            !$omp& ivib,ener_vib,ener_rot,jf,ji,tranfreq,tranfreq0,offset,abscoef,cutoff)&
-           !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,Asum,gamma_RAM)
+           !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,Asum,gamma_ram)
            loop_swap : do iswap = 1,nswap_
              !
              indexf = indexf_RAM(iswap)
@@ -2118,8 +2121,8 @@ module spectrum
              nu_ram(iswap) = tranfreq
              !
              if (lineprofile_do) then
-               gamma_RAM(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji)
-               temp_gamma_n = get_Voigt_gamma_n(Nspecies,Jf,Ji,gamma_idx_RAM(iswap))               
+                gamma_ram(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji)
+                temp_gamma_n = get_Voigt_gamma_n(Nspecies,Jf,Ji,gamma_idx_RAM(iswap))
              endif
              !
              !do do_log_intensity
@@ -2140,7 +2143,7 @@ module spectrum
                 nu_ram(iswap_) = nu_ram(iswap)
                 !
                 if (lineprofile_do) then
-                  gamma_RAM(iswap_)=gamma_RAM(iswap)
+                  gamma_ram(iswap_)=gamma_ram(iswap)
                   gamma_idx_RAM(iswap_)=gamma_idx_RAM(iswap)
                 endif
                 !
@@ -2374,7 +2377,8 @@ module spectrum
                 tranfreq = nu_ram(iswap)
                 halfwidth = gamma_ram(iswap)
                 !
-                call do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,offset,freql,intens_omp(:,iomp))
+
+                call do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth,dpwcoef,offset,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -2392,7 +2396,8 @@ module spectrum
                 tranfreq = nu_ram(iswap)
                 halfwidth = gamma_ram(iswap)
                 !
-                call do_Voigt_Fast(tranfreq,abscoef,dfreq,freq,halfwidth,gamma_idx_RAM(iswap),dpwcoef,offset,freql,intens_omp(:,iomp))
+                call do_Voigt_Fast(tranfreq,abscoef,use_resolving_power, &
+                     freq,gamma_idx_RAM(iswap),dpwcoef,offset,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -2615,7 +2620,7 @@ module spectrum
        ! change from microns to wavenumbers
        !
        do ipoint =  npoints,1,-1
-         !
+          !
          write(tunit,'(2(1x,es16.8))') 10000.0_rk/freq(ipoint),intens(ipoint)
          !
        enddo
@@ -2634,7 +2639,7 @@ module spectrum
        !
      else
        !
-       write(tunit,'(2(1x,es16.8))') (freq(ipoint),intens(ipoint),ipoint=1,npoints)
+       write(tunit,'(2(1x,es16.8E3))') (freq(ipoint),intens(ipoint),ipoint=1,npoints)
        !
      endif
      !
@@ -3145,29 +3150,37 @@ module spectrum
      !
   end subroutine  do_Voi_Q
   !
-  subroutine  do_Voigt(tranfreq,abscoef,dfreq,freq,halfwidth_Lorentz,dpwcoef,offset,freql,intens)
+  subroutine  do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth_Lorentz,dpwcoef,offset,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth_Lorentz,offset,freql,dpwcoef
+     real(rk),intent(in) :: tranfreq,abscoef,halfwidth_Lorentz,offset,freql,dpwcoef
      real(rk),intent(in) :: freq(:)
      real(rk),intent(out) :: intens(:)
-     real(rk) :: tranfreq_i,halfwidth_doppler,offset_
+     real(rk) :: tranfreq_i,halfwidth_doppler,d_freq, d_ln_freq
      integer(ik) :: ib,ie,ipoint
+     logical, intent(in) :: use_resolving_power
       !
       halfwidth_doppler=dpwcoef*tranfreq
       if (halfwidth_doppler<100.0_rk*small_) return
       !
-      offset_ = offset
-      if ( use_width_offset ) offset_ = offset*max(halfwidth_Lorentz,halfwidth_doppler)
-      !
-      ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
-      ie =  min(nint( ( tranfreq+offset_-freql)/dfreq )+1,npoints)
+      if (use_resolving_power) then
+         d_ln_freq = log(freq(2)) - log(freq(1))
+         ib = nint((log(tranfreq - offset) - log(freql))/d_ln_freq) + 1
+         ib = max(ib, 1)
+         
+         ie = nint((log(tranfreq + offset) - log(freql))/d_ln_freq) + 1
+         ie = min(ie, npoints)
+      else
+         d_freq = freq(2) - freq(1)
+         ib =  max(nint( ( tranfreq-offset-freql)/d_freq )+1,1)
+         ie =  min(nint( ( tranfreq+offset-freql)/d_freq )+1,npoints)
+      endif
       !
       if (ie<=ib) return
       !
       !$omp parallel do private(ipoint,tranfreq_i) shared(intens) schedule(dynamic)
-      do ipoint=ib,ie
+      do ipoint = ib, ie
          !
          tranfreq_i = freq(ipoint)
          !
@@ -3180,25 +3193,33 @@ module spectrum
   end subroutine  do_Voigt
   !
 
-  subroutine  do_Voigt_Fast(tranfreq,abscoef,dfreq,freq,halfwidth_Lorentz,index_Lorentz,dpwcoef,offset,freql,intens)
+  subroutine  do_Voigt_Fast(tranfreq,abscoef,use_resolving_power,freq,index_Lorentz,dpwcoef,offset,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,offset,freql,dpwcoef,halfwidth_Lorentz
+     real(rk),intent(in) :: tranfreq,abscoef,offset,freql,dpwcoef
      real(rk),intent(in) :: freq(:)
      integer,intent(in)  :: index_Lorentz
      real(rk),intent(out) :: intens(:)
-     real(rk) :: halfwidth_doppler,offset_
+     real(rk) :: halfwidth_doppler,d_freq,d_ln_freq
      integer(ik) :: ib,ie
+     logical :: use_resolving_power
       !
       halfwidth_doppler=dpwcoef*tranfreq
       if (halfwidth_doppler<100.0_rk*small_) return
       !
-      offset_ = offset
-      if ( use_width_offset ) offset_ = offset*max(halfwidth_doppler,halfwidth_Lorentz)
-      !
-      ib =  max(nint( ( tranfreq-offset-freql)/dfreq +1),1)
-      ie =  min(nint( ( tranfreq+offset-freql)/dfreq +1),npoints)
+      if (use_resolving_power) then
+         d_ln_freq = log(freq(2)) - log(freq(1))
+         ib = nint((log(tranfreq - offset) - log(freql))/d_ln_freq) + 1
+         ib = max(ib, 1)
+         
+         ie = nint((log(tranfreq + offset) - log(freql))/d_ln_freq) + 1
+         ie = min(ie, npoints)
+      else
+         d_freq = freq(2) - freq(1)
+         ib =  max(nint( ( tranfreq-offset-freql)/d_freq )+1,1)
+         ie =  min(nint( ( tranfreq+offset-freql)/d_freq )+1,npoints)
+      endif
       !
       call fast_voigt%compute(freq,intens, abscoef,ib,ie,freql,tranfreq,index_Lorentz)
       !
