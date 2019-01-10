@@ -1148,8 +1148,6 @@ module spectrum
         !
         Asum = -1.0_rk
         !
-        write(my_fmt,'(a)')  '(1x,i11,1x,f12.6,1x,i6,1x,f7.1,1x,es12.4,3x)'
-        !
       endif
       !
       allocate(quantum_numbers(0:maxitems,nlines),nchars_quanta(maxitems),stat=info)
@@ -1349,7 +1347,7 @@ module spectrum
           !
           temp0 = real(itemp,rk)*dtemp
           !
-          write(tunit,"(f9.1,1x,es15.4)") temp0,pf(0,itemp)
+          write(tunit,"(f8.1,1x,f15.4)") temp0,pf(0,itemp)
           !
         enddo
         !
@@ -1389,7 +1387,7 @@ module spectrum
           !
           temp0 = real(itemp,rk)*dtemp
           !
-          write(tunit,"(1x,f12.3,1x,es20.8)") temp0,pf(0,itemp)
+          write(tunit,"(f8.1,1x,f15.4)") temp0,pf(0,itemp)
           !
         enddo
         !
@@ -2556,15 +2554,20 @@ module spectrum
      !
      open(unit=tunit,file=trim(output)//".life",action='write',status='replace')
      !
+     if ( mod(nint(2.0_rk*jrot(1)),2)==0 ) then 
+       write(my_fmt,'(a)')  '(1x,i11,1x,f12.6,1x,i6,1x,i7,1x,es12.4,3x)'
+     else
+       write(my_fmt,'(a)')  '(1x,i11,1x,f12.6,1x,i6,1x,f7.1,1x,es12.4,3x)'
+     endif
+     !
      do ilevelf = 1,nlines
        !
        ! write to .life-file
        !
-       if ( mod(nint(2.0_rk*jrot(ilevelf)),2)==0 ) then 
-         write(my_fmt,'(a)')  '(1x,i11,1x,f12.6,1x,i6,1x,f7.1,1x,es12.4,3x)'
-         write(tunit,my_fmt,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),nint(jrot(ilevelf)),1.0_rk/Asum(ilevelf)
+       if ( mod(nint(2.0_rk*jrot(1)),2)==0 ) then 
+          write(tunit,my_fmt,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),nint(jrot(ilevelf)),1.0_rk/Asum(ilevelf)
        else
-         write(tunit,my_fmt,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),jrot(ilevelf),1.0_rk/Asum(ilevelf)
+          write(tunit,my_fmt,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),jrot(ilevelf),1.0_rk/Asum(ilevelf)
        endif
        !
        do kitem = 1,maxitems
