@@ -7,7 +7,7 @@ Temperature 298.0
 mass 23.
 
 species
- H2   gamma 0.0155 n 0.41 t0 298.0 ratio 0.82
+ H2  gamma 0.0155 n 0.41 t0 298.0 ratio 0.82
  He  gamma 0.1070 n 0.77 t0 298.0 ratio 0.18
 end
 
