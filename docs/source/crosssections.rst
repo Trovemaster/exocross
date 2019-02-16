@@ -1,14 +1,22 @@
 Cross-Sections
-=============
+==============
 
 The method is described in: 
 C. Hill, S. N. Yurchenko, J. Tennyson, "Temperature-dependent molecular absorption cross sections for exoplanets and other atmospheres",  Icarus, 226, 1673-1677 (2013). 
-.. _link to article: http://www.sciencedirect.com/science/article/pii/S0019103512003041
+`See the paper here`_.
 
-* Gaussian profile, HWHM is the half-width at half-maximum. 
 
-### Example:
+.. _See the paper here: http://www.sciencedirect.com/science/article/pii/S0019103512003041
 
+
+
+Gaussian profile
+^^^^^^^^^^^^^^^^
+
+Example (HWHM is the half-width at half-maximum):
+
+::
+    
     Temperature  2000.0
     Range 0.0  12000.0
     
@@ -36,13 +44,18 @@ C. Hill, S. N. Yurchenko, J. Tennyson, "Temperature-dependent molecular absorpti
     end
     
 
-* Doppler profile 
 
-![Doppler](https://github.com/Trovemaster/exocross/blob/master/img/alpha.png)
-m is the effective mass of the molecule in amu. 
+Doppler profile 
+^^^^^^^^^^^^^^^
 
-### Example
+Doppler_ is the effective mass of the molecule in amu. 
 
+.. _Doppler: https://github.com/Trovemaster/exocross/blob/master/img/alpha.png
+
+Example:
+
+::
+    
     Temperature  1500.0
     Range 0.0  12000.0
     Npoints 200001
@@ -55,15 +68,16 @@ m is the effective mass of the molecule in amu.
     States ch4-50.states-all
 
     Transitions a-02100.dat
+    
 
+Lorentzian profile
+^^^^^^^^^^^^^^^^^^
 
-* Lorentzian profile
+Here b is the normalization factor. 
 
-![Lorentz](https://github.com/Trovemaster/exocross/blob/master/img/lorentz.png)
+Example:
 
-where b is the normalization factor. 
-
-### Example:
+::
 
     Temperature  300
     Range 0.0  10000.0
@@ -80,10 +94,12 @@ where b is the normalization factor.
     Transitions NiH.trans
 
 
-* Stick spectrum
+Stick spectrum
+^^^^^^^^^^^^^^
 
-### Example
-
+Example:
+::
+    
     (ScH stick spectrum)
     Temperature 1500.0
     Range 0.  16000.0
@@ -97,13 +113,18 @@ where b is the normalization factor.
     output ScH_1500K_stick
     States       ScH.states
     Transitions  ScH.trans
+        
+
+bin 
+^^^
+
+is to produce average intensity per the wavenumber or wavelength interval as defined by 
+Range/(Npoints-1). The wavelength is invoked by adding um to the range values. 
+
+Example:
+::
+
     
-
-* bin 
-give average intensity per the wavenumber or wavelength interval as defined by Range/(Npoints-1). The wavelength is invoked by adding um to the range values 
-
-### Example:
-
     (ScH bin spectrum)
     Temperature 1500.0
     Range 0.  16000.0
@@ -117,18 +138,22 @@ give average intensity per the wavenumber or wavelength interval as defined by R
     States       ScH.states
     Transitions  ScH.trans
     
-or 
+ 
+or:
+::
     
     (ScH bin spectrum)
     Temperature 1500.0
     Range 1.  100.0 um (or micron)
+    
 
+Box
+^^^
+Is to plot the maximal transition intensity per wavenumber interval, which is a cheaper alternative for the stick spectrum
 
-* Box
-gives the maximal transition intensity per wavenumber interval, which is a cheaper alternative for the stick spectrum
-
-### Example:
-
+Example:
+::
+    
     (ScH box spectrum)
     Temperature 1500.0
     Range 0.  16000.0
@@ -144,10 +169,14 @@ gives the maximal transition intensity per wavenumber interval, which is a cheap
     output ScH_1500K_box_stick
     States       ScH.states
     Transitions  ScH.trans
+    
+    
 
-The intensity cut-off (stick) can be done using the HITRAN method: S = S0 nu/nu0 tanh(c2 nu /2/T) 
-for nu<=2000 cm-1 and 1e-29 cm/molecule above. 
-     
+The intensity cut-off (stick) can be done using the HITRAN method: 
+:math:`S=S_{0} \tanh(c_2 \nu/2T)` for :math:`\nu\le 2000` cm :math:`^{-1}` and :math:`10^{-29}` cm/molecule above. 
+
+::     
+    
     absorption
     stick
     cutoff HITRAN (S_crit) 1e-29  nu_crit 2000 
@@ -156,4 +185,6 @@ for nu<=2000 cm-1 and 1e-29 cm/molecule above.
     States       ScH.states
     Transitions  ScH.trans
      
+
+
 
