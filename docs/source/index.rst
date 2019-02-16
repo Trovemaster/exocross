@@ -8,7 +8,10 @@ Welcome to ExoCross's documentation!
    intro
    crosssections
    lifetimes   
-   filters 
+   filters
+   partfunc 
+   cooling
+   keywords
    license
 
  
