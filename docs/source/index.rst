@@ -12,6 +12,7 @@ Welcome to ExoCross's documentation!
    partfunc 
    cooling
    superlines
+   profiles
    hitran
    keywords
    license
