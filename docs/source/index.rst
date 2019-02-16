@@ -11,6 +11,8 @@ Welcome to ExoCross's documentation!
    filters
    partfunc 
    cooling
+   superlines
+   hitran
    keywords
    license
 
