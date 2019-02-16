@@ -37,7 +37,7 @@ module accuracy
   real(rk), parameter :: rad   = 180._rk/pi                      ! radian = 180/pi
   integer, parameter  :: cl          = 80                        ! Max character string length
   integer, parameter  :: wl          = 500                       ! Very large max character string length 
-  character(len=cl)   :: my_fmt                                  !text variable containing formats for reads/writes
+  character(len=cl)   :: my_fmt                                  ! text variable containing formats for reads/writes
   integer, parameter  :: fititermax  = 200                       ! Max number of iterations in different fittings 
 
 

@@ -3299,7 +3299,8 @@ module spectrum
      character(len=20),intent(in) :: quantum_numbers(0:maxitems,nlines)
      integer(ik) :: nchars_,kitem,ierror_nu,iE,ierror_i,ierror,ierror_S,l,qni,qnf,ierror_f,&
                     ilevelf,ileveli,iswap,nchars_tot
-     character(9) b_fmt
+     character(9) :: b_fmt
+     character(len=cl) :: h_fmt
      integer(ik) :: Jpp,Jp,i
      real(rk)    :: gamma1,gamma2,gamma3,n1,n2,n3
      !
@@ -3317,6 +3318,13 @@ module spectrum
        jf = jrot(ilevelf)
        ji = jrot(ileveli)
        !
+       !
+       if (abscoef>1.0D-99) then 
+          write(h_fmt,"(a)") "(i3,f12.6,es10.3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6)"
+       else
+          write(h_fmt,"(a)") "(i3,f12.6,es10.2E3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6)"
+       endif
+       !
        if (stick_hitran) then
          !
          Jp  = int(Jf)
@@ -3326,7 +3334,7 @@ module spectrum
          gamma2 = species(2)%gammaQN(Jpp,Jp-Jpp)
          n1 = species(1)%nQN(Jpp,Jp-Jpp)
          !
-         write(sunit,"(i3,f12.6,e10.3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6)",advance="no") &
+         write(sunit,h_fmt,advance="no") &
                      iso,tranfreq,abscoef,acoef,&
                      gamma1,gamma2,&
                      energyi,n1,species(1)%delta
