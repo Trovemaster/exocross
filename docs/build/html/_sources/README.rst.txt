@@ -4,14 +4,11 @@ Welcome to ExoCross's documentation!
 
 Anoher simple header 
 ====================
-Simple text:: 
+Simple text 
 
     
     print "Hello"
     >> hello! 
-
-
-
     
 
 Guide 
@@ -20,15 +17,12 @@ Guide
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
-
-   intro
-   lifetimes   
-   filters 
-   license
-
+   
+   help
+   license 
    
    
-If :math:`\sigma_{1}` equals :math:`\sigma_{2}` then etc, etc.
+
 
 
 Indices and tables

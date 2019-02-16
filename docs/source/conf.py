@@ -28,6 +28,8 @@ version = ''
 # The full version, including alpha/beta/rc tags
 release = '1'
 
+html_theme = 'classic'
+
 
 # -- General configuration ---------------------------------------------------
 
@@ -68,7 +70,6 @@ exclude_patterns = []
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = None
-
 
 # -- Options for HTML output -------------------------------------------------
 
