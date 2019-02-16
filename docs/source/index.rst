@@ -22,6 +22,7 @@ Guide
    :caption: Contents:
 
    intro
+   crosssections
    lifetimes   
    filters 
    license

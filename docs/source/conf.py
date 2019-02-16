@@ -28,7 +28,7 @@ version = ''
 # The full version, including alpha/beta/rc tags
 release = '1'
 
-html_theme = 'classic'
+html_theme = 'nature'
 
 
 # -- General configuration ---------------------------------------------------
