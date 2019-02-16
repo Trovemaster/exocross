@@ -1,22 +1,6 @@
 Welcome to ExoCross's documentation!
 ====================================
 
-
-Anoher simple header 
-====================
-Simple text:: 
-
-    
-    print "Hello"
-    >> hello! 
-
-
-
-    
-
-Guide 
-^^^^^    
-
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
@@ -27,11 +11,7 @@ Guide
    filters 
    license
 
-   
-   
-If :math:`\sigma_{1}` equals :math:`\sigma_{2}` then etc, etc.
-
-
+ 
 Indices and tables
 ==================
 
