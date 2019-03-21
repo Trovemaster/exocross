@@ -730,7 +730,7 @@ module spectrum
        case ("OFFSET")
           !
           call readf(offset) 
-          if (nitems<4) then
+          if (nitems>2) then
             call readu(w)
             if (trim(w)/='HWHM') then
               write(out,"('illegal units of offset ',a,' must be HWHM')") trim(w)
