@@ -4,17 +4,40 @@ Line profiles
 Doppler 
 ^^^^^^^
 
+This is the averaged Doppler line profile which conserves the area at each grid point for any resolution used. 
+It requires a mass of the molecule (Dalton) defined.  
+
+
 Example 
 ::
 
      temperature 2000.0 
      absorption
      Doppler
+     mass 20.0 
+
+
+
+Doppler Sampling
+^^^^^^^^^^^^^^^^
+::
+
+     temperature 2000.0 
+     absorption
+     Doppler Sampling
+     mass 20.0 
+
+
+
+
+`Doppler Sampling` is used for the simple sampling method. 
 
 
 
 Gaussian
 ^^^^^^^^
+This is the averaged Gaussian line profile which conserves the area at each grid point for any resolution used. 
+It requires an `HWHM` value to be defined.  
 
 Example 
 ::
@@ -23,6 +46,22 @@ Example
      absorption
      gaussian
      hwhm .321
+
+
+Gaussian Sampling
+^^^^^^^^^^^^^^^^^
+
+`Gaussian Sampling` is used for the simple sampling method. 
+
+
+Example 
+::
+
+     temperature 2000.0 
+     absorption
+     gaussian Sampling
+     hwhm .321
+
 
 
 Voigt

@@ -190,9 +190,19 @@ In combination with the keyword `histogram-J` the transition filename can be fol
 
     bin
     
-   
+
+* Sampling: used together with the line profile to indicate that a sampling (not averaging) version will be used. For example   
+
+::
+
+    gaussian sampling 
+
+
+Currently this makes sense only in combination with Gaussian and Doppler. 
+
 
 * HWHM, HalfWidth: Half width at the half maximum, used for Gauss, Lorenz.
+
 
 ::
 

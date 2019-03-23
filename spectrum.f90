@@ -733,7 +733,7 @@ module spectrum
               !
               select case(w)
                 !
-              case("SAMPLE")
+              case("SAMPLING")
                 !
                 if (trim(proftype)=="DOPPLER")  proftype = 'DOPP0'
                 if (trim(proftype)=="GAUSSIAN") proftype = 'GAUS0'
@@ -1022,7 +1022,7 @@ module spectrum
     !
     if (Ngrids>0.and.all( proftype(1:5)/=(/'VOIGT','GAUS0','DOPP0'/))) then 
        write(out,"('Error: grids cannot be used with in combination with ',a)") trim(proftype(1:5))
-       write(out,"('currently only with Voigt or Gaussian or Doppler SAMPLE')")
+       write(out,"('currently only with Voigt or Gaussian or Doppler SAMPLING')")
        stop 'Error: illegal use of grid and a profile type'
     endif
     !
