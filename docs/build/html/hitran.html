@@ -140,6 +140,17 @@
 <p><cite>qn 4</cite> indicates the quantum number (4th column in States after J’s columns);</p>
 <p><cite>ierror 4 vmax 10</cite> means that the error code 4 is applied for all values of <cite>qn</cite> less or equal to 10 etc.</p>
 <p><cite>error-Air   ierr 4</cite> indicates that the error code for the Air-broadening is 4.</p>
+<p>The intensity cut-off (stick) can be done using the HITRAN method:
+<span class="math notranslate nohighlight">\(S=S_{0} \tanh(c_2 \nu/2T)\)</span> for <span class="math notranslate nohighlight">\(\nu\le 2000\)</span> cm <span class="math notranslate nohighlight">\(^{-1}\)</span> and <span class="math notranslate nohighlight">\(10^{-29}\)</span> cm/molecule above.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">absorption</span>
+<span class="n">stick</span>
+<span class="n">cutoff</span> <span class="n">HITRAN</span> <span class="p">(</span><span class="n">S_crit</span><span class="p">)</span> <span class="mf">1e-29</span>  <span class="n">nu_crit</span> <span class="mi">2000</span>
+
+<span class="n">output</span> <span class="n">ScH_1500K_box_stick</span>
+<span class="n">States</span>       <span class="n">ScH</span><span class="o">.</span><span class="n">states</span>
+<span class="n">Transitions</span>  <span class="n">ScH</span><span class="o">.</span><span class="n">trans</span>
+</pre></div>
+</div>
 </div>
 
 

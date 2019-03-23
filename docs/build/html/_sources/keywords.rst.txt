@@ -303,7 +303,7 @@ Example
     Transitions  26_hit12.par
     
     
- HITRAN` can also form a section where there HITRAN-error codes are specified, e.g. 
+ `HITRAN` can also form a section where there HITRAN-error codes are specified, e.g. 
 ::
      
      hitran
@@ -312,6 +312,21 @@ Example
       error-S  qn 4 ierr 5  vmax  10 ierr 4  vmax  20 ierr 3  vmax  100 
       error-Air   ierr 4
      end
+
+
+* `grid` is to define a multi-grid with different resolutions in different sub-grids as follows 
+
+Example 
+::     
+    
+    grid
+      Range   0    100   Npoints 10000
+      Range 100   1000  Npoints 1000 
+      Range 1000 10000  Npoints 100
+    end
+     
+    
+
 
 
 ** `error-E` and `error-S` are used to specify the ranges for the quantum numbers for different Energy and intensity error-codes, respectively.

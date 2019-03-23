@@ -80,3 +80,20 @@ Here `write` indicates that the HITRAN-stick-like list will be printed.
 `error-Air   ierr 4` indicates that the error code for the Air-broadening is 4. 
 
  
+
+
+The intensity cut-off (stick) can be done using the HITRAN method: 
+:math:`S=S_{0} \tanh(c_2 \nu/2T)` for :math:`\nu\le 2000` cm :math:`^{-1}` and :math:`10^{-29}` cm/molecule above. 
+
+::     
+    
+    absorption
+    stick
+    cutoff HITRAN (S_crit) 1e-29  nu_crit 2000 
+    
+    output ScH_1500K_box_stick
+    States       ScH.states
+    Transitions  ScH.trans
+     
+
+

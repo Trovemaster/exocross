@@ -325,7 +325,7 @@ He  gamma 0.043 n 0.02 t0 298.0 file  1H2-16O__He__a1.broad model JJ ratio 0.16<
    Transitions  26_hit12.par
 
 
-HITRAN` can also form a section where there HITRAN-error codes are specified, e.g.
+`HITRAN` can also form a section where there HITRAN-error codes are specified, e.g.
 </pre></div>
 </div>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">hitran</span>
@@ -333,6 +333,17 @@ HITRAN` can also form a section where there HITRAN-error codes are specified, e.
  <span class="n">error</span><span class="o">-</span><span class="n">E</span>  <span class="n">qn</span> <span class="mi">4</span> <span class="n">ierr</span> <span class="mi">4</span>  <span class="n">vmax</span>  <span class="mi">10</span> <span class="n">ierr</span> <span class="mi">3</span>  <span class="n">vmax</span>  <span class="mi">20</span> <span class="n">ierr</span> <span class="mi">2</span>  <span class="n">vmax</span>  <span class="mi">30</span>  <span class="n">ierr</span> <span class="mi">1</span>  <span class="n">vmax</span>  <span class="mi">40</span> <span class="n">ierr</span> <span class="mi">0</span>  <span class="n">vmax</span>  <span class="mi">100</span>
  <span class="n">error</span><span class="o">-</span><span class="n">S</span>  <span class="n">qn</span> <span class="mi">4</span> <span class="n">ierr</span> <span class="mi">5</span>  <span class="n">vmax</span>  <span class="mi">10</span> <span class="n">ierr</span> <span class="mi">4</span>  <span class="n">vmax</span>  <span class="mi">20</span> <span class="n">ierr</span> <span class="mi">3</span>  <span class="n">vmax</span>  <span class="mi">100</span>
  <span class="n">error</span><span class="o">-</span><span class="n">Air</span>   <span class="n">ierr</span> <span class="mi">4</span>
+<span class="n">end</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><cite>grid</cite> is to define a multi-grid with different resolutions in different sub-grids as follows</li>
+</ul>
+<p>Example</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">grid</span>
+  <span class="n">Range</span>   <span class="mi">0</span>    <span class="mi">100</span>   <span class="n">Npoints</span> <span class="mi">10000</span>
+  <span class="n">Range</span> <span class="mi">100</span>   <span class="mi">1000</span>  <span class="n">Npoints</span> <span class="mi">1000</span>
+  <span class="n">Range</span> <span class="mi">1000</span> <span class="mi">10000</span>  <span class="n">Npoints</span> <span class="mi">100</span>
 <span class="n">end</span>
 </pre></div>
 </div>

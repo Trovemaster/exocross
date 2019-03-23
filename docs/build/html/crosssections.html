@@ -52,6 +52,7 @@
 <li><a class="reference internal" href="#stick-spectrum">Stick spectrum</a></li>
 <li><a class="reference internal" href="#bin">bin</a></li>
 <li><a class="reference internal" href="#box">Box</a></li>
+<li><a class="reference internal" href="#multi-grid">multi-grid</a></li>
 </ul>
 </li>
 </ul>
@@ -230,23 +231,15 @@ Range/(Npoints-1). The wavelength is invoked by adding um to the range values.</
 <span class="n">Transitions</span>  <span class="n">ScH</span><span class="o">.</span><span class="n">trans</span>
 </pre></div>
 </div>
-<p>A multi-grid with regions of different resolutions can be defined using the following _grid_ section:</p>
+</div>
+<div class="section" id="multi-grid">
+<h2>multi-grid<a class="headerlink" href="#multi-grid" title="Permalink to this headline">¶</a></h2>
+<p>A multi-grid with regions of different resolutions can be defined using the following <cite>grid</cite> section:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">grid</span>
   <span class="n">Range</span>   <span class="mi">0</span>    <span class="mi">100</span>   <span class="n">Npoints</span> <span class="mi">10000</span>
   <span class="n">Range</span> <span class="mi">100</span>   <span class="mi">1000</span>  <span class="n">Npoints</span> <span class="mi">1000</span>
   <span class="n">Range</span> <span class="mi">1000</span> <span class="mi">10000</span>  <span class="n">Npoints</span> <span class="mi">100</span>
 <span class="n">end</span>
-</pre></div>
-</div>
-<p>The intensity cut-off (stick) can be done using the HITRAN method:
-<span class="math notranslate nohighlight">\(S=S_{0} \tanh(c_2 \nu/2T)\)</span> for <span class="math notranslate nohighlight">\(\nu\le 2000\)</span> cm <span class="math notranslate nohighlight">\(^{-1}\)</span> and <span class="math notranslate nohighlight">\(10^{-29}\)</span> cm/molecule above.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">absorption</span>
-<span class="n">stick</span>
-<span class="n">cutoff</span> <span class="n">HITRAN</span> <span class="p">(</span><span class="n">S_crit</span><span class="p">)</span> <span class="mf">1e-29</span>  <span class="n">nu_crit</span> <span class="mi">2000</span>
-
-<span class="n">output</span> <span class="n">ScH_1500K_box_stick</span>
-<span class="n">States</span>       <span class="n">ScH</span><span class="o">.</span><span class="n">states</span>
-<span class="n">Transitions</span>  <span class="n">ScH</span><span class="o">.</span><span class="n">trans</span>
 </pre></div>
 </div>
 </div>

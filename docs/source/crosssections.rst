@@ -170,8 +170,13 @@ Example:
     States       ScH.states
     Transitions  ScH.trans
     
+
+
+multi-grid
+^^^^^^^^^^
+
     
-A multi-grid with regions of different resolutions can be defined using the following _grid_ section:
+A multi-grid with regions of different resolutions can be defined using the following `grid` section:
 
 ::     
     
@@ -181,24 +186,5 @@ A multi-grid with regions of different resolutions can be defined using the foll
       Range 1000 10000  Npoints 100
     end
      
-
-
-
-
-
-The intensity cut-off (stick) can be done using the HITRAN method: 
-:math:`S=S_{0} \tanh(c_2 \nu/2T)` for :math:`\nu\le 2000` cm :math:`^{-1}` and :math:`10^{-29}` cm/molecule above. 
-
-::     
-    
-    absorption
-    stick
-    cutoff HITRAN (S_crit) 1e-29  nu_crit 2000 
-    
-    output ScH_1500K_box_stick
-    States       ScH.states
-    Transitions  ScH.trans
-     
-
 
 
