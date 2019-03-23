@@ -1,0 +1,171 @@
+
+
+<!doctype html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>HITRAN &#8212; ExoCross 1 documentation</title>
+    <link rel="stylesheet" href="_static/bizstyle.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script async="async" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="_static/bizstyle.js"></script>
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="ExoCross keywords" href="keywords.html" />
+    <link rel="prev" title="Line profiles" href="profiles.html" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <!--[if lt IE 9]>
+    <script type="text/javascript" src="_static/css3-mediaqueries.js"></script>
+    <![endif]-->
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="keywords.html" title="ExoCross keywords"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="profiles.html" title="Line profiles"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">ExoCross 1 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="profiles.html"
+                        title="previous chapter">Line profiles</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="keywords.html"
+                        title="next chapter">ExoCross keywords</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/hitran.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="hitran">
+<h1>HITRAN<a class="headerlink" href="#hitran" title="Permalink to this headline">¶</a></h1>
+<p>ExoCross can be used with the standard HITRAN line list by adding the <cite>HITRAN`keyword anywhere in the input file (outside any sections). This will also require the partition function (`pf</cite>) and isotopologue number (<cite>iso</cite>) defined.</p>
+<p>HITRAN broadening parameters will be used unless the species-section is given, which specifies the broadening.  The .states file is not required and ignored if given. The HITRAN total statistical weights are used directly.</p>
+<p>For example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Temperature</span>  <span class="mf">296.0</span>
+<span class="n">Range</span> <span class="mf">0.0</span>  <span class="mf">10000.0</span>
+
+<span class="n">Npoints</span> <span class="mi">10001</span>
+
+<span class="n">absorption</span>
+<span class="n">gauss</span>
+<span class="n">hwhm</span> <span class="mf">0.5</span> <span class="p">(</span><span class="n">cm</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="n">hitran</span>
+<span class="n">iso</span> <span class="mi">261</span>
+<span class="n">pf</span> <span class="mf">1000.0</span>
+
+<span class="n">output</span> <span class="n">C2H2_ab_g0</span><span class="o">.</span><span class="mi">5</span>
+<span class="n">Transitions</span>  <span class="mi">26</span><span class="n">_hit12</span><span class="o">.</span><span class="n">par</span>
+</pre></div>
+</div>
+<p>HITRAN keyword can also also used for writing in the HITRAN output. In this case the broadening parameters are expected to be specified for air and self as part of the SPECIES section, including delta. To invoke HITRAN output use WRITE next to the HITRAN keyword, which starts a section, which should be ended either by END or an emty line. The ID_ISO should be also specified using ISO keyword.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Temperature</span>  <span class="mf">1900.0</span>
+<span class="n">Range</span> <span class="mf">0.0</span>  <span class="mf">10000.0</span>
+
+<span class="n">absorption</span>
+<span class="n">stick</span>
+<span class="n">threshold</span> <span class="o">-</span><span class="mf">1e-25</span>
+
+<span class="n">hitran</span> <span class="n">write</span>
+
+<span class="n">iso</span> <span class="mi">28</span>
+
+<span class="n">pressure</span>  <span class="mf">1.0</span>
+<span class="n">species</span>
+     <span class="n">air</span>   <span class="n">gamma</span> <span class="mf">0.0155</span> <span class="n">n</span> <span class="mf">0.41</span> <span class="n">t0</span> <span class="mf">298.0</span>  <span class="n">ratio</span> <span class="mf">0.82</span> <span class="n">delta</span> <span class="mf">0.000</span>
+     <span class="bp">self</span>  <span class="n">gamma</span> <span class="mf">0.1070</span> <span class="n">n</span> <span class="mf">0.77</span> <span class="n">t0</span> <span class="mf">298.0</span>  <span class="n">ratio</span> <span class="mf">0.18</span> <span class="n">delta</span> <span class="mf">0.000</span>
+<span class="n">end</span>
+
+<span class="n">mass</span> <span class="mf">40.0</span>
+
+<span class="n">output</span> <span class="n">NO_1900K_HITRAN</span>
+
+<span class="n">States</span> <span class="mi">15</span><span class="n">N16O</span><span class="o">.</span><span class="n">states</span>
+
+<span class="n">Transitions</span>  <span class="n">NO_128_N15</span><span class="o">.</span><span class="n">trans</span><span class="o">.</span><span class="n">head</span>
+</pre></div>
+</div>
+<p>The following example allows one to specify the error codes (6 values) for the HITRAN format outputs. It is still a part of the HITRAN WRITE section, the six keywords (<cite>error-E</cite>, <cite>error-S</cite>, <cite>error-Air</cite>, <cite>error-self</cite>, <cite>error-delta</cite>) start lines with the corresponding specifications. The Energy and Intensity (S) lines are used to give the ranges of he quantum numbers for different error codes. The other four can hold only one error code.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">hitran</span> <span class="n">write</span>
+ <span class="n">error</span><span class="o">-</span><span class="n">E</span>  <span class="n">qn</span> <span class="mi">4</span> <span class="n">ierr</span> <span class="mi">4</span>  <span class="n">vmax</span>  <span class="mi">10</span> <span class="n">ierr</span> <span class="mi">3</span>  <span class="n">vmax</span>  <span class="mi">20</span> <span class="n">ierr</span> <span class="mi">2</span>  <span class="n">vmax</span>  <span class="mi">30</span>  <span class="n">ierr</span> <span class="mi">1</span>  <span class="n">vmax</span>  <span class="mi">40</span> <span class="n">ierr</span> <span class="mi">0</span>  <span class="n">vmax</span>  <span class="mi">100</span>
+ <span class="n">error</span><span class="o">-</span><span class="n">S</span>  <span class="n">qn</span> <span class="mi">4</span> <span class="n">ierr</span> <span class="mi">5</span>  <span class="n">vmax</span>  <span class="mi">10</span> <span class="n">ierr</span> <span class="mi">4</span>  <span class="n">vmax</span>  <span class="mi">20</span> <span class="n">ierr</span> <span class="mi">3</span>  <span class="n">vmax</span>  <span class="mi">100</span>
+ <span class="n">error</span><span class="o">-</span><span class="n">Air</span>   <span class="n">ierr</span> <span class="mi">4</span>
+ <span class="n">error</span><span class="o">-</span><span class="bp">self</span>  <span class="n">ierr</span> <span class="mi">4</span>
+ <span class="n">error</span><span class="o">-</span><span class="n">n</span>     <span class="n">ierr</span> <span class="mi">4</span>
+ <span class="n">error</span><span class="o">-</span><span class="n">delta</span> <span class="n">ierr</span> <span class="mi">0</span>
+<span class="n">end</span>
+</pre></div>
+</div>
+<p>Here <cite>write</cite> indicates that the HITRAN-stick-like list will be printed.</p>
+<p><cite>qn 4</cite> indicates the quantum number (4th column in States after J’s columns);</p>
+<p><cite>ierror 4 vmax 10</cite> means that the error code 4 is applied for all values of <cite>qn</cite> less or equal to 10 etc.</p>
+<p><cite>error-Air   ierr 4</cite> indicates that the error code for the Air-broadening is 4.</p>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="keywords.html" title="ExoCross keywords"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="profiles.html" title="Line profiles"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">ExoCross 1 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2019, Sergey Yurchenko.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.8.2.
+    </div>
+  </body>
+</html>

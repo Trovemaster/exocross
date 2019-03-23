@@ -1,0 +1,376 @@
+
+
+<!doctype html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>ExoCross keywords &#8212; ExoCross 1 documentation</title>
+    <link rel="stylesheet" href="_static/bizstyle.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script async="async" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="_static/bizstyle.js"></script>
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="MIT License" href="license.html" />
+    <link rel="prev" title="HITRAN" href="hitran.html" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <!--[if lt IE 9]>
+    <script type="text/javascript" src="_static/css3-mediaqueries.js"></script>
+    <![endif]-->
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="license.html" title="MIT License"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="hitran.html" title="HITRAN"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">ExoCross 1 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">ExoCross keywords</a><ul>
+<li><a class="reference internal" href="#or">or</a></li>
+<li><a class="reference internal" href="#id1">or</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="hitran.html"
+                        title="previous chapter">HITRAN</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="license.html"
+                        title="next chapter">MIT License</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/keywords.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="exocross-keywords">
+<h1>ExoCross keywords<a class="headerlink" href="#exocross-keywords" title="Permalink to this headline">¶</a></h1>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">The position of the keywords is not important. The input is not key-sensitive.</p>
+</div>
+<ul class="simple">
+<li>GNS: Nuclear statistical weight <cite>gns 2.0</cite></li>
+<li>Temperature:  Temperature (K):</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Temperature</span>  <span class="mf">3000.0</span>
+</pre></div>
+</div>
+<p><cite>Aliases</cite>: Temp, Temperature</p>
+<p>** Temperature can be split into rotational temperature and vibrational temperature, which in input is given as</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Temperature</span>  <span class="p">(</span><span class="n">Rotational</span><span class="p">)</span> <span class="mi">700</span> <span class="n">Vib</span> <span class="p">(</span><span class="n">vibrational</span><span class="p">)</span> <span class="mi">2000</span> <span class="p">(</span><span class="n">K</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>In this case it is also important to provide the addresses of the vibrational columns using the QN section.</p>
+<ul class="simple">
+<li>QN: The designation of the quantum numbers  (QN) to columns can be done using the QN section. In this section <cite>vib</cite> is used for the range of the vibrational QNs; <cite>K</cite> is for the column with the rotational “K”; <cite>Sym</cite> is for symmetry; <cite>Nsym</cite> is number of the symmetries; <cite>Nmodes</cite> stands for the number of vibrational modes. The column numbering starts after the J column (4th). The vibrational addressing is required for when vibrational temperature is used.</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">QN</span>
+  <span class="n">Vib</span> <span class="mi">2</span> <span class="mi">7</span>
+  <span class="n">Nmodes</span> <span class="mi">9</span>
+  <span class="n">K</span>  <span class="mi">7</span>
+<span class="n">end</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li>PF: input value of the partition function.</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">PF</span>  <span class="mf">1000.0</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li>Range:  Wavenumber (cm-1) or wavelength (um or micron) range, i.e. from nu1 to nu2:</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Range</span> <span class="mf">0.0</span> <span class="mf">2000.000</span>
+</pre></div>
+</div>
+<p>Here is example for microns (wavelength), which however does nor work will all profiles:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Range</span> <span class="mf">100.0</span> <span class="mf">200.000</span> <span class="n">um</span>
+</pre></div>
+</div>
+<p><cite>Aliases</cite>: Window, Frequencies, Wavenumbers, Range</p>
+<ul class="simple">
+<li><cite>um</cite> or <cite>micron</cite>: units of wavelength used in combination with Range</li>
+<li><cite>cm-1</cite>: units of wavenumber used in combination with Range, can be omitted as default.</li>
+<li><cite>abundance</cite>: is the molecular abundance, which is the factor used in intensities or cross-sections.</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">abundance</span> <span class="mf">0.97</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><cite>Cut-off</cite>: to use the HITRAN-cut-off scheme (see HITRAN 2012 paper). <cite>nu_crit</cite> is to give the corresponding parameter in the HITRAN cut-off scheme.</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cutoff</span> <span class="n">HITRAN</span> <span class="p">(</span><span class="n">S_crit</span><span class="p">)</span> <span class="mf">1e-29</span>  <span class="n">nu_crit</span> <span class="mi">2000</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li>Npoints: Number of grid points (usually an odd number)</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Npoints</span> <span class="mi">100001</span>
+</pre></div>
+</div>
+<p>&gt; Aliases: Npoints, Number-of-points</p>
+<ul class="simple">
+<li><cite>Absorption</cite>: type of spectra</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Absorption</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><cite>Emission</cite>: type of spectra`</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Emission</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><cite>lifetime</cite>: type of spectra, to compute life time of Ej as 1/sum_i A_ji; saved into a new .life file.</li>
+</ul>
+<p>Only one of these three types is needed, it can appear outside any sections anywhere in the program. ‘Absorption’ is default.</p>
+<ul class="simple">
+<li>Partfunc or Partition-function: To compute the partition function and its contributions for a set of temperature; it also starts  a section defining the corresponding parameters</li>
+</ul>
+<ul class="simple">
+<li>Ntemps: Number of temperature steps</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Ntemps</span> <span class="mi">500</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li>TempMax, maxtemps: Maximal temperature</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">TempMax</span> <span class="mf">5000.0</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li>Moment: Moment to compute (0=none,1=Q1,2=Q2,3=CP)</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">moment</span> <span class="mi">1</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li>CP: the same as Moment 3</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">CP</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li>output: File name for crosssections, stick-spectra etc.</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">output</span> <span class="n">CH4_stick_T300K</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li>Cooling is a section name to compute the cooling function on a grid of temperatures. The parameters used in the Cooliing section are TempMax (maxtemps) and Ntemps, see Partfunc.</li>
+<li><cite>States</cite>, <cite>StatesFile</cite>, <cite>StateFile</cite>, <cite>States_file</cite>, <cite>States-File</cite>: The name of the .states file <cite>States CH4_linelist.states</cite></li>
+<li>Transitions, TransitionFiles: The name of the .trans file or the section name for the list of the .trans files.</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Transitions</span> <span class="n">CH4_linelist</span><span class="o">.</span><span class="n">trans</span>
+</pre></div>
+</div>
+<div class="section" id="or">
+<h2>or<a class="headerlink" href="#or" title="Permalink to this headline">¶</a></h2>
+<blockquote>
+<div><dl class="docutils">
+<dt>Transitions</dt>
+<dd>CH4_100.trans
+CH4_200.trans
+CH4_300.trans
+CH4_400.trans</dd>
+</dl>
+<p>end</p>
+</div></blockquote>
+<p>In combination with the keyword <cite>histogram-J</cite> the transition filename can be followed by the J-value this file is associated with.</p>
+<ul class="simple">
+<li>Threshold: Intensity threshold. A line is skipped from line profile evaluation, or simply from the output if the corresponding absorption coefficient/emissivity is smaller than <cite>Threshold</cite>.</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Threshold</span> <span class="mf">1e-28</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li>Enermax: Energy Threshold used to select states below some energy value</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">enermax</span>  <span class="mf">20000.0</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li>Gaussian, Gauss, Gauss0, Doppler, Doppl, Doppl0, Box, Bin, Rect,  Sticks, Stick, Voigt, pseudo, pse-Rocco, pse-Liu, Voig-Quad: The type of the line profile.</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">gauss</span>
+
+<span class="n">Doppler</span>
+
+<span class="n">stick</span>
+
+<span class="nb">bin</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li>HWHM, HalfWidth: Half width at the half maximum, used for Gauss, Lorenz.</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>`HWHM  0.1`
+</pre></div>
+</div>
+<ul class="simple">
+<li>Mass, Masses: Effective molecular mass (u0), used for Doppl.</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mass</span> <span class="mf">16.0</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li>Verbose: verbose level, defines the amount of data to be printed out in the output <cite>Verbose 3</cite></li>
+<li><cite>histogram</cite> computing crosssections using intensities saved on (usually) an equidistant grid.</li>
+<li><cite>histogram-J</cite> computing cross-sections using intensities saved on a grid with J-dependent histogram files.</li>
+<li><cite>NRAM</cite> or <cite>Ncash</cite>: number of transitions to put into RAM; Alias is <cite>LINES-TO-CASH</cite></li>
+<li><cite>Nprocs</cite>: Number of OMP processes. Ideally should be the same as the number of omp-processors allocated, but would work with any number. Aliases are <cite>OMP_NUM_PROCS</cite> and <cite>OMP_PROCS</cite>.</li>
+<li><cite>mem</cite>: maximal memory allocated for the job. It is used to estimate how many transitions can be put into RAM. Should be less than or equal too the memory of the system.</li>
+<li><cite>ioffset</cite> is a in integer factor to compute the wavenumber offset in units of HWHM:</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">offset</span> <span class="o">=</span> <span class="n">ioffset</span><span class="o">*</span><span class="n">hwhm</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><cite>offset</cite> is a factor to compute the wavenumber offset in cm-1</li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">offset</span> <span class="mi">25</span> <span class="p">(</span><span class="n">cm</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><cite>pressure</cite> value in bar must be specified (otherwise P=1 bar is assumed) used for Voigt.</li>
+<li><cite>Species</cite> or  <cite>Broadener</cite> starts a section to define the Voigt-type broadening parameters</li>
+</ul>
+<p><span class="math notranslate nohighlight">\(\gamma = \sum_i \gamma_i (T^0_i/T)^n P/P^0_i r_i\)</span></p>
+<p><cite>gamma</cite> or <cite>gamma0</cite> is the reference HWHM (cm-1) for Voigt used in <cite>Species</cite></p>
+<p><cite>n</cite> is the exponent n_i for Voigt used in <cite>Species</cite></p>
+<p><cite>delta</cite> is the pressure shift.</p>
+<p><cite>T0</cite> is the reference T (K), usually 298 for Voigt used in <cite>Species</cite></p>
+<p><cite>P0</cite> is the reference pressure in bar, usually 1 for Voigt used in <cite>Species</cite></p>
+<p><cite>ratio</cite> is the mixing ratio of the species (unitless) for example the solar mixing ratio of H2 and He is 0.9 and 0.1 (<cite>species</cite>).</p>
+<p><cite>file</cite> is the name of the file with broadening parameters</p>
+<p><cite>model</cite> is the broadening model, e.g. <cite>J</cite> (alias <cite>a0</cite>) or <cite>JJ</cite> (alias <cite>a1</cite>).</p>
+<p><cite>nquad</cite> is the number of quadrature points used for <cite>Voigt-Quad</cite></p>
+<p>The name of the species should be the first thing on the line.</p>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mass</span> <span class="mf">16.0</span>
+<span class="n">pressure</span> <span class="mf">0.5</span>
+<span class="n">Temperature</span> <span class="mf">1300.0</span>
+<span class="n">Species</span>
+  <span class="n">H2</span>  <span class="n">gamma</span> <span class="mf">0.05</span> <span class="n">n</span> <span class="mf">0.4</span> <span class="n">t0</span> <span class="mf">298.0</span> <span class="n">ratio</span> <span class="mf">0.9</span>
+  <span class="n">He</span>  <span class="n">gamma</span> <span class="mf">0.04</span> <span class="n">n</span> <span class="mf">1.0</span> <span class="n">t0</span> <span class="mf">298.0</span> <span class="n">ratio</span> <span class="mf">0.1</span>
+<span class="n">end</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id1">
+<h2>or<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
+<blockquote>
+<div><dl class="docutils">
+<dt>Species</dt>
+<dd>H2  gamma 0.0207 n 0.44 t0 298.0 file 1H2-16O__H2__a1.broad model JJ ratio 0.84
+He  gamma 0.043 n 0.02 t0 298.0 file  1H2-16O__He__a1.broad model JJ ratio 0.16</dd>
+</dl>
+<p>end</p>
+</div></blockquote>
+<ul class="simple">
+<li><cite>Phoenix</cite> is the keyword for converting ExoMol line list to the Phoenix format. The <cite>species</cite> are expected to specify the Voigt parameters of the broadeners. <cite>Phoenix</cite> should appear anywhere in the main body of the input in the way as a line profile keyword.</li>
+<li><cite>HITRAN</cite> is to use the HITRAN-format of the transition file or output.  Reading from hitran (.par) requires also the definition of the partition function <cite>pf</cite> and the isotopologue number <cite>iso</cite>. No .states is needed. To read from HITRAN use <cite>HITRAN READ</cite></li>
+<li><cite>iso</cite> is the isotopologue number of a HITRAN molecule, e.g. 261 for 12C2H2.</li>
+</ul>
+<p>Example</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>   hitran
+   iso 261
+   pf 1000.0
+   output C2H2_ab_g0.5
+   Transitions  26_hit12.par
+
+
+HITRAN` can also form a section where there HITRAN-error codes are specified, e.g.
+</pre></div>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">hitran</span>
+ <span class="n">write</span>
+ <span class="n">error</span><span class="o">-</span><span class="n">E</span>  <span class="n">qn</span> <span class="mi">4</span> <span class="n">ierr</span> <span class="mi">4</span>  <span class="n">vmax</span>  <span class="mi">10</span> <span class="n">ierr</span> <span class="mi">3</span>  <span class="n">vmax</span>  <span class="mi">20</span> <span class="n">ierr</span> <span class="mi">2</span>  <span class="n">vmax</span>  <span class="mi">30</span>  <span class="n">ierr</span> <span class="mi">1</span>  <span class="n">vmax</span>  <span class="mi">40</span> <span class="n">ierr</span> <span class="mi">0</span>  <span class="n">vmax</span>  <span class="mi">100</span>
+ <span class="n">error</span><span class="o">-</span><span class="n">S</span>  <span class="n">qn</span> <span class="mi">4</span> <span class="n">ierr</span> <span class="mi">5</span>  <span class="n">vmax</span>  <span class="mi">10</span> <span class="n">ierr</span> <span class="mi">4</span>  <span class="n">vmax</span>  <span class="mi">20</span> <span class="n">ierr</span> <span class="mi">3</span>  <span class="n">vmax</span>  <span class="mi">100</span>
+ <span class="n">error</span><span class="o">-</span><span class="n">Air</span>   <span class="n">ierr</span> <span class="mi">4</span>
+<span class="n">end</span>
+</pre></div>
+</div>
+<p>** <cite>error-E</cite> and <cite>error-S</cite> are used to specify the ranges for the quantum numbers for different Energy and intensity error-codes, respectively.</p>
+<p>** <cite>qn</cite> is the quantum number (the number of the QN-column after J) used for the error-specification.</p>
+<p>** <cite>ierr</cite> is followed by the error code, followed by</p>
+<p>** <cite>vmax</cite> (keyword) followed by the maximum value of qn this error code applies, which is followed by another error code.</p>
+<p>** <cite>error-Air ierr</cite> to give the error code for the HITRAN air-broadening (one constant value).</p>
+<p>** <cite>error-self ierr</cite> to give the error code for the HITRAN self-broadening (one constant value).</p>
+<p>** <cite>error-n ierr</cite> to give the error code for the HITRAN n-broadening (one constant value).</p>
+<p>** <cite>error-delta ierr</cite> to give the error code for the HITRAN line-shift (one constant value).</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="license.html" title="MIT License"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="hitran.html" title="HITRAN"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">ExoCross 1 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2019, Sergey Yurchenko.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.8.2.
+    </div>
+  </body>
+</html>

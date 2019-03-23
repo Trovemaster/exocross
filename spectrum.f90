@@ -10,7 +10,7 @@ module spectrum
   private
   public intensity,readinput,verbose
   !
-  integer(ik),parameter   :: nfiles_max =1000, max_items = 1000, nspecies_max = 10, nquadmax = 101, filtermax = 100
+  integer(ik),parameter   :: nfiles_max =1000, max_items = 1000, nspecies_max = 10, nquadmax = 101, filtermax = 100, Ngrids_max = 100
   integer(ik),parameter :: HITRAN_max_ierr = 10            ! maximal number of QNs for error-specification in HITRAN
   integer(hik),parameter :: max_transitions_to_ram = 1000000000
   integer(ik) :: N_omp_procs=1
@@ -79,10 +79,19 @@ module spectrum
     !
   end type QNT
   !
+  type gridT
+    integer(ik)  :: npoints = 10000 ! total number 
+    integer(ik)  :: i1  = 1 ! first grid point as a global counter
+    real(rk)     :: freql=-small_
+    real(rk)     :: freqr= 200000.0
+    real(rk)     :: dfreq
+  end type gridT
+  !
   type(selectT),save :: upper(filtermax),lower(filtermax)
   type(QNT),save :: QN
+  type(gridT),save :: grid(Ngrids_max)
   !
-  integer(ik)    :: Nspecies = 1, Nfilters = 0
+  integer(ik)    :: Nspecies = 1, Nfilters = 0, Ngrids = 0
   type(speciesT),save :: species(nspecies_max)
   type(HitranErrorT),target,save :: HITRAN_E(HITRAN_max_ierr),HITRAN_S(HITRAN_max_ierr)
   type(HitranErrorT),target,save :: HITRAN_Air,HITRAN_Self,HITRAN_N,HITRAN_Delta
@@ -113,7 +122,7 @@ module spectrum
     !
     logical :: eof,if_halfwidth_defined = .false., if_species_defined = .false., if_QN_defined = .false.
     character(len=cl) :: w,v
-    integer(ik)   :: i,ifilter,iE,iS,npoints0,ierror
+    integer(ik)   :: i,ifilter,iE,iS,npoints0,ierror,igrid
     type(HitranErrorT),pointer :: HITRAN
     real(rk) :: f_t
     ! -----------------------------------------------------------
@@ -569,8 +578,8 @@ module spectrum
           !
           if (trim(w)/="".and.trim(w)/="END") then
              !
-             write (out,"('input: wrong last line in CONTRACTION =',a)") trim(w)
-             stop 'input - illigal last line in CONTRACTION'
+             write (out,"('input: wrong last line in FILTER =',a)") trim(w)
+             stop 'input - illigal last line in FILTER'
              !
           endif
           !
@@ -683,10 +692,12 @@ module spectrum
             'LIFETIME','LIFETIMES','VOI-FAST','VOI-FNORM','VOI-916')
           !
           if (pressure<small_.and.(w(1:3)=='VOI'.or.w(1:3)=='PSE')) then
+             !
              ! for pressure= 0 Voigt is repalced by Doppler
+             !
              w = 'DOPPLER'
              !
-             write(out,"('This is P=0 atm Voigt, which will be reated as Doppler')")
+             write(out,"('This is P=0 atm Voigt, which will be treated as Doppler')")
              !
           endif
           !
@@ -714,6 +725,29 @@ module spectrum
           if (microns) then
             ioffset = 0
             offset = 0
+          endif
+          !
+          if (nitems>1) then
+            !
+            call readu(w)
+              !
+              select case(w)
+                !
+              case("SAMPLE")
+                !
+                if (trim(proftype)=="DOPPLER")  proftype = 'DOPP0'
+                if (trim(proftype)=="GAUSSIAN") proftype = 'GAUS0'
+                if (trim(proftype)=="VOIGT")    proftype = 'VOIGT'
+                !
+              case ("NORM","NORMALIZED","AVERAGED")
+                !
+                if (trim(proftype)=="VOIGT") proftype = 'VOI-QUAD'
+                !
+              case default
+                !
+                call report ("Unrecognized 2nd keyword in Profile-type "//trim(w),.true.)
+                !
+              end select
           endif
           !
        case ("HWHM","HALFWIDTH")
@@ -822,11 +856,68 @@ module spectrum
           !
           nspecies = i
           !
-      case default
-        !
-        call report ("Unrecognized unit name "//trim(w),.true.)
-        !
-      end select
+        case ("GRID","GRIDS")
+          !
+          call read_line(eof) ; if (eof) exit
+          !
+          igrid = 0
+          !
+          call readu(w)
+          !
+          do while (trim(w)/="".and.trim(w)/="END")
+            !
+            igrid = igrid + 1
+            !
+            do while (trim(w)/="".and.item<Nitems)
+              !
+              select case(w)
+              !
+              case('RANGE')
+                !
+                call readf(grid(igrid)%freql)
+                call readf(grid(igrid)%freqr)
+                !
+                if (igrid>1) then 
+                  if ( grid(igrid)%freql/=grid(igrid-1)%freqr ) then 
+                     write (out,"('input: beginnning of the ',i5,'th grid is inconsistent with the grid on the left ',2f12.5)")&
+                           igrid,grid(igrid-1)%freqr,grid(igrid)%freql
+                     stop 'input - illigal last line in GRIDS'
+                  endif
+                endif
+                !
+              case('NPOINTS')
+                !
+                call readi(grid(igrid)%npoints)
+                !
+              case default
+                !
+                call report ("Unrecognized unit name "//trim(w),.true.)
+                !
+              end select
+              !
+              call readu(w)
+              !
+            enddo
+            !
+            call read_line(eof) ; if (eof) exit
+            call readu(w)
+            !
+          enddo
+          !
+          Ngrids = igrid
+          !
+          if (trim(w)/="".and.trim(w)/="END") then
+             !
+             write (out,"('input: wrong last line in GRIDS =',a)") trim(w)
+             stop 'input - illigal last line in GRIDS'
+             !
+          endif
+          !
+       case default
+         !
+         call report ("Unrecognized unit name "//trim(w),.true.)
+         !
+       end select
       !
     enddo
     !
@@ -905,6 +996,11 @@ module spectrum
         !stop "The RESOLVING option can be used with BIN only"
       endif
       !
+      if (Ngrids>0) then
+        write(out,"('Error: resolving power (option R) is currently not working with multiple grids')")
+        stop 'Error: resolving power (option R) cannot be used with multiple grids'
+      endif
+      !
       npoints0 = nint(real((log(freqr)-log(freql))/resolving_f,rk))+1
       !
       !if (npoints0>npoints) then
@@ -922,6 +1018,12 @@ module spectrum
         stop "Illegal use_resolving_power with zero nu1"
       endif
       !
+    endif
+    !
+    if (Ngrids>0.and.all( proftype(1:5)/=(/'VOIGT','GAUS0','DOPP0'/))) then 
+       write(out,"('Error: grids cannot be used with in combination with ',a)") trim(proftype(1:5))
+       write(out,"('currently only with Voigt or Gaussian or Doppler SAMPLE')")
+       stop 'Error: illegal use of grid and a profile type'
     endif
     !
     if (if_species_defined.and.if_halfwidth_defined) then
@@ -976,8 +1078,8 @@ module spectrum
    !
    !
    real(rk)    :: hitran_Tref = 296_rk
-   integer(ik) :: info,ipoint,nlevels,i,itemp,enunit,tunit,sunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems
-   integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k
+   integer(ik) :: info,ipoint,ipoint_,nlevels,i,itemp,enunit,tunit,sunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems
+   integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff
@@ -1029,6 +1131,8 @@ module spectrum
    dpwcoef=sqrt(2.0*ln2*boltz*avogno)/vellgt
    dpwcoef = dpwcoef*sqrt(temp/meanmass)
    !
+   if (Ngrids>0) npoints = sum(grid(1:Ngrids)%npoints)+1
+   !
    write(npoints_fmt,'(i9)') npoints
    !
    allocate(freq(npoints),stat=info)
@@ -1039,6 +1143,32 @@ module spectrum
    intens = 0
    !
    forall(ipoint=1:npoints) freq(ipoint)=freql+real(ipoint-1,rk)*dfreq
+   !
+   if (Ngrids>0) then 
+     !
+     if (use_resolving_power) then
+       write(out,"('Error: resolving power (option R) is currently not working with multiple grids')")
+       stop 'Error: resolving power (option R) is currently not working with multiple grids'
+     endif
+     !
+     ipoint_ = 0
+     freq(1) = grid(1)%freql
+     do igrid = 1,Ngrids
+       dfreq=(grid(igrid)%freqr-grid(igrid)%freql)/real(grid(igrid)%npoints,rk)
+       grid(igrid)%i1 = ipoint_+1
+       do ipoint = 1,grid(igrid)%npoints
+          ipoint_ = ipoint_ + 1
+          freq(ipoint_) = grid(igrid)%freql+real(ipoint-1,rk)*dfreq
+       enddo
+       grid(igrid)%dfreq = dfreq
+     enddo
+     ! last point 
+     freq(npoints) = grid(Ngrids)%freqr
+     !
+     freql = grid(1)%freql
+     freqr = grid(Ngrids)%freqr
+     !
+   endif
    !   
    if (use_resolving_power) then
      !
@@ -2266,6 +2396,25 @@ module spectrum
             !$omp end parallel do
             !
             !
+        case ('DOPP0')
+            !
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth0) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                halfwidth0=dpwcoef*tranfreq
+                if (halfwidth0<100.0_rk*small_) cycle
+                !
+                call do_gauss0(tranfreq,abscoef,dfreq,freq,halfwidth0,freql,intens_omp(:,iomp))
+                !
+              enddo
+              !
+            enddo
+            !$omp end parallel do
+            !
         case ('GAUSS')
             !
             !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
@@ -2742,23 +2891,21 @@ module spectrum
      real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,freql
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
-     real(rk) :: alpha,abscoef,dfreq_,de,ln2,offset_
-     integer(ik) :: ib,ie,ipoint
+     real(rk) :: alpha,abscoef,dfreq_,de,ln2,offset_,dfreq_t,freql_t
+     integer(ik) :: ib,ie,ipoint,igrid
      !
      if (halfwidth<small_) return
      !
      offset_ = offset
      if ( use_width_offset ) offset_ = offset*halfwidth
      !
-     ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+offset_-freql)/dfreq )+1,npoints)
+     call get_ipoint_ranges(tranfreq,freq,offset_,ib,ie)
      !
      ln2=log(2.0_rk)
      alpha = -ln2/halfwidth**2
      !
      abscoef=abscoef0*sqrt(ln2/pi)/halfwidth
      !
-     !omp parallel do private(ipoint,dfreq_,de) shared(intens) schedule(dynamic)
      do ipoint=ib,ie
         !
         dfreq_=freq(ipoint)-tranfreq
@@ -2768,11 +2915,75 @@ module spectrum
         intens(ipoint)=intens(ipoint)+abscoef*de
         !
      enddo
-     !omp end parallel do
      !
   end subroutine do_gauss0
-
-
+  !
+  !
+  ! Obtain left and right grid points around the current frequency
+  subroutine get_ipoint_ranges(tranfreq,freq,offset,ib,ie)
+     !
+     real(rk),intent(in) :: tranfreq,offset
+     real(rk),intent(in) :: freq(npoints)
+     integer(ik),intent(out) :: ib,ie
+     !
+     real(rk) :: dfreq_t,freql_t
+     integer(ik) :: igrid
+     !
+     ib = 1
+     ie = Npoints
+     !
+     if (use_resolving_power) then
+         !
+         dfreq_t = log(freq(2)) - log(freq(1))
+         ib = nint((log(tranfreq - offset) - log(freql))/dfreq_t) + 1
+         ib = max(ib, 1)
+         !
+         ie = nint((log(tranfreq + offset) - log(freql))/dfreq_t) + 1
+         ie = min(ie,npoints)
+         !
+         return
+         !
+     endif
+     !
+     if (Ngrids>0) then 
+       igrid = 1
+       do while(tranfreq>grid(igrid+1)%freql.and.igrid<Ngrids)
+         igrid = igrid + 1
+       enddo
+       !
+       dfreq_t = grid(igrid)%dfreq
+       freql_t = grid(igrid)%freql
+       !
+       if (tranfreq-offset>=grid(igrid)%freql) then
+         ib =  max(nint( ( tranfreq-offset-freql_t)/dfreq_t )+1,1)
+         ib = grid(igrid)%i1+ib-1
+       elseif(igrid>1) then
+         ib =  max(nint( ( tranfreq-offset-grid(igrid-1)%freql)/grid(igrid-1)%dfreq )+1,1)
+         ib = grid(igrid-1)%i1+ib-1
+       endif
+       !
+       if (tranfreq+offset<=grid(igrid)%freqr) then
+         ie =  min(nint( ( tranfreq+offset-freql_t)/dfreq_t )+1,npoints)
+         ie = grid(igrid)%i1+ie-1
+       elseif(igrid<Ngrids) then
+         ie =  min(nint( ( tranfreq+offset-grid(igrid+1)%freql)/grid(igrid+1)%dfreq )+1,npoints)
+         ie = grid(igrid+1)%i1+ie-1
+       endif
+       !
+     else
+       !
+       freql_t = freq(1)
+       dfreq_t = freq(2) - freq(1)
+       !
+       ib =  max(nint( ( tranfreq-offset-freql_t)/dfreq_t )+1,1)
+       ie =  min(nint( ( tranfreq+offset-freql_t)/dfreq_t )+1,npoints)
+       !
+     endif
+     !
+  end subroutine get_ipoint_ranges
+  !
+  !
+  !
   subroutine do_gauss(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens)
      !
      implicit none
@@ -3160,25 +3371,32 @@ module spectrum
      real(rk),intent(in) :: tranfreq,abscoef,halfwidth_Lorentz,offset,freql,dpwcoef
      real(rk),intent(in) :: freq(:)
      real(rk),intent(out) :: intens(:)
-     real(rk) :: tranfreq_i,halfwidth_doppler,d_freq, d_ln_freq
+     real(rk) :: tranfreq_i,halfwidth_doppler,offset_
      integer(ik) :: ib,ie,ipoint
      logical, intent(in) :: use_resolving_power
       !
       halfwidth_doppler=dpwcoef*tranfreq
+      !
+      offset_ = offset
+      if ( use_width_offset ) offset_ = offset*halfwidth_Lorentz
+      !
+      call get_ipoint_ranges(tranfreq,freq,offset_,ib,ie)
+      !
       if (halfwidth_doppler<100.0_rk*small_) return
       !
-      if (use_resolving_power) then
-         d_ln_freq = log(freq(2)) - log(freq(1))
-         ib = nint((log(tranfreq - offset) - log(freql))/d_ln_freq) + 1
-         ib = max(ib, 1)
-         
-         ie = nint((log(tranfreq + offset) - log(freql))/d_ln_freq) + 1
-         ie = min(ie, npoints)
-      else
-         d_freq = freq(2) - freq(1)
-         ib =  max(nint( ( tranfreq-offset-freql)/d_freq )+1,1)
-         ie =  min(nint( ( tranfreq+offset-freql)/d_freq )+1,npoints)
-      endif
+      !if (use_resolving_power) then
+      !   d_ln_freq = log(freq(2)) - log(freq(1))
+      !   ib = nint((log(tranfreq - offset) - log(freql))/d_ln_freq) + 1
+      !   ib = max(ib, 1)
+      !   
+      !   ie = nint((log(tranfreq + offset) - log(freql))/d_ln_freq) + 1
+      !   ie = min(ie, npoints)
+      !else
+      !   d_freq = freq(2) - freq(1)
+      !   ib =  max(nint( ( tranfreq-offset-freql)/d_freq )+1,1)
+      !   ie =  min(nint( ( tranfreq+offset-freql)/d_freq )+1,npoints)
+      !   !
+      !endif
       !
       if (ie<=ib) return
       !
