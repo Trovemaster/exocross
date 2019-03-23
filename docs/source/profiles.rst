@@ -124,7 +124,7 @@ Voigt-parameters
 
 `Species` or  `Broadener` starts a section to define the Voigt-type broadening parameters 
 
-     :math:`gamma(Voigt) = \sum_i \gamma_i (T^0_i/T)^n P/P^0_i {\rm ratio}_i` 
+     :math:`\gamma(Voigt) = \sum_i \gamma_i (T^0_i/T)^n P/P^0_i {\rm ratio}_i` 
 
 The keywords are: 
 
