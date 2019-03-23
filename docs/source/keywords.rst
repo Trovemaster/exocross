@@ -149,7 +149,7 @@ Only one of these three types is needed, it can appear outside any sections anyw
     Transitions CH4_linelist.trans
 
 
-or
+or:
 ::
 
     Transitions
@@ -278,7 +278,9 @@ Example:
      end
 
 
-or 
+
+Example 2:
+ 
 ::
      
      Species
