@@ -15,7 +15,7 @@ ExoCross keywords
 
 `Aliases`: Temp, Temperature
 
-** Temperature can be split into rotational temperature and vibrational temperature, which in input is given as 
++ Temperature can be split into rotational temperature and vibrational temperature, which in input is given as 
        
 ::
 
@@ -331,20 +331,20 @@ Example
 
 
 
-** `error-E` and `error-S` are used to specify the ranges for the quantum numbers for different Energy and intensity error-codes, respectively.
++ `error-E` and `error-S` are used to specify the ranges for the quantum numbers for different Energy and intensity error-codes, respectively.
 
-** `qn` is the quantum number (the number of the QN-column after J) used for the error-specification. 
++ `qn` is the quantum number (the number of the QN-column after J) used for the error-specification. 
 
-** `ierr` is followed by the error code, followed by 
++ `ierr` is followed by the error code, followed by 
 
-** `vmax` (keyword) followed by the maximum value of qn this error code applies, which is followed by another error code. 
++ `vmax` (keyword) followed by the maximum value of qn this error code applies, which is followed by another error code. 
 
-** `error-Air ierr` to give the error code for the HITRAN air-broadening (one constant value).  
++ `error-Air ierr` to give the error code for the HITRAN air-broadening (one constant value).  
 
-** `error-self ierr` to give the error code for the HITRAN self-broadening (one constant value).
++ `error-self ierr` to give the error code for the HITRAN self-broadening (one constant value).
 
-** `error-n ierr` to give the error code for the HITRAN n-broadening (one constant value).
++ `error-n ierr` to give the error code for the HITRAN n-broadening (one constant value).
 
-** `error-delta ierr` to give the error code for the HITRAN line-shift (one constant value).
++ `error-delta ierr` to give the error code for the HITRAN line-shift (one constant value).
 
 
