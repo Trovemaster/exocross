@@ -85,6 +85,7 @@ module spectrum
     real(rk)     :: freql=-small_
     real(rk)     :: freqr= 200000.0
     real(rk)     :: dfreq
+    real(rk)     :: offset = -100000.0_rk
   end type gridT
   !
   type(selectT),save :: upper(filtermax),lower(filtermax)
@@ -290,13 +291,13 @@ module spectrum
             !
             select case(w)
             !
-            case('TEMPMAX','MAXTEMP','MAX-TEMPERATURE')
+            case('TEMPMAX','MAXTEMP','MAX-TEMPERATURE',"TMAX")
               !
               call readf(maxtemp)
               !
               if (maxtemp<small_) call report ("Illegal Max Temperature maxtem=0 "//trim(w),.true.)
               !
-            case ("NTEMPS","NPOINTS","NSTEPS","NUMBER-OF-TEMPERATURES")
+            case ("NTEMPS","NPOINTS","NSTEPS","NUMBER-OF-TEMPERATURES","N")
               !
               call readi(npoints)
               !
@@ -773,6 +774,8 @@ module spectrum
             use_width_offset = .true.
           endif
           !
+          if (offset<=0) stop 'offset cannot be negative or zero'
+          !
        case ("MASS")
           !
           call readf(meanmass)
@@ -888,6 +891,10 @@ module spectrum
               case('NPOINTS')
                 !
                 call readi(grid(igrid)%npoints)
+                !
+              case('OFFSET')
+                !
+                call readf(grid(igrid)%offset)
                 !
               case default
                 !
@@ -1020,9 +1027,9 @@ module spectrum
       !
     endif
     !
-    if (Ngrids>0.and.all( proftype(1:5)/=(/'VOIGT','GAUS0','DOPP0'/))) then 
+    if (Ngrids>0.and.all( trim(proftype(1:5))/=(/ character(len=5) :: 'VOIGT','GAUS0','DOPP0','BIN'/))) then 
        write(out,"('Error: grids cannot be used with in combination with ',a)") trim(proftype(1:5))
-       write(out,"('currently only with Voigt or Gaussian or Doppler SAMPLING')")
+       write(out,"('currently only with Voigt or Gaussian or Doppler or BIN SAMPLING')")
        stop 'Error: illegal use of grid and a profile type'
     endif
     !
@@ -1161,6 +1168,7 @@ module spectrum
           freq(ipoint_) = grid(igrid)%freql+real(ipoint-1,rk)*dfreq
        enddo
        grid(igrid)%dfreq = dfreq
+       if (grid(igrid)%offset<0) grid(igrid)%offset = offset
      enddo
      ! last point 
      freq(npoints) = grid(Ngrids)%freqr
@@ -2565,7 +2573,9 @@ module spectrum
                 !
                 if (abscoef<cutoff) cycle
                 !
-                ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
+                call get_grid_ipoint(tranfreq,freq,ipoint)
+                !
+                !ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
                 !
                 intens_omp(ipoint,iomp) = max(intens_omp(ipoint,iomp),abscoef)
                 !
@@ -2605,7 +2615,9 @@ module spectrum
                 !
                 !if (abscoef<cutoff) cycle
                 !
-                ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
+                call get_grid_ipoint(tranfreq,freq,ipoint)
+                !
+                !ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
                 !
                 intens_omp(ipoint,iomp) = intens_omp(ipoint,iomp)+abscoef
                 !
@@ -2926,7 +2938,7 @@ module spectrum
      real(rk),intent(in) :: freq(npoints)
      integer(ik),intent(out) :: ib,ie
      !
-     real(rk) :: dfreq_t,freql_t
+     real(rk) :: dfreq_t,freql_t,offset_
      integer(ik) :: igrid
      !
      ib = 1
@@ -2953,20 +2965,21 @@ module spectrum
        !
        dfreq_t = grid(igrid)%dfreq
        freql_t = grid(igrid)%freql
+       offset_ = grid(igrid)%offset
        !
-       if (tranfreq-offset>=grid(igrid)%freql) then
-         ib =  max(nint( ( tranfreq-offset-freql_t)/dfreq_t )+1,1)
+       if (tranfreq-offset_>=grid(igrid)%freql) then
+         ib =  max(nint( ( tranfreq-offset_-freql_t)/dfreq_t )+1,1)
          ib = grid(igrid)%i1+ib-1
        elseif(igrid>1) then
-         ib =  max(nint( ( tranfreq-offset-grid(igrid-1)%freql)/grid(igrid-1)%dfreq )+1,1)
+         ib =  max(nint( ( tranfreq-offset_-grid(igrid-1)%freql)/grid(igrid-1)%dfreq )+1,1)
          ib = grid(igrid-1)%i1+ib-1
        endif
        !
-       if (tranfreq+offset<=grid(igrid)%freqr) then
-         ie =  min(nint( ( tranfreq+offset-freql_t)/dfreq_t )+1,npoints)
+       if (tranfreq+offset_<=grid(igrid)%freqr) then
+         ie =  min(nint( ( tranfreq+offset_-freql_t)/dfreq_t )+1,npoints)
          ie = grid(igrid)%i1+ie-1
        elseif(igrid<Ngrids) then
-         ie =  min(nint( ( tranfreq+offset-grid(igrid+1)%freql)/grid(igrid+1)%dfreq )+1,npoints)
+         ie =  min(nint( ( tranfreq+offset_-grid(igrid+1)%freql)/grid(igrid+1)%dfreq )+1,npoints)
          ie = grid(igrid+1)%i1+ie-1
        endif
        !
@@ -2982,6 +2995,48 @@ module spectrum
      !
   end subroutine get_ipoint_ranges
   !
+  ! Obtain the ipoint for the current frequency
+  subroutine get_grid_ipoint(tranfreq,freq,ipoint)
+     !
+     real(rk),intent(in) :: tranfreq
+     real(rk),intent(in) :: freq(npoints)
+     integer(ik),intent(out) :: ipoint
+     !
+     real(rk) :: dfreq_t,freql_t
+     integer(ik) :: igrid
+     !
+     if (use_resolving_power) then
+         !
+         dfreq_t = log(freq(2)) - log(freq(1))
+         freql_t = freq(1)
+         !
+         ipoint =  nint(real((log(tranfreq)-log(freql_t))/dfreq_t,rk))+1
+         !
+         return
+         !
+     endif
+     !
+     if (Ngrids>0) then 
+       igrid = 1
+       do while(tranfreq>grid(igrid+1)%freql.and.igrid<Ngrids)
+         igrid = igrid + 1
+       enddo
+       !
+       dfreq_t = grid(igrid)%dfreq
+       freql_t = grid(igrid)%freql
+       !
+       ipoint =  min(grid(igrid)%i1+max(nint( ( tranfreq-freql_t)/dfreq_t )+1,1),npoints)
+       !
+     else
+       !
+       freql_t = freq(1)
+       dfreq_t = freq(2) - freq(1)
+       !
+       ipoint =  min(max(nint( ( tranfreq-freql_t)/dfreq_t )+1,1),npoints)
+       !
+     endif
+     !
+  end subroutine get_grid_ipoint
   !
   !
   subroutine do_gauss(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens)
