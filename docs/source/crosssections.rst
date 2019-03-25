@@ -187,4 +187,8 @@ A multi-grid with regions of different resolutions can be defined using the foll
     end
      
 
+The maximal number of sub-grids is 100. Currently this option only works with 
+simple sampling-type profiles, such as `Voigt`, `Doppler Sampling`,  `Gaussian Sampling` or `Bin`. 
+The latter is commonly used to generate super-lines.  
+`offset` is an optional keyword to allow region-dependent cutoffs for line profiles.
 

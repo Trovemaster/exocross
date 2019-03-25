@@ -247,6 +247,19 @@ Currently this makes sense only in combination with Gaussian and Doppler.
     offset 25 (cm-1)
 
 
+`offset` can be defined in terms of HWHM
+
+::
+
+    offset HWHM
+
+
+`offset`s can allow using different values for different regions, see the multi-grid section 
+`grid`. 
+
+
+
+
 * `pressure` value in bar must be specified (otherwise P=1 bar is assumed) used for Voigt. 
 
 
@@ -332,7 +345,7 @@ Example
 ::     
     
     grid
-      Range   0    100   Npoints 10000
+      Range   0    100   Npoints 10000 offset 25.
       Range 100   1000  Npoints 1000 
       Range 1000 10000  Npoints 100
     end
