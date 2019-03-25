@@ -181,8 +181,8 @@ A multi-grid with regions of different resolutions can be defined using the foll
 ::     
     
     grid
-      Range   0    100   Npoints 10000
-      Range 100   1000  Npoints 1000 
+      Range   0    100   Npoints 10000 offset 10 
+      Range 100   1000  Npoints 1000  offset 25
       Range 1000 10000  Npoints 100
     end
      
@@ -190,5 +190,6 @@ A multi-grid with regions of different resolutions can be defined using the foll
 The maximal number of sub-grids is 100. Currently this option only works with 
 simple sampling-type profiles, such as `Voigt`, `Doppler Sampling`,  `Gaussian Sampling` or `Bin`. 
 The latter is commonly used to generate super-lines.  
-`offset` is an optional keyword to allow region-dependent cutoffs for line profiles.
+`offset` is an optional keyword to allow region-dependent cutoffs for line profiles. If undefined, the value of the 
+global keyword `offset` or the corresponding default value (25 cm-1) is used.
 
