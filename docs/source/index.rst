@@ -6,6 +6,7 @@ Welcome to ExoCross's documentation!
    :caption: Contents:
 
    intro
+   compile
    crosssections
    lifetimes   
    filters
