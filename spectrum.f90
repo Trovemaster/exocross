@@ -15,9 +15,9 @@ module spectrum
   integer(hik),parameter :: max_transitions_to_ram = 1000000000
   integer(ik) :: N_omp_procs=1
   !
-  integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,ioffset = 10,iso=-1
-  real(rk)      :: temp=298.0,partfunc=-1.0,freql=-small_,freqr= 200000.0,thresh=1.0d-70,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
-  real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = 25.0, pressure = 1.0_rk
+  integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,ioffset = 10,iso=1,imolecule =-1
+  real(rk)      :: temp=298.0,partfunc=-1.0,partfunc_ref=-1.0,freql=-small_,freqr= 200000.0,thresh=1.0d-70
+  real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = 25.0, pressure = 1.0_rk,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
   real(rk)      :: enermax = 1e7, abscoef_thresh = 1.0d-50, abundance = 1.0d0, gf_factor = 1.0d0
   real(rk)      :: S_crit = 1e-29      ! cm/molecule, HITRAN cut-off paramater
   real(rk)      :: nu_crit = 2000.0d0  ! cm-1, HITRAN cut-off paramater
@@ -31,7 +31,7 @@ module spectrum
   integer(ik)   :: intJvalue(nfiles_max)
   character(4) a_fmt
   character(9) b_fmt
-  real(rk) :: temp_vib = -1.0
+  real(rk) :: temp_vib = -1.0, temp_ref = -1.0
   !
   !VoigtKampff parameters
   integer :: voigt_index=0
@@ -100,7 +100,7 @@ module spectrum
   integer(ik),allocatable,save  :: gamma_idx(:,:) !Used for indexing the gamma for the fast_voigt
   real(rk),allocatable,save  :: gamma_comb(:,:) !Used for indexing the gamma for the fast_voigt
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
-             stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false.
+             stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false., spectra_do = .false.
   logical :: lineprofile_do = .false., use_width_offset = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
@@ -171,11 +171,16 @@ module spectrum
              call readu(w)
              !
              if (w(1:3)=='VIB') then
+                 !
                  call readf(temp_vib)
-                 vibtemperature_do  = .true.
-                 if (temp_vib<small_) call report ("Illegal Tvib"//trim(w),.true.)
-               else
-                 call report ("Illegal key, expected vib"//trim(w),.true.)
+                 !
+             elseif(w(1:3)=='REF') then
+                 !
+                 call readf(temp_ref)
+                 if (temp_ref<small_) call report ("Illegal Tref"//trim(w),.true.)
+                 !
+             else
+                 call report ("Illegal key, expected vib or ref"//trim(w),.true.)
              endif 
              !
           endif
@@ -199,6 +204,22 @@ module spectrum
           call readf(partfunc)
           !
           partfunc_do = .false.
+          !
+          !
+          if (Nitems>2) then 
+             !
+             call readu(w)
+             !
+             if (w(1:3)=='REF') then
+                 !
+                 call readf(partfunc_ref)
+                 !
+             else
+                 call report ("Illegal key, expected ref"//trim(w),.true.)
+             endif 
+             !
+          endif
+         
           !
         case ("RESOLVING","R")
           !
@@ -263,9 +284,11 @@ module spectrum
           !
          call readi(N_omp_procs)
           !
-        case ("ISO","ISOTOPE","IELION")
+        case ("ISO","ISOTOPE","IELION","IMOLECULE","IMOL")
           !
-          call readi(iso)
+          call readi(imolecule)
+          !
+          if (nitems>1) call readi(iso)
           !
         case ("ABUNDANCE")
           !
@@ -409,10 +432,14 @@ module spectrum
           histogram = .true.
           histogramJ = .true.
           !
-       case ("NRAM","NLINES-TO-RAM","LINES-TO-CACHE","NCACHE")
+        case ("NRAM","NLINES-TO-RAM","LINES-TO-CACHE","NCACHE")
           !
           call readf(f_t)
           N_to_RAM = int(f_t,hik)
+          !
+        case ("SPECTRA")
+          !
+          spectra_do = .true.
           !
         case ("HITRAN","OXFORD")
           !
@@ -984,8 +1011,8 @@ module spectrum
       stop 'Error-Gaussian: Illegal value of HWHM'
     endif
     !
-    if (hitran_do.and.iso<0) then 
-      write(out,"('Error-HITRAN/Oxford: iso is illegal (negative) on undefined, use e.g. ISO 11 for water')") 
+    if (hitran_do.and.(iso<0.or.imolecule<0)) then 
+      write(out,"('Error-HITRAN/Oxford: iso or imolecule are illegal (negative) on undefined, use e.g. ISO 1 1  for 16 water')") 
       stop 'Error-HITRAN/Oxford: illegal iso'
     endif
     !
@@ -1065,7 +1092,7 @@ module spectrum
         enddo
       endif
       !
-      if (.not.if_species_defined.and..not.if_halfwidth_defined.and..not.hitran_do) then
+      if (.not.if_species_defined.and..not.if_halfwidth_defined.and..not.hitran_do.and..not.spectra_do) then
         write(out,"('Input Error: For ',a,' either HWHM or gamma@species must be defined, e.g. HWHM 0.05')") trim(proftype)
         stop 'Input Error: either  HWHM or gamma@SPECIES must be defined for this profile type'
       endif
@@ -1088,7 +1115,7 @@ module spectrum
    real(rk)    :: hitran_Tref = 296_rk
    integer(ik) :: info,ipoint,ipoint_,nlevels,i,itemp,enunit,tunit,sunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems
    integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid
-   real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air
+   real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air,beta_ref
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff
    integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll
@@ -1115,7 +1142,7 @@ module spectrum
    logical :: eof
    character(len=cl) :: w
    !
-   integer(ik) :: imol,iostat_
+   integer(ik) :: imol,iostat_,isotope
    real(rk)    :: gf,gi,mem_t,temp_gamma_n,offset_
    character(55) ch_q,ch_broad
    !
@@ -1125,6 +1152,8 @@ module spectrum
    cmcoef=1.0_rk/(8.0_rk*pi*vellgt)
    emcoef=1.0_rk*planck*vellgt/(4.0_rk*pi)
    dfreq=(freqr-freql)/real(npoints-1,rk)
+   !
+   beta_ref = c2/temp_ref
    !
    gfcoef=1.34738d+21 ! vellgt**3*me/(8.0_rk*pi**2*e**2) e:=4.80320427e-10*Fr; me := .9109383560e-27*g ; Fr:=cm^(3/2)*sqrt(g)/s;
    !
@@ -1879,6 +1908,16 @@ module spectrum
      stop 'Undefined PF'
    endif
    !
+   if (spectra_do.and.(partfunc<0.0.or.partfunc_ref<0.0)) then
+     write(out,"('For SPECTRA pf and ref-pf must be defined using PF XXXX REF YYYY')")
+     stop 'Undefined PF'
+   endif
+   !
+   if (spectra_do.and.(temp_ref<0.0)) then
+     write(out,"('For SPECTRA reference temperatures must be defined using temperature XXXX REF YYYY')")
+     stop 'Undefined reference Temperature'
+   endif
+   !
    if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE','COO'/)) ) then
      allocate(intens_omp(npoints,N_omp_procs),stat=info)
      intens_omp = 0
@@ -2023,13 +2062,13 @@ module spectrum
            do while(iswap_<N_to_RAM)
              !
              !read(tunit,*,end=119) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
-             read(tunit,"(i3,f12.6,e10.3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6,a55,23x,2f7.1)",end=119) &
-                  imol,tranfreq,abscoef,acoef,gamma_,gamma_s,energyi,n_,delta_air,ch_q,gf,gi
+             read(tunit,"(i2,i1,f12.6,e10.3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6,a55,23x,2f7.1)",end=119) &
+                  imol,isotope,tranfreq,abscoef,acoef,gamma_,gamma_s,energyi,n_,delta_air,ch_q,gf,gi
              !
              tranfreq = tranfreq + delta_air * pressure
              energyf = tranfreq + energyi
              !
-             if (imol/=iso) cycle
+             if (imol/=imolecule.or.iso/=isotope) cycle
              !
              if (tranfreq<small_) cycle
              !
@@ -2080,15 +2119,79 @@ module spectrum
               exit loop_tran
            endif
            !
-        else ! ExoMol format of the trans-file
+        elseif (spectra_do) then
            !
-           do iswap = 1,N_to_RAM
+           ! SPECTRA format (ioa tomsk database)
+           !
+           iswap_ = 0
+           !
+           do while(iswap_<N_to_RAM)
              !
-             read(tunit,*,end=120) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
+             !read(tunit,*,end=119) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
+             read(tunit,*,end=120) &
+                  imol,isotope,tranfreq,abscoef,energyi,gamma_,n_
+             !
+             energyf = tranfreq + energyi
+             !
+             if (imol/=imolecule.or.iso/=isotope) cycle
+             !
+             if (tranfreq<small_) cycle
+             !
+             if (tranfreq<freql.or.tranfreq>freqr) cycle
+             !
+             iswap_ = iswap_ + 1
+             !
+             abscoef_ram(iswap_)=abscoef*exp(-beta    *energyi)*(1.0_rk-exp(-beta    *tranfreq))*partfunc_ref/&
+                                        (exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))*partfunc   ) 
+             !
+             nu_ram(iswap_) = tranfreq
+             !
+             ! estimate the line shape parameter
+             !
+             if (lineprofile_do) then
+               !
+               ! The current version of ExoCross does no know how to locate J-values in HITRAN-input.
+               ! Therefore we can only use the static values of Voigt-parameters together with Nspecies
+               !
+               Jf = 0.0_rk
+               Ji = 0.0_rk
+               species(1)%gamma = gamma_
+               species(1)%n = n_
+               !
+               gamma_ram(iswap_) = gamma_ * pressure * (temp_ref/temp)**n_
+
+               !Below: probably not correct, but gamma_idx_RAM definitely needs
+               !to be initialized somehow
+               gamma_idx_RAM(iswap_) = fast_voigt%get_size()
+               !
+             endif
              !
              cycle
              !
            120 continue
+             nswap = iswap_-1
+             eof = .true.
+             exit
+           enddo
+           !
+           nswap = iswap_
+           !
+           intband = intband + sum(abscoef_RAM(1:nswap))
+           !
+           if (nswap<1) then
+              if (verbose>=5) write(out,"('... Finish swap')")
+              exit loop_tran
+           endif
+           !
+        else ! ExoMol format of the trans-file
+           !
+           do iswap = 1,N_to_RAM
+             !
+             read(tunit,*,end=121) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
+             !
+             cycle
+             !
+           121 continue
              !
              nswap_ = iswap-1
              eof = .true.

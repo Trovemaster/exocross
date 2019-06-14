@@ -18,7 +18,7 @@ For example:
     hwhm 0.5 (cm-1)
     
     hitran
-    iso 261
+    iso 26 1
     pf 1000.0
     
     output C2H2_ab_g0.5

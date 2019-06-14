@@ -15,6 +15,7 @@ Welcome to ExoCross's documentation!
    superlines
    profiles
    hitran
+   spectra
    keywords
    license
 

@@ -316,13 +316,37 @@ Example 2:
 
 * `HITRAN` is to use the HITRAN-format of the transition file or output.  Reading from hitran (.par) requires also the definition of the partition function `pf` and the isotopologue number `iso`. No .states is needed. To read from HITRAN use `HITRAN READ` 
 
-* `iso` is the isotopologue number of a HITRAN molecule, e.g. 261 for 12C2H2. 
+* `SPECTRA` is to use the SPECTRA-format (IAO.ru, Tomsk) of the transition file.  This will also require the definition of the (i) reference temperature, (ii)  partition function for the target temperature, (iii)
+partition function for the reference temperature, and (iv) the molecule/isotope pair  (`iso`). 
+
+Example: 
+::
+
+    Temperature  500.0  ref 296.0
+    Range 0.0  10000.0
+    
+    Npoints 10001
+    
+    absorption
+    Voigt
+    
+    spectra
+    iso 26 1
+    pf 1000.0 ref 500
+    
+    output CH4_voigt_T500K
+
+    Transitions  SpectraMol_CH4_296K.txt
+    
+    
+
+* `iso` is to define the isotopologue for HITRAN or SPECTRA molecule, e.g. 26 1 for 12C2H2. 
 
 Example 
 ::
     
     hitran
-    iso 261
+    iso 26 1
     pf 1000.0
     output C2H2_ab_g0.5
     Transitions  26_hit12.par
