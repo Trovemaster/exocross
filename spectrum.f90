@@ -166,6 +166,8 @@ module spectrum
               call report ("Illegal Temperatue (must be positive>0)"//trim(w),.true.)
           endif 
           !
+          temp_ref = temp
+          !
           if (Nitems>2) then 
              !
              call readu(w)
@@ -205,6 +207,7 @@ module spectrum
           !
           partfunc_do = .false.
           !
+          partfunc_ref = partfunc
           !
           if (Nitems>2) then 
              !

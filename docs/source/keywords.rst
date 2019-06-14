@@ -25,6 +25,14 @@ ExoCross keywords
 In this case it is also important to provide the addresses of the vibrational columns using the QN section. 
 
 
++ A reference temperature (used e.g. with `SPECTRA`) can be specifed using the `REF` keyword as part of the `Temperature` line, e.g: 
+       
+::
+
+    Temperature 1000 Ref 296 
+
+    
+
 * QN: The designation of the quantum numbers  (QN) to columns can be done using the QN section. In this section `vib` is used for the range of the vibrational QNs; `K` is for the column with the rotational "K"; `Sym` is for symmetry; `Nsym` is number of the symmetries; `Nmodes` stands for the number of vibrational modes. The column numbering starts after the J column (4th). The vibrational addressing is required for when vibrational temperature is used.
 
 ::
@@ -41,6 +49,13 @@ In this case it is also important to provide the addresses of the vibrational co
 ::
 
     PF  1000.0
+
+
++ A reference partition funcion (used e.g. with `SPECTRA`) can be specifed using the `REF` keyword as part of the `PFe` line, e.g: 
+       
+::
+
+    PF 4000 Ref 100
 
 
 * Range:  Wavenumber (cm-1) or wavelength (um or micron) range, i.e. from nu1 to nu2:
