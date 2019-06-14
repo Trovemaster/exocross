@@ -721,6 +721,7 @@ module spectrum
           !
           if (trim(w)=="LIFETIME".or.trim(w)=="LIFETIMES") then 
             specttype = "LIFETIME"
+            proftype = "LIFETIME"
           endif
           !
           if (microns) then
@@ -1816,7 +1817,7 @@ module spectrum
           !
        endif
        !
-   case ('RECT','BOX')
+   case ('RECT','BOX','MAX')
        !
        if (verbose>=2) then
           !
@@ -1843,7 +1844,7 @@ module spectrum
              write(out,"(10x,/'Stick pectra of type ',a,' with the HITRAN cut-off model, Scrit = ',e18.5,' nu_crit = ',f16.4)") &
              trim(proftype),S_crit,nu_crit
           else
-             write(out,"(10x,/'Stick pectra of type ',a,' stronger than ',e18.5)") trim(proftype),thresh
+             write(out,"(10x,/'Stick spectra of type ',a,' stronger than ',e18.5)") trim(proftype),thresh
           endif
           write(out,"(10x,'Range = ',f18.7,'-',f18.7)") freql,freqr
           write(out,"(10x,'Temperature = ',f18.7)") temp
@@ -2696,14 +2697,14 @@ module spectrum
      !
      do i=1,N_omp_procs
       intens(:) = intens(:) + intens_omp(:,i)
-    enddo
+     enddo
      !
    else if (trim(proftype(1:3))== 'MAX') then
-      do iomp = 1,N_omp_procs
-        do ipoint = 1,npoints
-          intens(i) = max(intens_omp(ipoint,iomp),intens(i))
-        enddo
-      enddo  
+     do iomp = 1,N_omp_procs
+       do ipoint = 1,npoints
+         intens(ipoint) = max(intens_omp(ipoint,iomp),intens(ipoint))
+       enddo
+     enddo  
    endif  
    !
    call IOstop(trim(ioname))
