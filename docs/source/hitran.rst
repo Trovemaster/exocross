@@ -26,6 +26,8 @@ For example:
     
     
 
+Here `iso`  can appear in a HITRAN form as, e.g. 261. 
+
 HITRAN keyword can also also used for writing in the HITRAN output. In this case the broadening parameters are expected to be specified for air and self as part of the SPECIES section, including delta. To invoke HITRAN output use WRITE next to the HITRAN keyword, which starts a section, which should be ended either by END or an emty line. The ID_ISO should be also specified using ISO keyword.
 ::
 
