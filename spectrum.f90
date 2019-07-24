@@ -291,7 +291,16 @@ module spectrum
           !
           call readi(imolecule)
           !
-          if (nitems>1) call readi(iso)
+          if (nitems>2) then 
+            call readi(iso)
+          else
+            iso = mod(imolecule,10)
+            if (iso<1.or.iso>9) then 
+              write(out,"('Input error: illegal iso/imol value = ',i7)") imolecule
+              stop 'Input error: illegal iso/imol value'
+            endif 
+            imolecule = (imolecule-iso)/10
+          endif
           !
         case ("ABUNDANCE")
           !
@@ -1663,7 +1672,7 @@ module spectrum
          ! Scan and find Jmax
          read(bunit,*,end=14) ch_broad(1:3),gamma_,n_,J_
          !
-         if (all(trim(ch_broad(1:2))/=(/'A0','A1'/))) cycle 
+         if (all(trim(ch_broad(1:2))/=(/'a0','a1','A0','A1'/))) cycle 
          !
          Jmax = max(Jmax,nint(J_+0.5_rk))
          JmaxAll = max(nint(J_+0.5_rk),JmaxAll)
@@ -1715,7 +1724,7 @@ module spectrum
          !
          select case ( trim(ch_broad(1:3)) )
            !
-         case ('J','A0')
+         case ('a0','A0')
            !
            if (nitems<4) call report ("not enough data in .broad for a0"//trim(w),.true.)
            !
@@ -1731,7 +1740,7 @@ module spectrum
            species(i)%gammaQN(J,:) = gamma_
            species(i)%nQN(J,:) = n_
            !
-         case ('JJ','A1')
+         case ('a1','A1')
            !
            if (nitems<5) call report ("not enough data in .broad for a1"//trim(w),.true.)
            !
@@ -1889,9 +1898,9 @@ module spectrum
    !
    if (lineprofile_do) then
       write(out,"(10x,'Pressure = ',e18.7)") pressure
-      write(out,"(10x,'Voigt parameters:   gamma       n         T0            P0')")
+      write(out,"(10x,'Voigt parameters:   gamma       n         T0            P0     Ratio')")
       do i =1,Nspecies
-        write(out,"(21x,a,4f12.4)") trim(species(i)%name),species(i)%gamma,species(i)%n,species(i)%t0,species(i)%p0
+        write(out,"(21x,a,4f12.4,1xf13.6)") trim(species(i)%name),species(i)%gamma,species(i)%n,species(i)%t0,species(i)%p0,species(i)%ratio
       enddo
    endif
    !
@@ -2085,7 +2094,7 @@ module spectrum
              !
              ! estimate the line shape parameter
              !
-             if (lineprofile_do) then
+             if (lineprofile_do.and..not.species(1)%if_defined) then
                !
                ! The current version of ExoCross does no know how to locate J-values in HITRAN-input.
                ! Therefore we can only use the static values of Voigt-parameters together with Nspecies
