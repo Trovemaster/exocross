@@ -26,7 +26,8 @@ module spectrum
   integer(ik)   :: nquad = 20      ! Number of quadrature points
   integer(hik)   :: N_to_RAM = -1000 ! Lines to keep in RAM
   !
-  character(len=cl) :: specttype="ABSORPTION",enrfilename="NONE",intfilename(nfiles_max),proftype="DOPPL",output="output"
+  character(len=cl) :: specttype="ABSORPTION",proftype="DOPPL"
+  character(len=wl) :: enrfilename="NONE",intfilename(nfiles_max),output="output"
   character(len=cl) :: pffilename="NONE"
   integer(ik)   :: intJvalue(nfiles_max)
   character(4) a_fmt
@@ -123,6 +124,7 @@ module spectrum
     !
     logical :: eof,if_halfwidth_defined = .false., if_species_defined = .false., if_QN_defined = .false.
     character(len=cl) :: w,v
+    character(len=wl) :: vl
     integer(ik)   :: i,ifilter,iE,iS,npoints0,ierror,igrid
     type(HitranErrorT),pointer :: HITRAN
     real(rk) :: f_t
@@ -662,8 +664,9 @@ module spectrum
          endif
          !
          call read_line(eof) ; if (eof) exit
-         call reada(w)
-         v = trim(w)
+         call reada(vl)
+         vl = trim(vl)
+         w = trim(vl)
          call upcase(w)
          !
          do while (trim(w)/="".and.trim(w)/="END")
@@ -672,7 +675,7 @@ module spectrum
            !
            if (i>nfiles_max) call report ("Too many files, increase nfiles_max"//trim(w),.true.)
            !
-           intfilename(i) = trim(v)
+           intfilename(i) = trim(vl)
            !
            ! for J-dependent histograms a J-value is expected in the last column
            !
@@ -681,8 +684,9 @@ module spectrum
            endif
            !
            call read_line(eof) ; if (eof) exit
-           call reada(w)
-           v = trim(w)
+           call reada(vl)
+           vl = trim(vl)
+           w = trim(vl)
            call upcase(w)
            !
          enddo
@@ -1684,11 +1688,11 @@ module spectrum
        !
        if (Jmax>0) then
          !
-         allocate(species(i)%gammaQN(0:Jmax,-1:1),stat=info)
+         allocate(species(i)%gammaQN(0:Jmax,-2:2),stat=info)
          call ArrayStart('gammaQN',info,size(species(i)%gammaQN),kind(species(i)%gammaQN))
          species(i)%gammaQN(:,:) = species(i)%gamma
          !
-         allocate(species(i)%nQN(0:Jmax,-1:1),stat=info)
+         allocate(species(i)%nQN(0:Jmax,-2:2),stat=info)
          !         
          call ArrayStart('nQN',info,size(species(i)%nQN),kind(species(i)%nQN))
          species(i)%nQN(:,:) = species(i)%N
@@ -1772,10 +1776,11 @@ module spectrum
          end select
          !
        enddo
+       !
        ! using the gamma(Jmax) value for all gamms for J>Jmax
        !
-       forall(k=-1:1) species(i)%gammaQN(Jmax+1:,k) = species(i)%gammaQN(Jmax,k)
-       forall(k=-1:1) species(i)%nQN(Jmax+1:,k) = species(i)%nQN(Jmax,k)
+       forall(k=-2:2) species(i)%gammaQN(Jmax+1:,k) = species(i)%gammaQN(Jmax,k)
+       forall(k=-2:2) species(i)%nQN(Jmax+1:,k) = species(i)%nQN(Jmax,k)
        !
        close(bunit)
        !
@@ -1783,11 +1788,11 @@ module spectrum
        !
        Jmax = JmaxAll
        !
-       allocate(species(i)%gammaQN(0:Jmax,-1:1),stat=info)
+       allocate(species(i)%gammaQN(0:Jmax,-2:2),stat=info)
        call ArrayStart('gammaQN',info,size(species(i)%gammaQN),kind(species(i)%gammaQN))
        species(i)%gammaQN(:,:) = species(i)%gamma
        !
-       allocate(species(i)%nQN(0:Jmax,-1:1),stat=info)
+       allocate(species(i)%nQN(0:Jmax,-2:2),stat=info)
        !         
        call ArrayStart('nQN',info,size(species(i)%nQN),kind(species(i)%nQN))
        species(i)%nQN(:,:) = species(i)%N
@@ -1796,15 +1801,15 @@ module spectrum
      !
    enddo
    !
-   allocate(gamma_idx(0:JmaxAll,-1:1),stat=info)
+   allocate(gamma_idx(0:JmaxAll,-2:2),stat=info)
    call ArrayStart('gamma_idx',info,size(gamma_idx),kind(gamma_idx))
-   allocate(gamma_comb(0:JmaxAll,-1:1),stat=info)
+   allocate(gamma_comb(0:JmaxAll,-2:2),stat=info)
    call ArrayStart('gamma_comb',info,size(gamma_comb),kind(gamma_comb))
    !
    gamma_idx = 1
    gamma_comb = -1
    do i=0,JmaxAll
-     do j= max(0,i-1),min(JmaxAll,i+1)    
+     do j= max(0,i-2),min(JmaxAll,i+2)
       gamma_comb(j,i-j) = get_Voigt_gamma_val(Nspecies,real(i,rk),real(j,rk))
      enddo
    enddo
