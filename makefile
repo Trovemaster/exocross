@@ -15,7 +15,7 @@ FOR  = ifort
 FFLAGS =  -O3 -qopenmp -traceback  -ip 
 
 #FOR = gfortran
-#FFLAGS = -O2 -fopenmp -std=f2008
+#FFLAGS = -O3 -fopenmp -std=f2008 -ffree-line-length-512
 
 
 #FFLAGS = -O0 -g -fpe0  -fltconsistency -stand f03 -check all -warn all -traceback -fp-stack-check  # debugging options

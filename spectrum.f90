@@ -1905,7 +1905,7 @@ module spectrum
       write(out,"(10x,'Pressure = ',e18.7)") pressure
       write(out,"(10x,'Voigt parameters:   gamma       n         T0            P0     Ratio')")
       do i =1,Nspecies
-        write(out,"(21x,a,4f12.4,1xf13.6)") trim(species(i)%name),species(i)%gamma,species(i)%n,species(i)%t0,species(i)%p0,species(i)%ratio
+        write(out,"(21x,a,4f12.4,f13.6)") trim(species(i)%name),species(i)%gamma,species(i)%n,species(i)%t0,species(i)%p0,species(i)%ratio
       enddo
    endif
    !
