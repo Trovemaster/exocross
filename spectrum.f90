@@ -1810,7 +1810,7 @@ module spectrum
    gamma_comb = -1
    do i=0,JmaxAll
      do j= max(0,i-2),min(JmaxAll,i+2)
-      gamma_comb(j,i-j) = get_Voigt_gamma_val(Nspecies,real(i,rk),real(j,rk))
+      gamma_comb(i,i-j) = get_Voigt_gamma_val(Nspecies,real(i,rk),real(j,rk))
      enddo
    enddo
    !
