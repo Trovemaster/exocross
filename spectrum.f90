@@ -77,6 +77,7 @@ module spectrum
     integer(ik) :: Nmodes= 1             ! Number of vib modes
     integer(ik) :: Nsym=1                ! Number of symmetries
     integer(ik) :: Rotcol(2)=(/5,6/)     ! Columns with Rot-QNs
+    integer(ik) :: dens_col              ! column with number density 
     !
   end type QNT
   !
@@ -101,7 +102,7 @@ module spectrum
   integer(ik),allocatable,save  :: gamma_idx(:,:) !Used for indexing the gamma for the fast_voigt
   real(rk),allocatable,save  :: gamma_comb(:,:) !Used for indexing the gamma for the fast_voigt
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
-             stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false., spectra_do = .false.
+             stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false., spectra_do = .false., vibpopulation_do = .false.
   logical :: lineprofile_do = .false., use_width_offset = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
@@ -177,6 +178,9 @@ module spectrum
              if (w(1:3)=='VIB') then
                  !
                  call readf(temp_vib)
+                 !
+                 vibtemperature_do  = .true.
+                 if (temp_vib<small_) call report ("Illegal Tvib"//trim(w),.true.)
                  !
              elseif(w(1:3)=='REF') then
                  !
@@ -400,6 +404,12 @@ module spectrum
                 QN%Rotcol(2) = QN%Rotcol(1)
                 !
               endif
+              !
+            case ("DENSITY","DENS")
+              !
+              call readi(QN%dens_col)
+              !
+              vibpopulation_do = .true.
               !
             case ("VIB","VIBRATIONAL")
               !
@@ -1133,7 +1143,7 @@ module spectrum
    integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air,beta_ref
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
-   real(rk)    :: acoef_,cutoff
+   real(rk)    :: acoef_,cutoff,ndensity
    integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll
    real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2
    character(len=cl) :: ioname
@@ -2315,8 +2325,13 @@ module spectrum
                !
                if (.not.vibtemperature_do) then
                   abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
-               else 
+               elseif(vibpopulation_do) then
+                  ! apply vibrational population
+                  read(quantum_numbers(QN%dens_col-4,ileveli),*) ndensity
+                  abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*ndensity*&
+                          (1.0_rk-exp(-c2/temp_vib*tranfreq))/(tranfreq**2*partfunc)
                   ! split into a product of vib and rot parts 
+               else
                   abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)*&
                           (1.0_rk-exp(-c2/temp_vib*tranfreq))/(tranfreq**2*partfunc)
                endif 
@@ -2327,10 +2342,19 @@ module spectrum
                !
                if (.not.vibtemperature_do) then
                   abscoef=emcoef*acoef*gtot(ilevelf)*exp(-beta*energyf)*tranfreq/(partfunc)
+
+               elseif(vibpopulation_do) then
+                  ! apply vibrational population
+                  read(quantum_numbers(QN%dens_col-4,ileveli),*) ndensity
+                  !
+                  abscoef=emcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*ndensity*&
+                          tranfreq/(partfunc)
+                  !
                else 
                   ! split into a product of vib and rot parts 
                   abscoef=emcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*&
                           exp(-c2/temp_vib*ener_vib)*tranfreq/(partfunc)
+
                   !
                endif 
                !
@@ -3714,9 +3738,9 @@ module spectrum
        !
        !
        if (abscoef>1.0D-99) then 
-          write(h_fmt,"(a)") "(i3,f12.6,es10.3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6)"
+          write(h_fmt,"(a)") "(i2,i1,f12.6,es10.3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6)"
        else
-          write(h_fmt,"(a)") "(i3,f12.6,es10.2E3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6)"
+          write(h_fmt,"(a)") "(i2,i1,f12.6,es10.2E3,e10.3,f5.4,f5.3,f10.4,f4.2,f8.6)"
        endif
        !
        if (stick_hitran) then
@@ -3729,7 +3753,7 @@ module spectrum
          n1 = species(1)%nQN(Jpp,Jp-Jpp)
          !
          write(sunit,h_fmt,advance="no") &
-                     iso,tranfreq,abscoef,acoef,&
+                     imolecule,iso,tranfreq,abscoef,acoef,&
                      gamma1,gamma2,&
                      energyi,n1,species(1)%delta
          !
