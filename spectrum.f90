@@ -10,7 +10,8 @@ module spectrum
   private
   public intensity,readinput,verbose
   !
-  integer(ik),parameter   :: nfiles_max =1000, max_items = 1000, nspecies_max = 10, nquadmax = 101, filtermax = 100, Ngrids_max = 100
+  integer(ik),parameter   :: nfiles_max =1000, max_items = 1000, nspecies_max = 10, nquadmax = 101, filtermax = 100
+  integer(ik),parameter   :: Ngrids_max = 100
   integer(ik),parameter :: HITRAN_max_ierr = 10            ! maximal number of QNs for error-specification in HITRAN
   integer(hik),parameter :: max_transitions_to_ram = 1000000000
   integer(ik) :: N_omp_procs=1
@@ -102,7 +103,8 @@ module spectrum
   integer(ik),allocatable,save  :: gamma_idx(:,:) !Used for indexing the gamma for the fast_voigt
   real(rk),allocatable,save  :: gamma_comb(:,:) !Used for indexing the gamma for the fast_voigt
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
-             stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false., spectra_do = .false., vibpopulation_do = .false.
+             stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false., spectra_do = .false., &
+             vibpopulation_do = .false.
   logical :: lineprofile_do = .false., use_width_offset = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
@@ -124,7 +126,7 @@ module spectrum
     implicit none
     !
     logical :: eof,if_halfwidth_defined = .false., if_species_defined = .false., if_QN_defined = .false.
-    character(len=cl) :: w,v
+    character(len=cl) :: w
     character(len=wl) :: vl
     integer(ik)   :: i,ifilter,iE,iS,npoints0,ierror,igrid
     type(HitranErrorT),pointer :: HITRAN
@@ -935,7 +937,7 @@ module spectrum
                 call readf(grid(igrid)%freqr)
                 !
                 if (igrid>1) then 
-                  if ( grid(igrid)%freql/=grid(igrid-1)%freqr ) then 
+                  if ( abs(grid(igrid)%freql-grid(igrid-1)%freqr)>small_ ) then 
                      write (out,"('input: beginnning of the ',i5,'th grid is inconsistent with the grid on the left ',2f12.5)")&
                            igrid,grid(igrid-1)%freqr,grid(igrid)%freql
                      stop 'input - illigal last line in GRIDS'
@@ -1139,8 +1141,8 @@ module spectrum
    !
    !
    real(rk)    :: hitran_Tref = 296_rk
-   integer(ik) :: info,ipoint,ipoint_,nlevels,i,itemp,enunit,tunit,sunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf,iline,maxitems
-   integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid
+   integer(ik) :: info,ipoint,ipoint_,nlevels,i,itemp,enunit,tunit,sunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf,iline
+   integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air,beta_ref
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff,ndensity
@@ -1625,7 +1627,7 @@ module spectrum
      enddo
      !
      ! From Numerical Recipes in Fortran 77
-     if (T_1 == T_2) stop 'Duplicate temperature in partition file'
+     if (abs(T_1-T_2)<small_) stop 'Duplicate temperature in partition file'
      partfunc = pf_1 + (temp - T_1) * (pf_2 - pf_1)/(T_2 - T_1)
      !
    endif
@@ -1915,7 +1917,8 @@ module spectrum
       write(out,"(10x,'Pressure = ',e18.7)") pressure
       write(out,"(10x,'Voigt parameters:   gamma       n         T0            P0     Ratio')")
       do i =1,Nspecies
-        write(out,"(21x,a,4f12.4,f13.6)") trim(species(i)%name),species(i)%gamma,species(i)%n,species(i)%t0,species(i)%p0,species(i)%ratio
+        write(out,"(21x,a,4f12.4,f13.6)") trim(species(i)%name),species(i)%gamma,species(i)%n,species(i)%t0,&
+                                          species(i)%p0,species(i)%ratio
       enddo
    endif
    !
@@ -3048,8 +3051,8 @@ module spectrum
      real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,freql
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
-     real(rk) :: alpha,abscoef,dfreq_,de,ln2,offset_,dfreq_t,freql_t
-     integer(ik) :: ib,ie,ipoint,igrid
+     real(rk) :: alpha,abscoef,dfreq_,de,ln2,offset_
+     integer(ik) :: ib,ie,ipoint
      !
      if (halfwidth<small_) return
      !
@@ -3291,6 +3294,7 @@ module spectrum
      integer(ik) :: ib,ie,ipoint
 
       !
+      ln2=log(2.0_rk)
       halfwidth0=dpwcoef*tranfreq
       x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
       !
@@ -3357,6 +3361,7 @@ module spectrum
      real(rk) :: gammaV,intens1,offset_
      integer(ik) :: ib,ie,ipoint
      !
+     ln2=log(2.0_rk)
      halfwidth0=dpwcoef*tranfreq
      x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
      !
@@ -3426,6 +3431,7 @@ module spectrum
      real(rk) :: d,x0,intens1,dnu_half,offset_
      integer(ik) :: ib,ie,ipoint
      !
+     ln2=log(2.0_rk)
      halfwidth0=dpwcoef*tranfreq
      x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
      !

@@ -2,7 +2,7 @@ module VoigtKampff
     use accuracy
     implicit none
 
-    public 	VoigtKampffCollection
+    public  VoigtKampffCollection
 
     private
 
@@ -38,7 +38,7 @@ module VoigtKampff
     
     
     
-    type ::	 VoigtKampffCollection
+    type :: VoigtKampffCollection
 
         type(VoigtKampffT),allocatable :: fast_voigts(:)
         integer(ik) :: capacity
@@ -64,9 +64,9 @@ module VoigtKampff
 contains
 
     subroutine construct(this,dpwcoeff,offset,dfreq,normalize)
-        class(VoigtKampffCollection)	::	this
-        logical,intent(in)		::	normalize
-        real(rk),intent(in)		::	dpwcoeff,offset,dfreq
+        class(VoigtKampffCollection)  ::  this
+        logical,intent(in)    ::  normalize
+        real(rk),intent(in)    ::  dpwcoeff,offset,dfreq
 
         this%n = 0
         this%capacity = 0
@@ -109,7 +109,7 @@ contains
     end subroutine
 
     integer(ik) function get_size(this)
-        class(VoigtKampffCollection),intent(in)	::	this
+        class(VoigtKampffCollection),intent(in)  ::  this
 
         get_size = this%n
     end function
@@ -121,7 +121,6 @@ contains
         integer(ik),intent(inout) :: gamma_idx
         integer(ik),intent(in) :: Jmax
 
-        integer(ik) :: ido,jdo
         real(rk)    :: val
         integer     :: idx
 
@@ -139,7 +138,7 @@ contains
     end subroutine
 
     subroutine compute_fast_voigt(this,freq,intens,abscoef,ib,ie,start_nu,nu0,index)
-        class(VoigtKampffCollection),intent(in)	::	this
+        class(VoigtKampffCollection),intent(in)  ::  this
         real(rk),intent(in)     :: freq(:),abscoef,start_nu,nu0
         integer(ik),intent(in)  :: ib,ie
         real(rk),intent(inout)  :: intens(:)
@@ -178,7 +177,7 @@ contains
 
 recursive function binarySearch_R (a, value) result (bsresult)
     type(VoigtKampffT), intent(in) :: a(:)
-    real(rk)	::	value
+    real(rk)  ::  value
     integer          :: bsresult, mid
  
     mid = size(a)/2 + 1
@@ -200,8 +199,8 @@ end function binarySearch_R
 
     !Check if the lorentzian is the same
     logical function is_close(a, b, rel_tol )
-      real(rk),intent(in)	::	a,b,rel_tol
-      	is_close = abs(a-b) <= rel_tol * max(abs(a), abs(b))
+      real(rk),intent(in)  ::  a,b,rel_tol
+        is_close = abs(a-b) <= rel_tol * max(abs(a), abs(b))
     end function
 
 
