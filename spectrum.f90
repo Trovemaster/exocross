@@ -177,7 +177,9 @@ module spectrum
              !
              call readu(w)
              !
-             if (w(1:3)=='VIB') then
+             temp_vib = temp
+             !
+             if (w(1:3)=='VIB'.and.Nitems>3) then
                  !
                  call readf(temp_vib)
                  !
@@ -2332,7 +2334,7 @@ module spectrum
                   ! apply vibrational population
                   read(quantum_numbers(QN%dens_col-4,ileveli),*) ndensity
                   abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*ndensity*&
-                          (1.0_rk-exp(-c2/temp_vib*tranfreq))/(tranfreq**2*partfunc)
+                          (1.0_rk-exp(-c2/ener_rot*tranfreq))/(tranfreq**2*partfunc)
                   ! split into a product of vib and rot parts 
                else
                   abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)*&
