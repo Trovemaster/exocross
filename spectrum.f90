@@ -1581,8 +1581,6 @@ module spectrum
         !
         do itemp = 1,npoints
           !
-          if (energy>enermax) cycle
-          !
           temp0 = real(itemp,rk)*dtemp
           !
           write(tunit,"(f8.1,1x,f15.4)") temp0,pf(0,itemp)
@@ -1824,7 +1822,7 @@ module spectrum
    gamma_comb = -1
    do i=0,JmaxAll
      do j= max(0,i-2),min(JmaxAll,i+2)
-      gamma_comb(i,i-j) = get_Voigt_gamma_val(Nspecies,real(i,rk),real(j,rk))
+      gamma_comb(j,i-j) = get_Voigt_gamma_val(Nspecies,real(i,rk),real(j,rk))
      enddo
    enddo
    !
@@ -1834,8 +1832,8 @@ module spectrum
      !
      !Combine all the gammas
      do i=0,JmaxAll
-      do j= max(0,i-1),min(JmaxAll,i+1) 
-       call fast_voigt%generate_indices(gamma_comb(i,i-j),gamma_idx(i,i-j),JmaxAll)
+      do j= max(0,i-2),min(JmaxAll,i+2) 
+       call fast_voigt%generate_indices(gamma_comb(j,i-j),gamma_idx(j,i-j),JmaxAll)
       enddo
      enddo  
      !   
@@ -2682,7 +2680,6 @@ module spectrum
                 tranfreq = nu_ram(iswap)
                 halfwidth = gamma_ram(iswap)
                 !
-
                 call do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth,dpwcoef,offset,freql,intens_omp(:,iomp))
                 !
               enddo
