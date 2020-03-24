@@ -41,8 +41,24 @@ where `upper` and `lower` refer to the upper and lower states, respectively; `la
 An example of a multiple QNs-filter::
 
     filter
-     upper 6 0  7 0  8 0  9 1 10 1 11 1 12 0 13 0 14 0
-     lower 6 0  7 1  8 1  9 0 10 0 11 0 12 0 13 0 14 0
+     upper 6 0  
+     upper 7 0  
+     upper 8 0
+     upper 9 1 
+     upper 10 1 
+     upper 11 1 
+     upper 12 0 
+     upper 13 0 
+     upper 14 0
+     lower 6 0  
+     upper 7 1  
+     upper 8 1  
+     upper 9 0 
+     upper 10 0 
+     upper 11 0 
+     upper 12 0 
+     upper 13 0 
+     upper 14 0
     end
 
 
