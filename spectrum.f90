@@ -19,6 +19,7 @@ module spectrum
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,ioffset = 10,iso=1,imolecule =-1
   real(rk)      :: temp=298.0,partfunc=-1.0,partfunc_ref=-1.0,freql=-small_,freqr= 200000.0,thresh=1.0d-70
   real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = 25.0, pressure = 1.0_rk,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
+  real(rk)      :: lineshift=0
   real(rk)      :: enermax = 1e7, abscoef_thresh = 1.0d-50, abundance = 1.0d0, gf_factor = 1.0d0
   real(rk)      :: S_crit = 1e-29      ! cm/molecule, HITRAN cut-off paramater
   real(rk)      :: nu_crit = 2000.0d0  ! cm-1, HITRAN cut-off paramater
@@ -46,7 +47,7 @@ module spectrum
   type speciesT ! broadener
     !
     real(rk)       :: N = 0.5_rk      ! Voigt parameter N
-    real(rk)       :: gamma = 0.0_rk ! Voigt parameter gamma
+    real(rk)       :: gamma = 0.0_rk  ! Voigt parameter gamma
     real(rk)       :: ratio = 1.0_rk  ! Ratio
     real(rk)       :: T0    = 296_rk  ! Reference T, K
     real(rk)       :: P0    = 1.0_rk  ! Reference P, bar
@@ -1130,6 +1131,7 @@ module spectrum
       do i=1,Nspecies
         !
         halfwidth =  halfwidth + species(i)%ratio*species(i)%gamma*(species(i)%T0/Temp)**species(i)%N*pressure/species(i)%P0
+        lineshift = lineshift + species(i)%ratio*species(i)%delta*pressure
         !
       enddo
       !
@@ -2078,7 +2080,7 @@ module spectrum
              stop 'Illegal specttype-key  for HITRAN'
            endif
            !
-           if(any(trim(proftype(1:5))==(/'STICK','PHOEN'/))) then
+           if(any(trim(proftype(1:5))==(/'PHOEN'/))) then
              print('(a,2x,a)'),'Illegal proftype HITRAN',trim(proftype)
              stop 'Illegal proftype for HITRAN'
            endif
@@ -2104,15 +2106,20 @@ module spectrum
              !
              if (tranfreq<freql.or.tranfreq>freqr) cycle
              !
+             abscoef = cmcoef*acoef*gf*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+             !
+             if (abscoef<thresh) cycle
+             !
              iswap_ = iswap_ + 1
              !
-             abscoef_ram(iswap_)=cmcoef*acoef*gf*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+             abscoef_ram(iswap_)=abscoef
              !
              nu_ram(iswap_) = tranfreq
              !
              ! estimate the line shape parameter
              !
-             if (lineprofile_do.and..not.species(1)%if_defined) then
+             if (lineprofile_do) then
+             !if (lineprofile_do.and..not.species(1)%if_defined) then
                !
                ! The current version of ExoCross does no know how to locate J-values in HITRAN-input.
                ! Therefore we can only use the static values of Voigt-parameters together with Nspecies
@@ -2124,8 +2131,9 @@ module spectrum
                species(2)%gamma = gamma_s
                !species(2)%n = n_
                !
-               gamma_ram(iswap_) = gamma_ * pressure * (hitran_Tref/temp)**n_
-
+               gamma_ram(iswap_) = gamma_ * pressure * (hitran_Tref/temp)**n_*species(1)%ratio
+               if (Nspecies>1) gamma_ram(iswap_) = gamma_ram(iswap_) + gamma_s * pressure * species(2)%ratio
+               !
                !Below: probably not correct, but gamma_idx_RAM definitely needs
                !to be initialized somehow
                gamma_idx_RAM(iswap_) = fast_voigt%get_size()
@@ -2297,6 +2305,8 @@ module spectrum
              !
              tranfreq = energyf-energyi
              !
+             tranfreq = tranfreq + lineshift
+             !
              tranfreq0 = tranfreq
              !
              if (microns) then
@@ -2450,70 +2460,51 @@ module spectrum
         !
         select case (trim(proftype(1:5)))
             !
-        case ('LIFET')
-            !
-            do iswap = 1,nswap
-              !
-              ilevelf = ilevelf_ram(iswap)
-              energyf = energies(ilevelf)
-              !
-              if (energyf>enermax) cycle
-              !
-              acoef = acoef_ram(iswap)
-              !
-              if (Asum(ilevelf)<0) Asum(ilevelf) = 0
-              !
-              Asum(ilevelf) = Asum(ilevelf) + acoef
-              !
-            enddo
-            !
         case ('STICK')
             !
-            call do_stick(sunit,nswap,nlines,maxitems,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,&
-                          nchars_quanta,quantum_numbers)
-            !
-             call TimerStop('Calc')
-            cycle loop_tran
-            !
-        case ('PHOEN')
-            !
-            if (Nspecies/=2) then 
-              write(out,"('Phoenix-Error: illegal Nspecies must be 2 not ',i4)") Nspecies
-              stop 'Phoenix-Error: illegal Nspecies '
+            if (hitran_do) then 
+               !
+               do iomp = 1,N_omp_procs
+                 !
+                 do iswap = iomp,nswap,N_omp_procs
+                   !
+                   abscoef = abscoef_ram(iswap)
+                   tranfreq = nu_ram(iswap)
+                   !
+                   ! write to .stick-file
+                   write(sunit,my_fmt) tranfreq,abscoef
+                   !
+                 enddo
+                 !
+               enddo
+               !
+            else
+               !
+               call do_stick(sunit,nswap,nlines,maxitems,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,&
+                            nchars_quanta,quantum_numbers)
+               !
             endif
-            !
-            call do_gf_oscillator_strength_Phoenix(i,ichunk,iso,nswap,nlines,energies,Jrot,ilevelf_ram,ileveli_ram,&
-                                                   acoef_ram,abscoef_ram,jmax,species(1)%gammaQN,&
-                                                   species(1)%nQN,species(2)%gammaQN,species(2)%nQN,output)
             !
             call TimerStop('Calc')
             cycle loop_tran
             !
-        case ('COOLI')
+        case ('VOIGT')
             !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp) schedule(dynamic)
             do iomp = 1,N_omp_procs
               !
               do iswap = iomp,nswap,N_omp_procs
                 !
-                ilevelf = ilevelf_ram(iswap)
-                energyf = energies(ilevelf)
                 abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                halfwidth = gamma_ram(iswap)
                 !
-                do itemp = 1,npoints
-                  !
-                  temp0 = real(itemp,rk)*dtemp
-                  !
-                  beta0 = c2/temp0
-                  !
-                  intens_omp(itemp,iomp) = intens_omp(itemp,iomp) + abscoef*exp(-(beta0-beta)*energyf)*partfunc/(pf(0,itemp))
-                  !
-                enddo
+                call do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth,dpwcoef,offset,freql,intens_omp(:,iomp))
                 !
               enddo
               !
             enddo
-            !$omp end parallel do
+            !$omp end parallel do            
             !
         case ('GAUS0')
             !
@@ -2551,7 +2542,6 @@ module spectrum
             enddo
             !$omp end parallel do
             !
-            !
         case ('DOPP0')
             !
             !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth0) shared(intens_omp) schedule(dynamic)
@@ -2588,7 +2578,6 @@ module spectrum
             enddo
             !$omp end parallel do
             !
-            !
         case ('LOREN')
             !
             !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp) schedule(dynamic)
@@ -2601,6 +2590,63 @@ module spectrum
                 halfwidth = gamma_ram(iswap)
                 !
                 call do_lorentz(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens_omp(:,iomp))
+                !
+              enddo
+              !
+            enddo
+            !$omp end parallel do
+            !
+        case ('LIFET')
+            !
+            do iswap = 1,nswap
+              !
+              ilevelf = ilevelf_ram(iswap)
+              energyf = energies(ilevelf)
+              !
+              if (energyf>enermax) cycle
+              !
+              acoef = acoef_ram(iswap)
+              !
+              if (Asum(ilevelf)<0) Asum(ilevelf) = 0
+              !
+              Asum(ilevelf) = Asum(ilevelf) + acoef
+              !
+            enddo
+            !
+        case ('PHOEN')
+            !
+            if (Nspecies/=2) then 
+              write(out,"('Phoenix-Error: illegal Nspecies must be 2 not ',i4)") Nspecies
+              stop 'Phoenix-Error: illegal Nspecies '
+            endif
+            !
+            call do_gf_oscillator_strength_Phoenix(i,ichunk,iso,nswap,nlines,energies,Jrot,ilevelf_ram,ileveli_ram,&
+                                                   acoef_ram,abscoef_ram,jmax,species(1)%gammaQN,&
+                                                   species(1)%nQN,species(2)%gammaQN,species(2)%nQN,output)
+            !
+            call TimerStop('Calc')
+            cycle loop_tran
+            !
+        case ('COOLI')
+            !
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                ilevelf = ilevelf_ram(iswap)
+                energyf = energies(ilevelf)
+                abscoef = abscoef_ram(iswap)
+                !
+                do itemp = 1,npoints
+                  !
+                  temp0 = real(itemp,rk)*dtemp
+                  !
+                  beta0 = c2/temp0
+                  !
+                  intens_omp(itemp,iomp) = intens_omp(itemp,iomp) + abscoef*exp(-(beta0-beta)*energyf)*partfunc/(pf(0,itemp))
+                  !
+                enddo
                 !
               enddo
               !
@@ -2663,24 +2709,6 @@ module spectrum
                 halfwidth = gamma_ram(iswap)
                 !
                 call do_Voigt_916(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,offset,freql,intens_omp(:,iomp))
-                !
-              enddo
-              !
-            enddo
-            !$omp end parallel do
-            !
-        case ('VOIGT')
-            !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp) schedule(dynamic)
-            do iomp = 1,N_omp_procs
-              !
-              do iswap = iomp,nswap,N_omp_procs
-                !
-                abscoef = abscoef_ram(iswap)
-                tranfreq = nu_ram(iswap)
-                halfwidth = gamma_ram(iswap)
-                !
-                call do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth,dpwcoef,offset,freql,intens_omp(:,iomp))
                 !
               enddo
               !
