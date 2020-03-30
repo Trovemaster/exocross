@@ -3836,14 +3836,14 @@ module spectrum
          !
          if ( mod(nint(2*Jf),2)==0 ) then
            !
-           write(sunit,'(i4,1x,a1,1x,a1)',advance="no") nint(Jf),trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
-           write(sunit,'(1x,i4,1x,a1,1x,a1)',advance="no") nint(Ji),trim(quantum_numbers(1,ileveli)),&
+           write(sunit,'(i4,a2,a2)',advance="no") nint(Jf),trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
+           write(sunit,'(1x,i4,a2,a2)',advance="no") nint(Ji),trim(quantum_numbers(1,ileveli)),&
                                                            trim(quantum_numbers(2,ileveli))
            !
          else
            !
-           write(sunit,'(f5.1,1x,a1,a1)',advance="no") Jf,trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
-           write(sunit,'(f5.1,1x,a1,a1)',advance="no") Ji,trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
+           write(sunit,'(f5.1,a1,a2)',advance="no") Jf,trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
+           write(sunit,'(f5.1,a1,a2)',advance="no") Ji,trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
            !
          endif
          !
