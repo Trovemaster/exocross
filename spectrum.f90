@@ -2075,11 +2075,6 @@ module spectrum
            !
            ! HITRAN format
            !
-           if (trim(specttype)/='ABSORPTION') then
-             print('(a,2x,a)'),'Illegal key for HITRAN',trim(specttype)
-             stop 'Illegal specttype-key  for HITRAN'
-           endif
-           !
            if(any(trim(proftype(1:5))==(/'PHOEN'/))) then
              print('(a,2x,a)'),'Illegal proftype HITRAN',trim(proftype)
              stop 'Illegal proftype for HITRAN'
@@ -2117,14 +2112,14 @@ module spectrum
                !
                !abscoef = cmcoef*acoef*gf*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
                !
-               abscoef_ram(iswap_)=abscoef*exp(-beta    *energyi)*(1.0_rk-exp(-beta    *tranfreq))*partfunc_ref/&
-                                          (exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))*partfunc   ) 
+               abscoef=abscoef*exp(-beta    *energyi)*(1.0_rk-exp(-beta    *tranfreq))*partfunc_ref/&
+                              (exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))*partfunc   ) 
                !
              case ('EMISSION')
                !
                ! emission coefficient [Ergs/mol/Sr]
                !
-               abscoef=emcoef*acoef*gtot(ilevelf)*exp(-beta*energyf)*tranfreq/(partfunc)
+               abscoef=emcoef*acoef*gf*exp(-beta*energyf)*tranfreq/(partfunc)
                !
              end select
              !

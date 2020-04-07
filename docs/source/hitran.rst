@@ -81,7 +81,25 @@ Here `write` indicates that the HITRAN-stick-like list will be printed.
 
 `error-Air   ierr 4` indicates that the error code for the Air-broadening is 4. 
 
- 
+
+The absorption spectrum using HITRAN can be computed using the HITRAN reference intensity:
+
+:math:`I(T)=\frac{I(T_{\rm ref}) \exp(-c_0 \tilde{E}''/T) \left(1-\exp(-c_0\tilde{\nu})\right) Q(T_{\rm ref})}{\exp(-c_0 \tilde{E}''/T_{\rm ref}) \left(1-\exp(-c_0\tilde{\nu})\right) Q(T)}`
+
+where :math:`T_{\rm ref}` and :math:`Q(T_{\rm ref})` are the reference temeprature (296 K) and the corresponding reference partition function. 
+This expression is always used if :math:`Q(T_{\rm ref})` is provided:
+The reference temperature is assumed 296 K (HITRAN standard). It can be changed via 
+::
+
+    
+    pf 100000. ref 30000.
+
+Otherwsie the standard absorption expression is amployed. The reference temperature is assumed 296 K (HITRAN standard). It can be changed via 
+::
+
+    
+    Temperature  1000 ref 173 
+
 
 
 The intensity cut-off (stick) can be done using the HITRAN method: 
