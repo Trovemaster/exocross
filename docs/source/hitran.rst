@@ -84,7 +84,7 @@ Here `write` indicates that the HITRAN-stick-like list will be printed.
 
 The absorption spectrum using HITRAN can be computed using the HITRAN reference intensity:
 
-:math:`I(T)=\frac{I(T_{\rm ref}) \exp(-c_0 \tilde{E}''/T) \left(1-\exp(-c_0\tilde{\nu})\right) Q(T_{\rm ref})}{\exp(-c_0 \tilde{E}''/T_{\rm ref}) \left(1-\exp(-c_0\tilde{\nu})\right) Q(T)}`
+:math:`I(T)=I(T_{\rm ref}) \frac{ \exp(-c_0 \tilde{E}''/T) \left(1-\exp(-c_0\tilde{\nu}/T)\right) Q(T_{\rm ref})}{\exp(-c_0 \tilde{E}''/T_{\rm ref}) \left(1-\exp(-c_0\tilde{\nu}/T_{\rm ref})\right) Q(T)}`
 
 where :math:`T_{\rm ref}` and :math:`Q(T_{\rm ref})` are the reference temeprature (296 K) and the corresponding reference partition function. 
 This expression is always used if :math:`Q(T_{\rm ref})` is provided:

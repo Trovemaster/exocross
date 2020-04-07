@@ -34,7 +34,7 @@ module spectrum
   integer(ik)   :: intJvalue(nfiles_max)
   character(4) a_fmt
   character(9) b_fmt
-  real(rk) :: temp_vib = -1.0, temp_ref = -1.0
+  real(rk) :: temp_vib = -1.0, temp_ref = 296.0
   !
   !VoigtKampff parameters
   integer :: voigt_index=0
@@ -172,7 +172,7 @@ module spectrum
               call report ("Illegal Temperatue (must be positive>0)"//trim(w),.true.)
           endif 
           !
-          temp_ref = temp
+          !temp_ref = temp
           !
           if (Nitems>2) then 
              !
@@ -218,7 +218,7 @@ module spectrum
           !
           partfunc_do = .false.
           !
-          partfunc_ref = partfunc
+          !partfunc_ref = partfunc
           !
           if (Nitems>2) then 
              !
@@ -2110,10 +2110,16 @@ module spectrum
                !
              case ('ABSORPTION')
                !
-               !abscoef = cmcoef*acoef*gf*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
-               !
-               abscoef=abscoef*exp(-beta    *energyi)*(1.0_rk-exp(-beta    *tranfreq))*partfunc_ref/&
-                              (exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))*partfunc   ) 
+               ! the reference partition function is undefined, we use the standard expression 
+               if (nint(partfunc_ref)==-1) then
+                  !
+                  abscoef = cmcoef*acoef*gf*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+                  !
+                else
+                  !
+                  abscoef=abscoef*exp(-beta    *energyi)*(1.0_rk-exp(-beta    *tranfreq))*partfunc_ref/&
+                                 (exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))*partfunc   ) 
+               endif
                !
              case ('EMISSION')
                !
