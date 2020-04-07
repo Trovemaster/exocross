@@ -2106,7 +2106,28 @@ module spectrum
              !
              if (tranfreq<freql.or.tranfreq>freqr) cycle
              !
-             abscoef = cmcoef*acoef*gf*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+             select case (trim(specttype))
+               !
+             case default
+               !
+               print('(a,2x,a)'),'Illegal key:',trim(specttype)
+               stop 'Illegal specttype-key'
+               !
+             case ('ABSORPTION')
+               !
+               !abscoef = cmcoef*acoef*gf*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+               !
+               abscoef_ram(iswap_)=abscoef*exp(-beta    *energyi)*(1.0_rk-exp(-beta    *tranfreq))*partfunc_ref/&
+                                          (exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))*partfunc   ) 
+               !
+             case ('EMISSION')
+               !
+               ! emission coefficient [Ergs/mol/Sr]
+               !
+               abscoef=emcoef*acoef*gtot(ilevelf)*exp(-beta*energyf)*tranfreq/(partfunc)
+               !
+             end select
+             !
              !
              if (abscoef<thresh) cycle
              !
