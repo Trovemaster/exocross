@@ -1150,7 +1150,7 @@ module spectrum
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air,beta_ref
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff,ndensity
-   integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll
+   integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin
    real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2
    character(len=cl) :: ioname
    !
@@ -1261,7 +1261,8 @@ module spectrum
       write(ioname, '(a)') 'Energy file'
       call IOstart(trim(ioname),enunit)
       open(unit=enunit,file=trim(enrfilename),action='read',status='old')
-      i = 0
+      imin = huge(1)/2
+      i = -imin
       iline = 0
       maxitems = 5
       Nvib_states = 0
@@ -1282,7 +1283,7 @@ module spectrum
          !
          iline = iline + 1
          !
-         i = max(i,itemp)
+         i = max(i,itemp) ; imin = min(itemp,imin)
          !
          maxitems = max(nitems,maxitems)
          !
@@ -1320,9 +1321,9 @@ module spectrum
       !
       maxitems = maxitems-4
       !
-      if (verbose>=3) print*,"nlevels: (total)",nlevels," (selected)",nlines
+      if (verbose>=3) print*,"ID max:",nlevels,", min:",imin,"States selected:",nlines
       !
-      allocate(energies(nlines),Jrot(nlines),gtot(nlines),indices(nlevels),stat=info)
+      allocate(energies(nlines),Jrot(nlines),gtot(nlines),indices(imin:nlevels),stat=info)
       call ArrayStart('energies',info,size(energies),kind(energies))
       call ArrayStart('Jrot',info,size(Jrot),kind(Jrot))
       call ArrayStart('gtot',info,size(gtot),kind(gtot))

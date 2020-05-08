@@ -30,7 +30,7 @@ IMPLICIT NONE
 CHARACTER(LEN=800), SAVE :: char=""
 LOGICAL, SAVE :: skipbl=.false., clear=.true., echo=.false.,           &
     debug=.false., more
-INTEGER, SAVE :: item=0, nitems=0, loc(0:80)=0, end(80)=0,               &
+INTEGER, SAVE :: item=0, nitems=0, loc(0:80)=0, end(80)=0,             &
     line(0:10)=0, level=0, nerror=0, ir=5, last=0, unit(0:10)
 
 CHARACTER(LEN=26), PARAMETER ::                                        &
