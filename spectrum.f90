@@ -748,7 +748,7 @@ module spectrum
           !
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
             'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX',&
-            'LIFETIME','LIFETIMES','VOI-FAST','VOI-FNORM','VOI-916')
+            'LIFETIME','LIFETIMES','VOI-FAST','VOI-FNORM','VOI-916','T-LIFETIME')
           !
           if (pressure<small_.and.(w(1:3)=='VOI'.or.w(1:3)=='PSE')) then
              !
@@ -780,6 +780,11 @@ module spectrum
           if (trim(w)=="LIFETIME".or.trim(w)=="LIFETIMES") then 
             specttype = "LIFETIME"
             proftype = "LIFETIME"
+          endif
+          !
+          if (trim(w)=='T-LIFETIME') then 
+            specttype = 'T-LIFETIME'
+            proftype  = 'T-LIFETIME'
           endif
           !
           if (microns) then
@@ -1340,7 +1345,7 @@ module spectrum
         ivib2 = QN%vibcol(2)-4
       endif
       !
-      if (trim(proftype)=='LIFETIME') THEN
+      if (trim(proftype)=='LIFETIME'.or.trim(proftype)=='T-LIFETIME') THEN
         !
         ! allocate the matrix for the sum of the A-coeffs
         !
@@ -2401,7 +2406,7 @@ module spectrum
                abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
                acoef=gfcoef*acoef*gtot(ilevelf)/(vellgt*tranfreq)**2
                !
-             case ('LIFETIME')
+             case ('LIFETIME','T-LIFETIME')
                !
                ilevelf_ram(iswap) = ilevelf
                ileveli_ram(iswap) = ileveli
@@ -2633,6 +2638,30 @@ module spectrum
               if (Asum(ilevelf)<0) Asum(ilevelf) = 0
               !
               Asum(ilevelf) = Asum(ilevelf) + acoef
+              !
+            enddo
+            !
+        case ('T-LIF')
+            !
+            do iswap = 1,nswap
+              !
+              ilevelf = ilevelf_ram(iswap)
+              energyf = energies(ilevelf)
+              !
+              ileveli = ileveli_ram(iswap)
+              energyi = energies(ileveli)
+              !
+              if (energyf>enermax.or.energyi>energy) cycle
+              !
+              acoef = acoef_ram(iswap)
+              !
+              if (Asum(ilevelf)<0) Asum(ilevelf) = 0
+              !
+              Asum(ilevelf) = Asum(ilevelf) + acoef+acoef/(exp(c2/temp*tranfreq)-1.0_rk)
+              !
+              if (Asum(ileveli)<0) Asum(ileveli) = 0
+              !
+              Asum(ileveli) = Asum(ileveli) + acoef/(exp(c2/temp*tranfreq)-1.0_rk)*gtot(ileveli)/gtot(ilevelf)
               !
             enddo
             !
@@ -2906,7 +2935,7 @@ module spectrum
    !
    call IOstop(trim(ioname))
    !
-   if (trim(proftype)=='LIFETIME') THEN
+   if (trim(proftype)=='LIFETIME'.or.trim(proftype)=='T-LIFETIME') THEN
      !
      write(ioname, '(a)') 'Life times'
      call IOstart(trim(ioname),tunit)
