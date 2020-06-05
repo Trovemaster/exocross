@@ -1,0 +1,14 @@
+temperature 40 (K)
+
+
+t-lifetime 
+
+Output 12C-16O__Li2015_lf_40k
+
+
+States      12C-16O__Li2015.states
+
+Transitions 12C-16O__Li2015.trans
+
+
+
