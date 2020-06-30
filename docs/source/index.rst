@@ -13,6 +13,7 @@ Welcome to ExoCross's documentation!
    partfunc 
    cooling
    superlines
+   strong-weak
    profiles
    hitran
    spectra

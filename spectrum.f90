@@ -144,7 +144,7 @@ module spectrum
     write(a_fmt,'(I3)') nchar
     write(a_fmt,'("a",a3)') adjustl(a_fmt)
     !
-    write(my_fmt,'(a,a4,a,a4,a)')  '(1x,2es16.8,1x,f5.1,1x,f12.4," <- ",f5.1,1x,f12.4,5x)'
+    write(my_fmt,'(a,a4,a,a4,a)')  '(1x,f16.6,1x,es16.8,1x,f5.1,1x,f12.4," <- ",f5.1,1x,f12.4,5x)'
     !
     do
         call read_line(eof) ; if (eof) exit
@@ -720,21 +720,47 @@ module spectrum
             !
             call readu(w)
             !
-            if (trim(w)/="HITRAN") &
-                call report ("Expected: either HITRAN with the a cutoff Intensity or just one number = cutoff "//trim(w),.true.)
-            cutoff_model = "HITRAN"
-            call readf(thresh)
+            cutoff_model = trim(w)
             !
-            S_crit = thresh
-            !
-            write(out,"('HITRAN intensity cut-off model is used, see HITRAN 2012 paper')")
-            !
-            call readu(w)
-            !
-            if (trim(w)/="NU_CRIT".and.trim(w)/="NUCRIT") &
-               call report ("Expected: keyword = NU_CRIT with the switching frquency"//trim(w),.true.)
-            !
-            call readf(nu_crit)
+            select case(w)
+              !
+            case("HITRAN")
+              !
+              call readf(thresh)
+              !
+              S_crit = thresh
+              !
+              write(out,"('HITRAN intensity cut-off model is used, see HITRAN 2012 paper')")
+              !
+              call readu(w)
+              !
+              if (trim(w)/="NU_CRIT".and.trim(w)/="NUCRIT") &
+                 call report ("Expected: keyword = NU_CRIT with the switching frequency"//trim(w),.true.)
+              !
+              call readf(nu_crit)
+              !
+            case ("EXP","EXP-WEAK","EXP-STRONG")
+              !
+              cutoff_model = "EXP"
+              !
+              call readf(thresh)
+              !
+              S_crit = thresh
+              !
+              write(out,"('EXP intensity cut-off model I0*exp(-nu/nucrit)')")
+              !
+              call readu(w)
+              !
+              if (trim(w)/="ALPHA".and.trim(w)/="NUCRIT") &
+                 call report ("Expected: keyword = ALPHA with the switching frequency"//trim(w),.true.)
+              !
+              call readf(nu_crit)
+              !
+            case default
+              !
+              call report ("Unrecognized 2nd keyword in THRESHOLD "//trim(w),.true.)
+              !
+            end select
             !
           else
             !
@@ -748,7 +774,7 @@ module spectrum
           !
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
             'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX',&
-            'LIFETIME','LIFETIMES','VOI-FAST','VOI-FNORM','VOI-916','T-LIFETIME')
+            'LIFETIME','LIFETIMES','VOI-FAST','VOI-FNORM','VOI-916','T-LIFETIME','TRANS')
           !
           if (pressure<small_.and.(w(1:3)=='VOI'.or.w(1:3)=='PSE')) then
              !
@@ -813,6 +839,10 @@ module spectrum
                 call report ("Unrecognized 2nd keyword in Profile-type "//trim(w),.true.)
                 !
               end select
+          endif
+          !
+          if (trim(proftype)=='TRANS') then 
+              write(my_fmt,'(a)')  '(i12,1x,i12,1x,es10.4,1x,f12.6)'
           endif
           !
        case ("HWHM","HALFWIDTH")
@@ -1150,8 +1180,8 @@ module spectrum
    !
    !
    real(rk)    :: hitran_Tref = 296_rk
-   integer(ik) :: info,ipoint,ipoint_,nlevels,i,itemp,enunit,tunit,sunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf,iline
-   integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems
+   integer(ik) :: info,ipoint,ipoint_,nlevels,i,itemp,enunit,tunit,sunit,wunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf
+   integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems,iline
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air,beta_ref
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff,ndensity
@@ -1513,31 +1543,36 @@ module spectrum
            !
            j0 = j
            !
-          endif
-          !
-          if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL') then
-            !
-            do itemp = 1,npoints
-              !
-              if (energy>enermax) cycle
-              !
-              temp0 = real(itemp,rk)*dtemp
-              !
-              beta0 = c2/temp0
-              !
-              !beta0 = planck*vellgt/(boltz*temp0)
-              !
-              pf(0,itemp) = pf(0,itemp) + gtot(i)*exp(-beta0*energy)
-              pf(1,itemp) = pf(1,itemp) + gtot(i)*exp(-beta0*energy)*(beta0*energy)
-              pf(2,itemp) = pf(2,itemp) + gtot(i)*exp(-beta0*energy)*(beta0*energy)**2
-              !
-              pf(3,itemp) = ( pf(2,itemp)/pf(0,itemp)-(pf(1,itemp)/pf(0,itemp))**2 )
-              !
-            enddo
-            !
-          endif
-          !
+         endif
+         !
+         if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL') then
+           !
+           do itemp = 1,npoints
+             !
+             if (energy>enermax) cycle
+             !
+             temp0 = real(itemp,rk)*dtemp
+             !
+             beta0 = c2/temp0
+             !
+             !beta0 = planck*vellgt/(boltz*temp0)
+             !
+             pf(0,itemp) = pf(0,itemp) + gtot(i)*exp(-beta0*energy)
+             pf(1,itemp) = pf(1,itemp) + gtot(i)*exp(-beta0*energy)*(beta0*energy)
+             pf(2,itemp) = pf(2,itemp) + gtot(i)*exp(-beta0*energy)*(beta0*energy)**2
+             !
+           enddo
+           !
+         endif
+         !
       end do
+      !
+      if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL') then
+         !
+         pf(3,:) = ( pf(2,:)/pf(0,:)-(pf(1,:)/pf(0,:))**2 )*R_ + 2.5_rk*R_
+         !
+      endif
+      !
       close(enunit)
       !
       ! print out the computed part. function objects and finish
@@ -1919,6 +1954,19 @@ module spectrum
           !
        endif
        !
+   case ('TRANS')
+       !
+       if (verbose>=2) then
+          !
+          write(out,"(10x,a)") 'Re-print .trans file'
+          !
+          if (cutoff_model=="EXP") then
+             write(out,"(10x,/'Strong/weak lines ',a,' with the EXP cut-off model, Scrit = ',e18.5,' nu_crit = ',f16.4)") &
+             trim(proftype),S_crit,nu_crit
+          endif
+          !
+       endif
+       !
    end select
    !
    if (lineprofile_do) then
@@ -2016,6 +2064,18 @@ module spectrum
        print*,"Error opening .trans file (istat is not 0, ",iostat_,")  ",trim(intfilename(i))
        stop 'Error opening .trans file'
      endif
+     !
+     select case (proftype(1:5)) 
+     case('TRANS')
+       !
+       write(ioname, '(a)') 'Trans file strong'
+       call IOstart(trim(ioname),sunit)
+       open(unit=sunit,file=trim(intfilename(i))//trim(output)//".s",action='write',status='replace')
+       write(ioname, '(a)') 'Trans file weak'
+       call IOstart(trim(ioname),wunit)
+       open(unit=wunit,file=trim(intfilename(i))//trim(output)//".w",action='write',status='replace')
+       !
+     end select
      !
      ichunk = 0
      !
@@ -2423,17 +2483,31 @@ module spectrum
              !
              cutoff = thresh
              !
-             if (trim(cutoff_model)=="HITRAN") then
+             select case (trim(cutoff_model))
+                !
+             case ("EXP")
+                !
+                continue
+                !
+             case ("HITRAN") 
+                !
                 if (tranfreq<=nu_crit) then
                   cutoff = S_crit*tranfreq/nu_crit*tanh(0.5_rk*c2/temp*tranfreq)
                 else
                   cutoff = S_crit
                 endif
-             endif
-             !
-             if (abscoef<cutoff) then
-               cycle loop_swap
-             endif
+                !
+                if (abscoef<cutoff) then
+                  cycle loop_swap
+                endif
+                !
+             case default
+               !
+               if (abscoef<cutoff) then
+                 cycle loop_swap
+               endif
+               !
+             end select
              !
              ilevelf_ram(iswap) = ilevelf
              ileveli_ram(iswap) = ileveli
@@ -2664,6 +2738,34 @@ module spectrum
               Asum(ileveli) = Asum(ileveli) + acoef/(exp(c2/temp*tranfreq)-1.0_rk)*gtot(ileveli)/gtot(ilevelf)
               !
             enddo
+            !
+        case ('TRANS')
+            !
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                acoef = acoef_ram(iswap)
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                !
+                ilevelf = ilevelf_ram(iswap)
+                ileveli = ileveli_ram(iswap)
+                !
+                cutoff = S_crit*exp(-tranfreq/nu_crit)
+                !
+                if (abscoef>=cutoff) then
+                    write(sunit,my_fmt) ilevelf,ileveli,acoef,tranfreq
+                else
+                    write(wunit,my_fmt) ilevelf,ileveli,acoef,tranfreq
+                endif
+                !
+              enddo
+              !
+            enddo
+            !
+            call TimerStop('Calc')
+            cycle loop_tran
             !
         case ('PHOEN')
             !
@@ -2911,7 +3013,11 @@ module spectrum
         !
      enddo loop_tran
      !
-     close(tunit)
+     select case (proftype(1:5)) 
+     case('TRANS')
+       close(tunit)
+       close(wunit)
+     end select
      !
      if (nswap_<nswap) cycle loop_file
      !
@@ -3092,7 +3198,7 @@ module spectrum
       real(rk),intent(in) :: tranfreq
       real(rk)  :: cutoff
       !
-      ! HITAN cutoff model as an intensity threshold
+      ! HITRAN cutoff model as an intensity threshold
       if (trim(cutoff_model)=="HITRAN") then
          if (tranfreq<=nu_crit) then
            cutoff = S_crit*tranfreq/nu_crit*tanh(0.5_rk*c2/temp*tranfreq)

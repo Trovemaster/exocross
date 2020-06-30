@@ -1,7 +1,7 @@
 module accuracy
   implicit none
   private
-  public sik, ik, hik, rk, ark, out, inp, safe_max,safe_min,max_exp, pi, twopi, cl, wl, c2
+  public sik, ik, hik, rk, ark, out, inp, safe_max,safe_min,max_exp, pi, twopi, cl, wl, c2, R_
   public accuracyInitialize
   public planck,avogno,vellgt,boltz,bohr,todebye
   public epsil,small_,sqrt2,sqrt3,rad,fititermax,aston,hartree,ev,my_fmt
@@ -54,6 +54,7 @@ module accuracy
   real(drk), parameter :: aston      =  planck/(8._rk*PI**2*vellgt*uma*1e-16_rk)  !rotational factor in cm-1 amu Ang^2
   real(drk), parameter :: todebye    =  2.541765_rk               ! a.u. in debye
   real(drk), parameter :: c2         =  1.43877736d0              ! second radiative constant NIST http://physics.nist.gov/cgi-bin/cuu/Value?c22ndrc
+  real(drk), parameter :: R_         =  8.3144598d0               ! Molar gas constant R, J/mol/K
   
   contains
 

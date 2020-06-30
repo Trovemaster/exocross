@@ -91,6 +91,16 @@ Here is example for microns (wavelength), which however does nor work will all p
 ::
      
      cutoff HITRAN (S_crit) 1e-29  nu_crit 2000
+
+* `Cutoff exp`: is used together with `trans` for partitioning into strong and weak parts for a reference temperature 
+scheme (see HITRAN 2012 paper). `nu_crit` is to give the corresponding parameter in the HITRAN cut-off scheme using 
+:math:`I_{\rm cut} = I0 \exp(-\nu/\alpha)`. 
+
+Example
+::
+    
+    cutoff  Exp 1e-25  alpha  2000   
+
      
 
 * Npoints: Number of grid points (usually an odd number) 
@@ -192,7 +202,7 @@ In combination with the keyword `histogram-J` the transition filename can be fol
     enermax  20000.0
 
 
-* Gaussian, Gauss, Gauss0, Doppler, Doppl, Doppl0, Box, Bin, Rect,  Sticks, Stick, Voigt, pseudo, pse-Rocco, pse-Liu, Voig-Quad: The type of the line profile. 
+* Gaussian, Gauss, Gauss0, Doppler, Doppl, Doppl0, Box, Bin, Rect,  Sticks, Stick, Voigt, pseudo, pse-Rocco, pse-Liu, Voig-Quad, trans: The type of the line profile. 
 
 
 ::
@@ -204,7 +214,8 @@ In combination with the keyword `histogram-J` the transition filename can be fol
     stick
 
     bin
-    
+
+    trans    
 
 * Sampling: used together with the line profile to indicate that a sampling (not averaging) version will be used. For example   
 
@@ -330,6 +341,10 @@ Example 2:
 * `Phoenix` is the keyword for converting ExoMol line list to the Phoenix format. The `species` are expected to specify the Voigt parameters of the broadeners. `Phoenix` should appear anywhere in the main body of the input in the way as a line profile keyword. 
 
 * `HITRAN` is to use the HITRAN-format of the transition file or output.  Reading from hitran (.par) requires also the definition of the partition function `pf` and the isotopologue number `iso`. No .states is needed. To read from HITRAN use `HITRAN READ` 
+
+* `TRANS` is used to partitioning the line list (.trans) files into weak and strong part defined for a reference temperature. Currently used in combination with 
+   `cutoff exp`. 
+
 
 * `SPECTRA` is to use the SPECTRA-format (IAO.ru, Tomsk) of the transition file.  This will also require the definition of the (i) reference temperature, (ii)  partition function for the target temperature, (iii)
 partition function for the reference temperature, and (iv) the molecule/isotope pair  (`iso`). 
