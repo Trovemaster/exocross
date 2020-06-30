@@ -92,14 +92,13 @@ Here is example for microns (wavelength), which however does nor work will all p
      
      cutoff HITRAN (S_crit) 1e-29  nu_crit 2000
 
-* `Cutoff exp`: is used together with `trans` for partitioning into strong and weak parts for a reference temperature 
-scheme (see HITRAN 2012 paper). `nu_crit` is to give the corresponding parameter in the HITRAN cut-off scheme using 
-:math:`I_{\rm cut} = I0 \exp(-\nu/\alpha)`. 
+* `Cutoff exp`: is used together with `trans` for partitioning into strong and weak parts for a reference temperature using the 
+  following dynamic threshhold: :math:`I_{\rm cut} = I_0 \exp(-\nu/\alpha)`. 
 
 Example
 ::
     
-    cutoff  Exp 1e-25  alpha  2000   
+    cutoff Exp 1e-25  alpha  2000   
 
      
 
