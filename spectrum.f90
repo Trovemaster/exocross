@@ -105,7 +105,7 @@ module spectrum
   real(rk),allocatable,save  :: gamma_comb(:,:) !Used for indexing the gamma for the fast_voigt
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
              stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false., spectra_do = .false., &
-             vibpopulation_do = .false.
+             vibpopulation_do = .false., super_energies_do = .false.
   logical :: lineprofile_do = .false., use_width_offset = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
@@ -469,6 +469,10 @@ module spectrum
         case ("SPECTRA")
           !
           spectra_do = .true.
+          !
+        case ("SUPER-ENERGIES")
+          !
+          super_energies_do = .true.
           !
         case ("HITRAN","OXFORD")
           !
@@ -1994,12 +1998,12 @@ module spectrum
      stop 'Undefined PF'
    endif
    !
-   if (spectra_do.and.(partfunc<0.0.or.partfunc_ref<0.0)) then
+   if ( (super_energies_do.or.spectra_do).and.(partfunc<0.0.or.partfunc_ref<0.0) ) then
      write(out,"('For SPECTRA pf and ref-pf must be defined using PF XXXX REF YYYY')")
      stop 'Undefined PF'
    endif
    !
-   if (spectra_do.and.(temp_ref<0.0)) then
+   if ( (super_energies_do.or.spectra_do).and.temp_ref<0.0 ) then
      write(out,"('For SPECTRA reference temperatures must be defined using temperature XXXX REF YYYY')")
      stop 'Undefined reference Temperature'
    endif
@@ -2253,13 +2257,12 @@ module spectrum
            !
            do while(iswap_<N_to_RAM)
              !
-             !read(tunit,*,end=119) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
-             read(tunit,*,end=120) &
-                  imol,isotope,tranfreq,abscoef,energyi,gamma_,n_
              !
-             energyf = tranfreq + energyi
+             read(tunit,*,end=120) imol,isotope,tranfreq,abscoef,energyi,gamma_,n_
              !
              if (imol/=imolecule.or.iso/=isotope) cycle
+             !
+             energyf = tranfreq + energyi
              !
              if (tranfreq<small_) cycle
              !
@@ -2281,11 +2284,12 @@ module spectrum
                !
                Jf = 0.0_rk
                Ji = 0.0_rk
+               !
                species(1)%gamma = gamma_
                species(1)%n = n_
                !
-               gamma_ram(iswap_) = gamma_ * pressure * (temp_ref/temp)**n_
-
+               gamma_ram(iswap_) = species(1)%gamma * pressure * (temp_ref/temp)**species(1)%n 
+               !
                !Below: probably not correct, but gamma_idx_RAM definitely needs
                !to be initialized somehow
                gamma_idx_RAM(iswap_) = fast_voigt%get_size()
@@ -2295,6 +2299,69 @@ module spectrum
              cycle
              !
            120 continue
+             nswap = iswap_-1
+             eof = .true.
+             exit
+           enddo
+           !
+           nswap = iswap_
+           !
+           intband = intband + sum(abscoef_RAM(1:nswap))
+           !
+           if (nswap<1) then
+              if (verbose>=5) write(out,"('... Finish swap')")
+              exit loop_tran
+           endif
+           !
+        elseif (super_energies_do) then
+           !
+           ! SPECTRA format (ioa tomsk database)
+           !
+           iswap_ = 0
+           !
+           do while(iswap_<N_to_RAM)
+             !
+             read(tunit,*,end=125) imol,isotope,tranfreq,abscoef,energyi !,gamma_,n_
+             !
+             if (imol/=imolecule.or.iso/=isotope) cycle
+             !
+             energyf = tranfreq + energyi
+             !
+             if (tranfreq<small_) cycle
+             !
+             if (tranfreq<freql.or.tranfreq>freqr) cycle
+             !
+             iswap_ = iswap_ + 1
+             !
+             abscoef_ram(iswap_)=abscoef*exp(-beta    *energyi)*(1.0_rk-exp(-beta    *tranfreq))*partfunc_ref/&
+                                        (exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))*partfunc   ) 
+             !
+             nu_ram(iswap_) = tranfreq
+             !
+             ! estimate the line shape parameter
+             !
+             if (lineprofile_do) then
+               !
+               ! The current version of ExoCross does no know how to locate J-values in HITRAN-input.
+               ! Therefore we can only use the static values of Voigt-parameters together with Nspecies
+               !
+               Jf = 0.0_rk
+               Ji = 0.0_rk
+               !
+               !species(1)%gamma = gamma_
+               !species(1)%n = n_
+               !
+               gamma_ram(iswap_) = species(1)%gamma * pressure * (temp_ref/temp)**species(1)%n 
+
+               !Below: probably not correct, but gamma_idx_RAM definitely needs
+               !to be initialized somehow
+               gamma_idx_RAM(iswap_) = fast_voigt%get_size()
+               !
+             endif
+             !
+             cycle
+             !
+           125 continue
              nswap = iswap_-1
              eof = .true.
              exit
