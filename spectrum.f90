@@ -23,6 +23,7 @@ module spectrum
   real(rk)      :: enermax = 1e7, abscoef_thresh = 1.0d-50, abundance = 1.0d0, gf_factor = 1.0d0
   real(rk)      :: S_crit = 1e-29      ! cm/molecule, HITRAN cut-off paramater
   real(rk)      :: nu_crit = 2000.0d0  ! cm-1, HITRAN cut-off paramater
+  real(rk)      :: ener_cut = 1e6      ! cm-1, lower energy cutoff used for partitioning into weak and strong lines
   real(rk)      :: resolving_power  = 1e6,resolving_f ! using resolving_power to set up grid
   character(len=cl) :: cutoff_model = "NONE"
   integer(ik)   :: nquad = 20      ! Number of quadrature points
@@ -755,10 +756,17 @@ module spectrum
               !
               call readu(w)
               !
-              if (trim(w)/="ALPHA".and.trim(w)/="NUCRIT") &
+              if (trim(w)/="ALPHA".and.(trim(w)/="NU_CRIT".and.trim(w)/="NUCRIT")) &
                  call report ("Expected: keyword = ALPHA with the switching frequency"//trim(w),.true.)
               !
               call readf(nu_crit)
+              !
+              if (Nitems>5) call readu(w)
+              !
+              if (trim(w)/="ENERCUT") &
+                 call report ("Expected: keyword = ENERCUT with the switching frequency"//trim(w),.true.)
+              !
+              call readf(ener_cut)
               !
             case default
               !
@@ -2821,10 +2829,13 @@ module spectrum
                 !
                 cutoff = S_crit*exp(-tranfreq/nu_crit)
                 !
-                if (abscoef>=cutoff) then
-                    write(sunit,my_fmt) ilevelf,ileveli,acoef,tranfreq
-                else
+                ileveli = ileveli_ram(iswap)
+                energyi = energies(ileveli)
+                !
+                if (abscoef<cutoff.and.energyi>ener_cut) then
                     write(wunit,my_fmt) ilevelf,ileveli,acoef,tranfreq
+                else
+                    write(sunit,my_fmt) ilevelf,ileveli,acoef,tranfreq
                 endif
                 !
               enddo
