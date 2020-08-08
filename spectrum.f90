@@ -746,7 +746,7 @@ module spectrum
               !
             case ("EXP","EXP-WEAK","EXP-STRONG")
               !
-              cutoff_model = "EXP"
+              cutoff_model = trim(w)
               !
               call readf(thresh)
               !
@@ -1930,7 +1930,7 @@ module spectrum
           !
        endif
        !
-   case ('RECT','BOX','MAX')
+   case ('RECT','BOX','MAX','BIN')
        !
        if (verbose>=2) then
           !
@@ -1953,12 +1953,18 @@ module spectrum
        endif
        if (verbose>=2) then
           !
-          if (cutoff_model=="HITRAN") then
+          select case(trim(cutoff_model))
+            !
+          case("HITRAN")
              write(out,"(10x,/'Stick pectra of type ',a,' with the HITRAN cut-off model, Scrit = ',e18.5,' nu_crit = ',f16.4)") &
              trim(proftype),S_crit,nu_crit
-          else
+          case("EXP","EXP-WEAK","EXP-STRONG")
+             write(out,"(10x,/'Strong/weak lines ',a,' with the EXP cut-off model, Scrit = ',e18.5,' nu_crit = ',f16.4)") &
+             trim(proftype),S_crit,nu_crit
+          case default
              write(out,"(10x,/'Stick spectra of type ',a,' stronger than ',e18.5)") trim(proftype),thresh
-          endif
+          end select 
+          !
           write(out,"(10x,'Range = ',f18.7,'-',f18.7)") freql,freqr
           write(out,"(10x,'Temperature = ',f18.7)") temp
           write(out,"(10x,'Partition function = ',f17.4)") partfunc
@@ -1980,6 +1986,17 @@ module spectrum
        endif
        !
    end select
+   !   
+   if (verbose>=2) then
+          !
+      select case(cutoff_model)
+        !
+      case("EXP","EXP-WEAK","EXP-STRONG")
+         write(out,"(10x,/'Strong/weak lines ',a,' with the EXP cut-off model, Scrit = ',e18.5,' nu_crit = ',f16.4)") &
+         trim(proftype),S_crit,nu_crit
+      end select 
+      !
+   endif
    !
    if (lineprofile_do) then
       write(out,"(10x,'Pressure = ',e18.7)") pressure
@@ -2560,9 +2577,21 @@ module spectrum
              !
              select case (trim(cutoff_model))
                 !
-             case ("EXP")
+             case ("EXP-WEAK")
                 !
-                continue
+                cutoff = S_crit*exp(-tranfreq/nu_crit)
+                !
+                if (trim(proftype(1:5))/='TRANS'.and.(abscoef>=cutoff.or.energyi<=ener_cut)) then
+                  cycle loop_swap
+                endif
+                !
+             case ("EXP-STRONG")
+                !
+                cutoff = S_crit*exp(-tranfreq/nu_crit)
+                !
+                if (trim(proftype(1:5))/='TRANS'.and.(abscoef<cutoff.and.energyi>ener_cut)) then
+                  cycle loop_swap
+                endif
                 !
              case ("HITRAN") 
                 !
