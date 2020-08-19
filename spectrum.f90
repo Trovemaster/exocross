@@ -106,7 +106,7 @@ module spectrum
   real(rk),allocatable,save  :: gamma_comb(:,:) !Used for indexing the gamma for the fast_voigt
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
              stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false., spectra_do = .false., &
-             vibpopulation_do = .false., super_energies_do = .false.
+             vibpopulation_do = .false., super_energies_do = .false., super_Einstein_do = .false.
   logical :: lineprofile_do = .false., use_width_offset = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
@@ -471,6 +471,10 @@ module spectrum
           !
           spectra_do = .true.
           !
+        case ("SUPER-EINSTEIN")
+          !
+          super_Einstein_do = .true.
+          !
         case ("SUPER-ENERGIES")
           !
           super_energies_do = .true.
@@ -752,7 +756,7 @@ module spectrum
               !
               S_crit = thresh
               !
-              write(out,"('EXP intensity cut-off model I0*exp(-nu/nucrit)')")
+              !write(out,"('EXP intensity cut-off model I0*exp(-nu/nucrit)')")
               !
               call readu(w)
               !
@@ -1196,7 +1200,7 @@ module spectrum
    integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems,iline
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air,beta_ref
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
-   real(rk)    :: acoef_,cutoff,ndensity
+   real(rk)    :: acoef_,cutoff,ndensity,abscoef_ref
    integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin
    real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2
    character(len=cl) :: ioname
@@ -1958,9 +1962,11 @@ module spectrum
           case("HITRAN")
              write(out,"(10x,/'Stick pectra of type ',a,' with the HITRAN cut-off model, Scrit = ',e18.5,' nu_crit = ',f16.4)") &
              trim(proftype),S_crit,nu_crit
+             write(out,"(10x,'EXP intensity cut-off model I0*exp(-nu/nucrit)')")
           case("EXP","EXP-WEAK","EXP-STRONG")
              write(out,"(10x,/'Strong/weak lines ',a,' with the EXP cut-off model, Scrit = ',e18.5,' nu_crit = ',f16.4)") &
              trim(proftype),S_crit,nu_crit
+             write(out,"(10x,'EXP intensity cut-off model I0*exp(-nu/nucrit)')")
           case default
              write(out,"(10x,/'Stick spectra of type ',a,' stronger than ',e18.5)") trim(proftype),thresh
           end select 
@@ -1981,6 +1987,7 @@ module spectrum
           if (cutoff_model=="EXP") then
              write(out,"(10x,/'Strong/weak lines ',a,' with the EXP cut-off model, Scrit = ',e18.5,' nu_crit = ',f16.4)") &
              trim(proftype),S_crit,nu_crit
+             write(out,"(10x,'EXP intensity cut-off model I0*exp(-nu/nucrit)')")
           endif
           !
        endif
@@ -2338,9 +2345,7 @@ module spectrum
               exit loop_tran
            endif
            !
-        elseif (super_energies_do) then
-           !
-           ! SPECTRA format (ioa tomsk database)
+        elseif (super_Einstein_do) then ! super_energies_do
            !
            iswap_ = 0
            !
@@ -2358,8 +2363,12 @@ module spectrum
              !
              iswap_ = iswap_ + 1
              !
-             abscoef_ram(iswap_)=abscoef*exp(-beta    *energyi)*(1.0_rk-exp(-beta    *tranfreq))*partfunc_ref/&
-                                        (exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))*partfunc   ) 
+             !abscoef_ram(iswap_)=abscoef*exp(-beta    *energyi)*(1.0_rk-exp(-beta    *tranfreq))*partfunc_ref/&
+             !                           (exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))*partfunc   ) 
+             !
+             ! gtot is set to 1
+             !
+             abscoef_ram(iswap_)=cmcoef*abscoef*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
              !
              nu_ram(iswap_) = tranfreq
              !
@@ -2436,7 +2445,7 @@ module spectrum
            abscoef_ram = 0
            !
            !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,ifilter,&
-           !$omp& ivib,ener_vib,ener_rot,jf,ji,tranfreq,tranfreq0,offset,abscoef,cutoff)&
+           !$omp& ivib,ener_vib,ener_rot,jf,ji,tranfreq,tranfreq0,offset,abscoef,cutoff,abscoef_ref)&
            !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,Asum,gamma_ram)
            loop_swap : do iswap = 1,nswap_
              !
@@ -2577,19 +2586,29 @@ module spectrum
              !
              select case (trim(cutoff_model))
                 !
+             case ("EXP")
+                !
+                continue
+                !
              case ("EXP-WEAK")
+                !
+                abscoef_ref =cmcoef*acoef*gtot(ilevelf)*exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))/&
+                             (tranfreq**2*partfunc_ref)
                 !
                 cutoff = S_crit*exp(-tranfreq/nu_crit)
                 !
-                if (trim(proftype(1:5))/='TRANS'.and.(abscoef>=cutoff.or.energyi<=ener_cut)) then
+                if ((abscoef>=cutoff.or.abscoef_ref>=cutoff).or.energyi<=ener_cut) then
                   cycle loop_swap
                 endif
                 !
              case ("EXP-STRONG")
                 !
+                abscoef_ref =cmcoef*acoef*gtot(ilevelf)*exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))/&
+                             (tranfreq**2*partfunc_ref)
+                !
                 cutoff = S_crit*exp(-tranfreq/nu_crit)
                 !
-                if (trim(proftype(1:5))/='TRANS'.and.(abscoef<cutoff.and.energyi>ener_cut)) then
+                if ((abscoef<cutoff.and.abscoef_ref<cutoff).and.energyi>ener_cut) then
                   cycle loop_swap
                 endif
                 !
@@ -2862,7 +2881,7 @@ module spectrum
                 energyi = energies(ileveli)
                 !
                 if (abscoef<cutoff.and.energyi>ener_cut) then
-                    write(wunit,my_fmt) ilevelf,ileveli,acoef,tranfreq
+                    write(wunit,my_fmt) ilevelf,ileveli,acoef !,tranfreq
                 else
                     write(sunit,my_fmt) ilevelf,ileveli,acoef,tranfreq
                 endif
