@@ -36,6 +36,7 @@ module spectrum
   character(4) a_fmt
   character(9) b_fmt
   real(rk) :: temp_vib = -1.0, temp_ref = 296.0
+  real(rk) :: unc_threshold = -1.0_rk ! uncertainty threshold 
   !
   !VoigtKampff parameters
   integer :: voigt_index=0
@@ -106,7 +107,8 @@ module spectrum
   real(rk),allocatable,save  :: gamma_comb(:,:) !Used for indexing the gamma for the fast_voigt
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
              stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false., spectra_do = .false., &
-             vibpopulation_do = .false., super_energies_do = .false., super_Einstein_do = .false.
+             vibpopulation_do = .false., super_energies_do = .false., super_Einstein_do = .false., &
+             uncertainty_filter = .false.
   logical :: lineprofile_do = .false., use_width_offset = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
@@ -788,6 +790,14 @@ module spectrum
           !
           call readf(enermax)
           !
+          ! energy threshold based on the uncertainty 
+          !
+       case('UNCERTAINTY_MAX','UNC_MAX','UNC')
+          !
+          uncertainty_filter = .true.
+          !
+          call readf(unc_threshold)
+          !
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
             'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX',&
             'LIFETIME','LIFETIMES','VOI-FAST','VOI-FNORM','VOI-916','T-LIFETIME','TRANS')
@@ -1202,7 +1212,7 @@ module spectrum
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff,ndensity,abscoef_ref
    integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin
-   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2
+   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc
    character(len=cl) :: ioname
    !
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
@@ -1485,6 +1495,12 @@ module spectrum
          call readi(gtot(i))
          call readf(jrot(i))
          !
+         !if (uncertainty_filter) then 
+         !  !
+         !  call readf(unc)
+         !  !
+         !endif
+         !
          if (mod(nint(jrot(i)*2),2)/=0) then
            write(b_fmt,"(f5.1)") jrot(i)             ; quantum_numbers(0,i) = adjustl(b_fmt)
          else
@@ -1578,6 +1594,13 @@ module spectrum
              pf(2,itemp) = pf(2,itemp) + gtot(i)*exp(-beta0*energy)*(beta0*energy)**2
              !
            enddo
+           !
+         endif
+         !
+         ! check uncertainies and exclude states if above 
+         !
+         if (uncertainty_filter) then 
+           !
            !
          endif
          !

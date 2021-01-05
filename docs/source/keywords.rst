@@ -34,6 +34,7 @@ In this case it is also important to provide the addresses of the vibrational co
     
 
 * QN: The designation of the quantum numbers  (QN) to columns can be done using the QN section. In this section `vib` is used for the range of the vibrational QNs; `K` is for the column with the rotational "K"; `Sym` is for symmetry; `Nsym` is number of the symmetries; `Nmodes` stands for the number of vibrational modes. The column numbering starts after the J column (4th). The vibrational addressing is required for when vibrational temperature is used.
+`density` can be used to give the non-LTE vibrational populations. 
 
 ::
       
@@ -41,6 +42,14 @@ In this case it is also important to provide the addresses of the vibrational co
         Vib 2 7 
         Nmodes 9 
         K  7
+      end
+
+
+::
+      
+      QN
+        Vib 2 7 
+        density 9 
       end
       
 

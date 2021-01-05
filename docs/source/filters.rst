@@ -66,6 +66,21 @@ Here the first number in each pair indicates the column number in the .states fi
 
 >Filters are case-sensitive.
 
+Using QN 
+--------
 
 
+A QN section has been added which explicitly tells ExoCross program which columns in the .states file it should read for QNs.  
+The keywords for the QN section include `density` and `vib`, followed by one and three numbers respectively.  
+The one number following the `density` keyword is the column which contains the density information, 
+usually the last column unless edited by hand.  The `vib` keyword is followed by two numbers denoting the first and last column number 
+for the last vibrational quantum number used.  For example, if the density column is the 18th column in the .states file 
+and the vibrational normal mode quantum numbers v1, v2, v3 are in columns 7, 8 and 9 then the QN section would appear as::
+
+
+
+    QN
+     density 18
+     vib 7 10 
+    end
 
