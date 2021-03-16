@@ -23,7 +23,6 @@ module spectrum
   real(rk)      :: enermax = 1e7, abscoef_thresh = 1.0d-50, abundance = 1.0d0, gf_factor = 1.0d0
   real(rk)      :: S_crit = 1e-29      ! cm/molecule, HITRAN cut-off paramater
   real(rk)      :: nu_crit = 2000.0d0  ! cm-1, HITRAN cut-off paramater
-  real(rk)      :: ener_cut = 1e6      ! cm-1, lower energy cutoff used for partitioning into weak and strong lines
   real(rk)      :: resolving_power  = 1e6,resolving_f ! using resolving_power to set up grid
   character(len=cl) :: cutoff_model = "NONE"
   integer(ik)   :: nquad = 20      ! Number of quadrature points
@@ -72,6 +71,16 @@ module spectrum
     !
   end type HitranErrorT
 
+  type CutoffT ! cutoff
+    !
+    real(rk)          :: threshold 
+    character(len=cl) :: filename="NONE"
+    integer(ik)       :: Npoints = 0
+    real(rk)          :: factor
+    real(rk)          :: enercut
+    real(rk),pointer  :: intensity(:) ! reference intensity
+    !
+  end type CutoffT
 
   type QNT ! broadener
     !
@@ -103,6 +112,8 @@ module spectrum
   type(HitranErrorT),target,save :: HITRAN_E(HITRAN_max_ierr),HITRAN_S(HITRAN_max_ierr)
   type(HitranErrorT),target,save :: HITRAN_Air,HITRAN_Self,HITRAN_N,HITRAN_Delta
   !
+  type(CutoffT),save :: cutoffs
+  !
   integer(ik),allocatable,save  :: gamma_idx(:,:) !Used for indexing the gamma for the fast_voigt
   real(rk),allocatable,save  :: gamma_comb(:,:) !Used for indexing the gamma for the fast_voigt
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
@@ -116,8 +127,8 @@ module spectrum
   logical :: accepted_work = .false.
   logical :: completed_work = .true.
   logical :: all_done = .false.
-  
-   type(VoigtKampffCollection),save :: fast_voigt
+  !
+  type(VoigtKampffCollection),save :: fast_voigt
   
   
   !
@@ -418,6 +429,7 @@ module spectrum
               call readi(QN%dens_col)
               !
               vibpopulation_do = .true.
+              vibtemperature_do  = .true.
               !
             case ("VIB","VIBRATIONAL")
               !
@@ -750,6 +762,42 @@ module spectrum
               !
               call readf(nu_crit)
               !
+            case("GRID")
+              !
+              do while (trim(w)/="".and.item<Nitems)
+                !
+                call readu(w)
+                !
+                select case(w)
+                  !
+                case("FILENAME","NAME","FILE")
+                  !
+                  call reada(cutoffs%filename)
+                  !
+                case ("NPOINTS")
+                  !
+                  call readi(cutoffs%npoints)
+                  !
+                case("THRESHOLD","THRESH")
+                  !
+                  call readf(cutoffs%threshold)
+                  !
+                case("FACTOR")
+                  !
+                  call readf(cutoffs%factor)
+                  !
+                case("ENERCUT")
+                  !
+                  call readf(cutoffs%enercut)
+                  !
+                case default
+                  !
+                  call report ("Unrecognized unit name in sub-file-theshold "//trim(w),.true.)
+                  !
+                end select
+                  !
+              enddo
+              !
             case ("EXP","EXP-WEAK","EXP-STRONG")
               !
               cutoff_model = trim(w)
@@ -772,7 +820,7 @@ module spectrum
               if (trim(w)/="ENERCUT") &
                  call report ("Expected: keyword = ENERCUT with the switching frequency"//trim(w),.true.)
               !
-              call readf(ener_cut)
+              call readf(cutoffs%enercut)
               !
             case default
               !
@@ -1207,13 +1255,13 @@ module spectrum
    !
    real(rk)    :: hitran_Tref = 296_rk
    integer(ik) :: info,ipoint,ipoint_,nlevels,i,itemp,enunit,tunit,sunit,wunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf
-   integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems,iline
+   integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems,iline,intunit,inu
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air,beta_ref
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff,ndensity,abscoef_ref
    integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin
    real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc
-   character(len=cl) :: ioname
+   character(len=cl) :: ioname,intname
    !
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
    integer(ik),allocatable :: gtot(:),indices(:)
@@ -1568,6 +1616,10 @@ module spectrum
            !
            if (.not.vibtemperature_do) then
               partfunc=partfunc+gtot(i)*exp(-beta*energy)
+           elseif(vibpopulation_do) then
+              ! apply vibrational population keeping the rotational part as Boltzmann
+              read(quantum_numbers(QN%dens_col-4,i),*) ndensity
+              partfunc=partfunc+gtot(i)*exp(-c2/temp*ener_rot)*ndensity
            else 
               ! split PF into a product of vib and rot parts 
               partfunc=partfunc+gtot(i)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)
@@ -2007,11 +2059,39 @@ module spectrum
           !
           write(out,"(10x,a)") 'Re-print .trans file'
           !
-          if (cutoff_model=="EXP") then
+          select case(trim(cutoff_model))
+             !
+          case ("EXP") 
              write(out,"(10x,/'Strong/weak lines ',a,' with the EXP cut-off model, Scrit = ',e18.5,' nu_crit = ',f16.4)") &
-             trim(proftype),S_crit,nu_crit
+             trim(cutoff_model),S_crit,nu_crit
              write(out,"(10x,'EXP intensity cut-off model I0*exp(-nu/nucrit)')")
-          endif
+          case("GRID")
+             !
+             write(out,"(10x,/'Strong/weak lines using precomputed grids from ',a)")  trim(cutoffs%filename)
+             write(out,"('... with the EXP cut-off model',a,'; enercut = ',e18.5)") trim(cutoff_model),cutoffs%enercut
+             write(out,"('... with factor = ',e18.5)") cutoffs%factor
+             !
+             if (cutoffs%npoints==0) then
+               write(out,"('npoints is undefined for cutoff gids')")
+               stop 'npoints is undefined for cutoff gids'
+             endif
+             !
+             allocate(cutoffs%intensity(cutoffs%npoints),stat=info)
+             call ArrayStart('cutoff%intensity',info,size(cutoffs%intensity),kind(cutoffs%intensity))
+             !
+             write(intname, '(a)') 'Reference intensity'
+             call IOstart(trim(intname),intunit)
+             open(unit=intunit,file=trim(cutoffs%filename),action='read',status='old',form='formatted')
+             !
+             read(intunit,*) cutoffs%intensity
+             !
+             close(intunit)
+             call IOstop(intname)
+             !
+          case default 
+            write(out,"(a,2x,a)") "illegal cutoff_model",trim(cutoff_model)
+            stop "illegal cutoff_model"
+          end select
           !
        endif
        !
@@ -2468,7 +2548,7 @@ module spectrum
            abscoef_ram = 0
            !
            !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,ifilter,&
-           !$omp& ivib,ener_vib,ener_rot,jf,ji,tranfreq,tranfreq0,offset,abscoef,cutoff,abscoef_ref)&
+           !$omp& ivib,ener_vib,ener_rot,jf,ji,tranfreq,tranfreq0,offset,abscoef,ndensity,cutoff,abscoef_ref)&
            !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,Asum,gamma_ram)
            loop_swap : do iswap = 1,nswap_
              !
@@ -2504,11 +2584,13 @@ module spectrum
                 if (trim(specttype)=='ABSORPTION') then 
                   ivib = ivib_state(ileveli)
                   ener_vib = energies_vib(ivib)
-                  ener_rot = energyi-ener_vib
+                  !
+                  ! let's assume that negative rotational energies can be made positive without breaking the physics
+                  ener_rot = abs(energyi-ener_vib)
                 else
                   ivib = ivib_state(ilevelf)
                   ener_vib = energies_vib(ivib)
-                  ener_rot = energyf-ener_vib
+                  ener_rot = abs(energyf-ener_vib)
                 endif
              endif
              !
@@ -2554,7 +2636,7 @@ module spectrum
                   ! apply vibrational population
                   read(quantum_numbers(QN%dens_col-4,ileveli),*) ndensity
                   abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*ndensity*&
-                          (1.0_rk-exp(-c2/ener_rot*tranfreq))/(tranfreq**2*partfunc)
+                          (1.0_rk-exp(-c2/temp*ener_rot*tranfreq))/(tranfreq**2*partfunc)
                   ! split into a product of vib and rot parts 
                else
                   abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)*&
@@ -2609,9 +2691,12 @@ module spectrum
              !
              select case (trim(cutoff_model))
                 !
-             case ("EXP")
+             case ("EXP","GRID")
                 !
-                continue
+                abscoef_ref =cmcoef*acoef*gtot(ilevelf)*exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))/&
+                             (tranfreq**2*partfunc_ref)
+                !
+                abscoef = max(abscoef,abscoef_ref)
                 !
              case ("EXP-WEAK")
                 !
@@ -2620,7 +2705,7 @@ module spectrum
                 !
                 cutoff = S_crit*exp(-tranfreq/nu_crit)
                 !
-                if ((abscoef>=cutoff.or.abscoef_ref>=cutoff).or.energyi<=ener_cut) then
+                if ((abscoef>=cutoff.or.abscoef_ref>=cutoff).or.energyi<=cutoffs%enercut) then
                   cycle loop_swap
                 endif
                 !
@@ -2631,7 +2716,7 @@ module spectrum
                 !
                 cutoff = S_crit*exp(-tranfreq/nu_crit)
                 !
-                if ((abscoef<cutoff.and.abscoef_ref<cutoff).and.energyi>ener_cut) then
+                if ((abscoef<cutoff.and.abscoef_ref<cutoff).and.energyi>cutoffs%enercut) then
                   cycle loop_swap
                 endif
                 !
@@ -2898,12 +2983,20 @@ module spectrum
                 ilevelf = ilevelf_ram(iswap)
                 ileveli = ileveli_ram(iswap)
                 !
-                cutoff = S_crit*exp(-tranfreq/nu_crit)
+                !
+                select case (trim(cutoff_model))
+                   !
+                case ("EXP","EXP-WEAK","EXP-STRONG")
+                  cutoff = S_crit*exp(-tranfreq/nu_crit)
+                case ("GRID")
+                  inu  = min(max(1,nint(tranfreq/ ( (freqr-freql)/cutoffs%npoints ) )),cutoffs%npoints)
+                  cutoff = cutoffs%intensity(inu)*cutoffs%factor
+                end select 
                 !
                 ileveli = ileveli_ram(iswap)
                 energyi = energies(ileveli)
                 !
-                if (abscoef<cutoff.and.energyi>ener_cut) then
+                if (abscoef<cutoff.and.energyi>cutoffs%enercut) then
                     write(wunit,my_fmt) ilevelf,ileveli,acoef !,tranfreq
                 else
                     write(sunit,my_fmt) ilevelf,ileveli,acoef,tranfreq
