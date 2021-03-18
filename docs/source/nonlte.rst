@@ -10,7 +10,7 @@ Treanor distribution
 
 The non-LTE spectra are modelled using the Treanor, non-Boltzmann distribution, which that the rotational and vibrational modes themselves are in LTE and the non-LTE population of a given state is taken as the product of the two Boltzmann distributions \citep{ExoCross,19PaLaxx}
 
-:math:`F_{J,v,k}(T_{\rm vib},T_{\rm rot}) = e^{-c_2 \tilde{E}_{v}^{\rm vib}/T_{\rm vib}} e^{-c_2 \tE_{J,k}^{v,\rm rot}/T_{\rm rot}},`
+:math:`F_{J,v,k}(T_{\rm vib},T_{\rm rot}) = e^{-c_2 \tilde{E}_{v}^{\rm vib}/T_{\rm vib}} e^{-c_2 \tilde{E}_{J,k}^{v,\rm rot}/T_{\rm rot}},`
 
 where  :math:`c_2= hc / k_B` is the second radiation constant (cm K), :math:`\tilde{E}_i = E_i/h c` is the energy term value, 
 and :math:`T` is the temperature in K.
