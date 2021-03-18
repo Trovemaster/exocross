@@ -12,16 +12,14 @@ The non-LTE spectra are modelled using the Treanor, non-Boltzmann distribution, 
 
 :math:`F_{J,v,k}(T_{\rm vib},T_{\rm rot}) = e^{-c_2 \tilde{E}_{v}^{\rm vib}/T_{\rm vib}} e^{-c_2 \tilde{E}_{J,k}^{v,\rm rot}/T_{\rm rot}},`
 
-where  :math:`c_2= hc / k_B` is the second radiation constant (cm K), :math:`\tilde{E}_i = E_i/h c` is the energy term value, 
-and :math:`T` is the temperature in K.
+where  :math:`c_2= hc / k_B` is the second radiation constant (cm K), :math:`\tilde{E}_i = E_i/h c` is the energy term value, and :math:`T` is the temperature in K.
 
 
 An absorption line intensity :math:`I_{\rm fi}` (cm/molecule) is then given by
 
 :math:`I({\rm f} \gets {\rm i}) = \frac{g_f^{\rm tot} A_{\rm fi}}{8 \pi c \tilde{\nu}_{\rm fi}^2}  \frac{F_{J,v,k}(T_{\rm vib},T_{\rm rot}) \left( 1-e^{-c_2\tilde{\nu}_{\rm fi}/T} \right)}{Q(T)},`
 
-where :math:`A_{\rm fi}` is the Einstein-A coefficient (:math:`s^{-1}`), :math:`\tilde{\nu}_{\rm fi}` is the transition wavenumber, 
-:math:`Q(T)` is the non-LTE partition function defined as a sum over states
+where :math:`A_{\rm fi}` is the Einstein-A coefficient (:math:`s^{-1}`), :math:`\tilde{\nu}_{\rm fi}` is the transition wavenumber, :math:`Q(T)` is the non-LTE partition function defined as a sum over states
 
 :math:` Q(T) =\sum_{n}  g_n^{\rm tot} F_{J,v,k}(T_{\rm vib},T_{\rm rot}),`
 
@@ -29,14 +27,10 @@ where :math:`A_{\rm fi}` is the Einstein-A coefficient (:math:`s^{-1}`), :math:`
 
 :math:`g_n^{\rm tot} = g^{\rm ns}_n (2 J_n+1),`
 
-:math:`J_n` is the corresponding total angular momentum, :math:`g^{\rm ns}_n` is the nuclear-spin statistical weight factor,
- :math:`c_2= hc / k_B` is the second radiation constant (cm K), :math:`\tilde{E}_i = E_i/h c` is the energy term value, and :math:`T`
- is the temperature in K.
+:math:`J_n` is the corresponding total angular momentum, :math:`g^{\rm ns}_n` is the nuclear-spin statistical weight factor,  :math:`c_2= hc / k_B` is the second radiation constant (cm K), :math:`\tilde{E}_i = E_i/h c` is the energy term value, and :math:`T`  is the temperature in K.
 
 
-For this approach ExoCross equires the vibrational and rotational temperatures as well as the rotational and vibational energies. 
-The separate vibrational and rotational temperatures for the molecule and approximating the total energy as the sum of the 
-respective rotational and vibrational (or vibronic) energies:
+For this approach ExoCross equires the vibrational and rotational temperatures as well as the rotational and vibational energies. The separate vibrational and rotational temperatures for the molecule and approximating the total energy as the sum of the respective rotational and vibrational (or vibronic) energies:
 
 :math:`\tilde{E}_{v,J,k} = \tilde{E}_{v}^{\rm vib} + \tilde{E}_{J,k}^{v,\rm rot},`
 

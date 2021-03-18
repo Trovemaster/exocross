@@ -434,11 +434,9 @@ Example
 
 
 
-* non-LTE: A name of the section for non-LTE calculations containing the infomation on the columns with the vibrational quantum numbers, 
-vibrational densites as well as the reference vaue of :math:`J`. 
+* non-LTE: A name of the section for non-LTE calculations containing the infomation on the columns with the vibrational quantum numbers, vibrational densites as well as the reference vaue of :math:`J`. 
 
-* Jref: a keyword specifying the reference :math:`J` value used to define reference vibrational energies taken as rovibrational (rovibronic) 
-term values from the States file at this value of :math:`J` as part of the non-LTE calculations. 
+* Jref: a keyword specifying the reference :math:`J` value used to define reference vibrational energies taken as rovibrational (rovibronic) term values from the States file at this value of :math:`J` as part of the non-LTE calculations. 
 
 * density: a keyword specifying the column that contains the custom vibrational densities used in the non-LTE calculations.
 
