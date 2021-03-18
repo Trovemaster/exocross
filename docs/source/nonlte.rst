@@ -42,7 +42,7 @@ respective rotational and vibrational (or vibronic) energies:
 
 where $v$ and $k$ are generic vibrational (vibronic) and rotational quantum numbers, respectively. The rotational contribution is  given by
 
-\tilde{E}_{J,k}^{v,\rm rot} = \tilde{E}_{v,J,k} - \tilde{E}_{v}^{\rm vib}.`
+:math:`\tilde{E}_{J,k}^{v,\rm rot} = \tilde{E}_{v,J,k} - \tilde{E}_{v}^{\rm vib}.`
 
 
 An example of a non-LTE ExoCross input for a rotational tempeature of 296 K and vibrational temperature of 2000 K in this case is given by
