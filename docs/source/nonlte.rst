@@ -87,7 +87,7 @@ given by
 
 The non-LTE partition function :math:`Q(T)` is defined as 
 
-:math:` Q(T) =\sum_{n}  g_n^{\rm tot} F_{J,v,k}(T_{\rm vib},T_{\rm rot}).`
+:math:`Q(T) =\sum_{n}  g_n^{\rm tot} F_{J,v,k}(T_{\rm vib},T_{\rm rot}).`
 
 
 Here is an example of a non-LTE ExoCross input for a rotational tempeature of 296 K and the normalised vibrational denisty 
