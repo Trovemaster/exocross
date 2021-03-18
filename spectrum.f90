@@ -90,7 +90,8 @@ module spectrum
     integer(ik) :: Nmodes= 1             ! Number of vib modes
     integer(ik) :: Nsym=1                ! Number of symmetries
     integer(ik) :: Rotcol(2)=(/5,6/)     ! Columns with Rot-QNs
-    integer(ik) :: dens_col              ! column with number density 
+    integer(ik) :: dens_col = 0          ! column with number density 
+    real(rk)    :: Jref = 0              ! Reference J used to define the vibronic contribution
     !
   end type QNT
   !
@@ -387,7 +388,12 @@ module spectrum
              !
           endif
           !
-        case ("QN","QUNTUM-NUMBERS")
+        case ("QN","QUNTUM-NUMBERS","NON-LTE")
+          !
+          if (trim(w)=="NON-LTE") then 
+              vibpopulation_do = .true.
+              vibtemperature_do  = .true.
+          endif
           !
           call read_line(eof) ; if (eof) exit
           call readu(w)
@@ -401,6 +407,10 @@ module spectrum
             case('NMODES')
               !
               call readi(QN%Nmodes)
+              !
+            case ("JREF")
+              !
+              call readf(QN%Jref)
               !
             case ("NSYM")
               !
@@ -1216,6 +1226,11 @@ module spectrum
       stop 'Input Error: For non-LTE (Tvib/=Trot) QN must be defined'
     endif
     !
+    if (vibtemperature_do.and.abs(QN%dens_col)<small_) then 
+      write(out,"('Input Error: For non-LTE (Tvib/=Trot) denisty column must be defined')")
+      stop 'Input Error: For non-LTE (Tvib/=Trot) denisty column must be defined'
+    endif
+    !
     !   half width for Doppler profiling
     if (any( proftype(1:3)==(/'VOI','PSE','LOR','PHO'/)).and.Nspecies>0) then
       !
@@ -1265,7 +1280,7 @@ module spectrum
    !
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
    integer(ik),allocatable :: gtot(:),indices(:)
-   character(len=20),allocatable :: quantum_numbers(:,:)
+   character(len=20),allocatable :: quantum_numbers(:,:),quantum_numbers_vib(:,:)
    !
    real(rk),allocatable :: acoef_RAM(:),abscoef_ram(:),nu_ram(:),intens_omp(:,:),gamma_ram(:)
    integer(ik),allocatable :: indexi_RAM(:),indexf_RAM(:)
@@ -1400,18 +1415,28 @@ module spectrum
             call readf(dtemp)
             call readf(ji)
             !
-            if (info>0.and.int(ji)==0) then
-              write(out,"('It is illegal to use not J-sorted states with vib-temperatures, E=',f14.6)") energy
-              stop 'States file must be ordered by J to use with Tvib'
+            ! check of Jref is appropriate, integer/half integer
+            !
+            if (iline==1) then
+              if (mod( nint(2.0_rk*(ji-QN%Jref)),2 )/=0) then 
+                write(out,"('For non-LTE calculations, Jref is either undefined or illegal, Jref=',f8.1)") QN%Jref
+                write(out,"('If undefined it is assumed zero which does not work for half-integers J')")
+                stop 'For non-LTE calculations, Jref is either undefined or illegal'
+              endif
             endif
             !
-            if (info>0) cycle
+            !if (info>0.and.int(ji)==0) then
+            !  write(out,"('It is illegal to use not J-sorted states with vib-temperatures, E=',f14.6)") energy
+            !  stop 'States file must be ordered by J to use with Tvib'
+            !endif
             !
-            if (int(ji)==0) then 
+            !if (info>0) cycle
+            !
+            if (nint(Ji-QN%Jref)==0) then 
               Nvib_states = Nvib_states + 1
-            else 
-              info = 1
-            endif
+            endif 
+            !  info = 1
+            !endif
             !
          endif
          !
@@ -1443,10 +1468,53 @@ module spectrum
         allocate(energies_vib(Nvib_states),ivib_state(nlines),stat=info)
         call ArrayStart('energies_vib',info,size(energies_vib),kind(energies_vib))
         call ArrayStart('ivib_state',info,size(ivib_state),kind(ivib_state))
+        !
+        allocate(quantum_numbers_vib(1:maxitems,Nvib_states),stat=info)
+        call ArrayStart('quantum_numbers_vib',info,size(quantum_numbers_vib),kind(quantum_numbers_vib))
+        !
         ivib_state = 1
         energies_vib = 0
         ivib1 = QN%vibcol(1)-4
         ivib2 = QN%vibcol(2)-4
+        !
+        ! read and define vibrational energies 
+        !
+        ivib = 0 
+        i = -imin
+        !
+        do
+           !
+           call read_line(eof,enunit) ; if (eof) exit
+           !
+           call readi(itemp)
+           call readf(energy)
+           !
+           iline = iline + 1
+           !
+           i = max(i,itemp) ; imin = min(itemp,imin)
+           !
+           call readf(dtemp)
+           call readf(ji)
+           !
+           ! check of Jref is appropriate, integer/half integer
+           !
+           if (nint(Ji-QN%Jref)==0) then
+             !
+             ivib = ivib + 1 
+             !           
+             energies_vib(ivib) = energy
+             ivib_state(i) = ivib
+             !
+             do kitem = 5,nitems
+                call reada(quantum_numbers_vib(kitem-4,ivib))
+             enddo
+             !
+           endif
+           !
+        end do
+        !
+        rewind(enunit)
+        !
       endif
       !
       if (trim(proftype)=='LIFETIME'.or.trim(proftype)=='T-LIFETIME') THEN
@@ -1526,7 +1594,6 @@ module spectrum
       endif
       j0 = 0
       i = 0
-      if (partfunc_do) partfunc = 0
       !
       ! start reading the energies
       !
@@ -1584,24 +1651,49 @@ module spectrum
          energy = energies(i)
          !
          if (vibtemperature_do) then
-           if (int(jrot(i))==0) then 
-              energies_vib(i) = energy
-              ivib_state(i) = i
-              ener_vib = energy
-              ener_rot = energy-ener_vib
-           else
-              loop_vib : do ivib  = 1,Nvib_states
-                if (all(quantum_numbers(ivib1:ivib2,i)==quantum_numbers(ivib1:ivib2,ivib))) then
-                  !
-                  ivib_state(i) = ivib
-                  ener_vib = energies_vib(ivib)
-                  ener_rot = energy-ener_vib
-                  exit loop_vib
-                  !
-                endif
-              enddo loop_vib
-           endif
+           !if (nint(jrot(i)-QN%Jref)==0) then
+           !   !energies_vib(i) = energy
+           !   ivib_state(i) = i
+           !   ener_vib = energy
+           !   ener_rot = 0
+           !else
+           loop_vib : do ivib  = 1,Nvib_states
+             if (all(quantum_numbers(ivib1:ivib2,i)==quantum_numbers_vib(ivib1:ivib2,ivib))) then
+               !
+               ivib_state(i) = ivib
+               ener_vib = energies_vib(ivib)
+               ener_rot = energy-ener_vib
+               !
+               if (ener_rot<small_) then
+                 !
+                 ! reassign vibrational energy to the lowest  
+                 !
+                 energies_vib(ivib) = energy
+                 !
+                 !write(out,"(a,a,f15.6,a,f15.6,a,f7.1)") 'Non-LTE Warning: negative rotational energies will be set to |Erot|',&
+                 !      ' E = ',energy,'Evib = ',ener_vib,'J = ',jrot(i)
+               endif
+               !
+               exit loop_vib
+               !
+             endif
+           enddo loop_vib
+           !endif
          endif
+         !
+         !
+      end do
+      !
+      !
+      ! Partitiion function 
+      !
+      if (partfunc_do) partfunc = 0
+      !
+      ! start reading the energies
+      !
+      do i = 1,nlines
+         !
+         energy = energies(i)
          !
          if (partfunc_do) then
            if (j/=j0) then
@@ -1616,14 +1708,21 @@ module spectrum
            !
            if (.not.vibtemperature_do) then
               partfunc=partfunc+gtot(i)*exp(-beta*energy)
-           elseif(vibpopulation_do) then
-              ! apply vibrational population keeping the rotational part as Boltzmann
-              read(quantum_numbers(QN%dens_col-4,i),*) ndensity
-              partfunc=partfunc+gtot(i)*exp(-c2/temp*ener_rot)*ndensity
-           else 
-              ! split PF into a product of vib and rot parts 
-              partfunc=partfunc+gtot(i)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)
-           endif 
+           else
+              ivib = ivib_state(i)
+              ener_vib = energies_vib(ivib)
+              ener_rot = energy-ener_vib
+              !           
+              if(vibpopulation_do) then
+                 ! apply vibrational population keeping the rotational part as Boltzmann
+                 read(quantum_numbers(QN%dens_col-4,i),*) ndensity
+                 partfunc=partfunc+gtot(i)*exp(-c2/temp*ener_rot)*ndensity
+              else 
+                 ! split PF into a product of vib and rot parts 
+                 partfunc=partfunc+gtot(i)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)
+              endif
+              ! 
+           endif
            !
            j0 = j
            !
@@ -1646,13 +1745,6 @@ module spectrum
              pf(2,itemp) = pf(2,itemp) + gtot(i)*exp(-beta0*energy)*(beta0*energy)**2
              !
            enddo
-           !
-         endif
-         !
-         ! check uncertainies and exclude states if above 
-         !
-         if (uncertainty_filter) then 
-           !
            !
          endif
          !
