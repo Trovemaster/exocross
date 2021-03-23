@@ -391,7 +391,7 @@ module spectrum
         case ("QN","QUNTUM-NUMBERS","NON-LTE")
           !
           if (trim(w)=="NON-LTE") then 
-              vibpopulation_do = .true.
+              !vibpopulation_do = .true.
               vibtemperature_do  = .true.
           endif
           !
@@ -1221,14 +1221,14 @@ module spectrum
       !stop 'Input Error: VOI-FAST cannot be used together with Species'
     endif
     !
-    if (vibtemperature_do.and..not.if_QN_defined) then 
-      write(out,"('Input Error: For non-LTE (Tvib/=Trot) QN must be defined')")
-      stop 'Input Error: For non-LTE (Tvib/=Trot) QN must be defined'
+    if (vibpopulation_do.and..not.if_QN_defined) then 
+      write(out,"('Input Error: For non-LTE (Tvib/=Trot) QN(=non-LTE) section must be defined')")
+      stop 'Input Error: For non-LTE (Tvib/=Trot) QN(non-LTE) must be defined'
     endif
     !
-    if (vibtemperature_do.and.abs(QN%dens_col)<small_) then 
-      write(out,"('Input Error: For non-LTE (Tvib/=Trot) denisty column must be defined')")
-      stop 'Input Error: For non-LTE (Tvib/=Trot) denisty column must be defined'
+    if (vibpopulation_do.and.QN%dens_col<4) then 
+      write(out,"('Input Error: For non-LTE denisty column must be >4')")
+      stop 'Input Error: For non-LTE (Tvib/=Trot) denisty is illegal'
     endif
     !
     !   half width for Doppler profiling
@@ -1684,6 +1684,18 @@ module spectrum
          !
       end do
       !
+      ! printout vibrational reference energies 
+      if (vibtemperature_do.and.verbose>=2) then
+         !
+         write(out,"('Vibrational energies prepared for non-LTE')")
+         !
+         do ivib  = 1,Nvib_states
+           ener_vib = energies_vib(ivib)
+           !
+           write(out,"(i4,f15.6)") ivib,ener_vib
+           !
+         enddo
+      endif
       !
       ! Partitiion function 
       !
