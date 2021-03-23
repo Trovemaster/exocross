@@ -2756,7 +2756,7 @@ module spectrum
 
                elseif(vibpopulation_do) then
                   ! apply vibrational population
-                  read(quantum_numbers(QN%dens_col-4,ileveli),*) ndensity
+                  read(quantum_numbers(QN%dens_col-4,ilevelf),*) ndensity
                   !
                   abscoef=emcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*ndensity*&
                           tranfreq/(partfunc)
