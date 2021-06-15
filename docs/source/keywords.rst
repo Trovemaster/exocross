@@ -346,6 +346,11 @@ Example 2:
      end
 
 
+* `unc` is the keyword for specifying the uncertainty threshold. it should appear in the filer section.
+
+
+* `filter` is the section name for specifying the filters 
+
 * `Phoenix` is the keyword for converting ExoMol line list to the Phoenix format. The `species` are expected to specify the Voigt parameters of the broadeners. `Phoenix` should appear anywhere in the main body of the input in the way as a line profile keyword. 
 
 * `HITRAN` is to use the HITRAN-format of the transition file or output.  Reading from hitran (.par) requires also the definition of the partition function `pf` and the isotopologue number `iso`. No .states is needed. To read from HITRAN use `HITRAN READ` 

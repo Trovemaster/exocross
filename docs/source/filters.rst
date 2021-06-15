@@ -66,6 +66,32 @@ Here the first number in each pair indicates the column number in the .states fi
 
 >Filters are case-sensitive.
 
+
+Uncertainty filter 
+------------------
+
+For the line lsits with uncertainties (column 5), the uncertainty filter (threshold) 
+can be used to select accurate transitions only. Both states (upper and lower) must satisfy the 
+uncertainty criteria. The uncertainly keywords are `Unc` or `uncertainty` with the uncertainty value as
+the parameter. This should be specified in the `filter` section. 
+
+
+Example:
+
+    filter
+     unc 0.001
+    end
+
+
+The default column with uncertainty is number 5, which can be changed in the QN section using the keyword `unc`:
+
+
+    QN
+     unc 6
+    end
+
+
+
 Using QN 
 --------
 
