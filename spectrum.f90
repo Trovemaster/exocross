@@ -82,7 +82,7 @@ module spectrum
     !
   end type CutoffT
 
-  type QNT ! broadener
+  type QNT ! Quantum numbers identified by columns
     !
     integer(ik) :: Kcol=1                ! Column with K 
     integer(ik) :: statecol=7            ! State column
@@ -91,6 +91,7 @@ module spectrum
     integer(ik) :: Nsym=1                ! Number of symmetries
     integer(ik) :: Rotcol(2)=(/5,6/)     ! Columns with Rot-QNs
     integer(ik) :: dens_col = 0          ! column with number density 
+    integer(ik) :: unc_col = 5           ! column with uncertainty (5 is default)
     real(rk)    :: Jref = 0              ! Reference J used to define the vibronic contribution
     !
   end type QNT
@@ -105,7 +106,7 @@ module spectrum
   end type gridT
   !
   type(selectT),save :: upper(filtermax),lower(filtermax)
-  type(QNT),save :: QN
+  type(QNT),save   :: QN
   type(gridT),save :: grid(Ngrids_max)
   !
   integer(ik)    :: Nspecies = 1, Nfilters = 0, Ngrids = 0
@@ -120,7 +121,7 @@ module spectrum
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
              stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false., spectra_do = .false., &
              vibpopulation_do = .false., super_energies_do = .false., super_Einstein_do = .false., &
-             uncertainty_filter = .false.
+             uncertainty_filter_do = .false.
   logical :: lineprofile_do = .false., use_width_offset = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
@@ -159,7 +160,7 @@ module spectrum
     write(a_fmt,'(I3)') nchar
     write(a_fmt,'("a",a3)') adjustl(a_fmt)
     !
-    write(my_fmt,'(a,a4,a,a4,a)')  '(1x,f16.6,1x,es16.8,1x,f5.1,1x,f12.4," <- ",f5.1,1x,f12.4,5x)'
+    write(my_fmt,'(a,a4,a,a4,a)')  '(1x,f16.6,1x,es16.8,1x,es11.4,1x,f5.1,1x,f12.4," <- ",f5.1,1x,f12.4,5x)'
     !
     do
         call read_line(eof) ; if (eof) exit
@@ -441,6 +442,10 @@ module spectrum
               vibpopulation_do = .true.
               vibtemperature_do  = .true.
               !
+            case ("UNC","UNCERTAINTY")
+              !
+              call readi(QN%unc_col)
+              !
             case ("VIB","VIBRATIONAL")
               !
               call readi(QN%Vibcol(1))
@@ -649,6 +654,15 @@ module spectrum
                 call readi(upper(ifilter)%i) ; upper(ifilter)%i = upper(ifilter)%i - 4
                 call reada(upper(ifilter)%mask)
                 !
+              case('UNC','UNCERTAINTY')
+                !
+                ! no need for the counter to change here
+                ifilter = ifilter - 1
+                !
+                uncertainty_filter_do = .true.
+                !
+                call readf(unc_threshold)
+                !
               case default
                 !
                 call report ("Unrecognized unit name "//trim(w),.true.)
@@ -847,14 +861,6 @@ module spectrum
        case ("ENERMAX")
           !
           call readf(enermax)
-          !
-          ! energy threshold based on the uncertainty 
-          !
-       case('UNCERTAINTY_MAX','UNC_MAX','UNC')
-          !
-          uncertainty_filter = .true.
-          !
-          call readf(unc_threshold)
           !
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
             'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX',&
@@ -1275,7 +1281,7 @@ module spectrum
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff,ndensity,abscoef_ref
    integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin
-   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc
+   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc_i,unc_f
    character(len=cl) :: ioname,intname
    !
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
@@ -1610,12 +1616,6 @@ module spectrum
          call readi(gtot(i))
          call readf(jrot(i))
          !
-         !if (uncertainty_filter) then 
-         !  !
-         !  call readf(unc)
-         !  !
-         !endif
-         !
          if (mod(nint(jrot(i)*2),2)/=0) then
            write(b_fmt,"(f5.1)") jrot(i)             ; quantum_numbers(0,i) = adjustl(b_fmt)
          else
@@ -1642,6 +1642,16 @@ module spectrum
              endif
              !
            enddo
+           !
+           ! check unc-field
+           !
+           ! filter based on the uncertainty 
+           if (uncertainty_filter_do) then
+              !
+              ! reconstruct the uncertainty from 
+              read(quantum_numbers(QN%unc_col-4,i),*,err=116) unc_i
+              !
+           endif
            !
          endif
          !
@@ -2681,6 +2691,17 @@ module spectrum
                  !
                enddo
                !
+               ! filter based on the uncertainty 
+               if (uncertainty_filter_do) then
+                  !
+                  ! reconstruct the uncertainty from 
+                  read(quantum_numbers(QN%unc_col-4,ilevelf),*) unc_f
+                  read(quantum_numbers(QN%unc_col-4,ileveli),*) unc_i
+                  !
+                  if (unc_f>unc_threshold.or.unc_i>unc_threshold) cycle loop_swap
+                  !
+               endif
+               !
              endif
              !
              if (vibtemperature_do) then
@@ -3533,6 +3554,13 @@ module spectrum
    if (allocated(Jrot)) call ArrayStop('Jrot')
    if (allocated(gtot)) call ArrayStop('gtot')
    if (specttype(1:4)=='PART') call ArrayStop('pf')
+   !
+   return
+   !
+   116 continue
+   !
+   write(out,"('Error read of unc: missing or wrongly specified UNC in QN')") 
+   stop 'Error read of unc: missing or wrongly specified UNC in QN'
    !
   end subroutine intensity
   !
@@ -4549,7 +4577,7 @@ module spectrum
           write(sunit,my_fmt) tranfreq,abscoef
           !
           write(out,my_fmt,advance="no") &
-          tranfreq,abscoef,jrot(ilevelf),energyf, jrot(ileveli),energyi
+          tranfreq,abscoef,acoef,jrot(ilevelf),energyf, jrot(ileveli),energyi
           !
           ! printing the line width
           !
