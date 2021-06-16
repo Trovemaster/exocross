@@ -1292,17 +1292,18 @@ module spectrum
    integer(ik),allocatable :: indexi_RAM(:),indexf_RAM(:)
    integer(ik),allocatable :: ileveli_RAM(:),ilevelf_RAM(:),gamma_idx_RAM(:)
    integer(ik) :: nswap_,nswap,iswap,iswap_,iomp,ichunk
-   real(rk),allocatable :: energies_vib(:)
+   real(rk),allocatable :: energies_vib(:),dens_vib(:)
    integer(ik),allocatable :: ivib_state(:)
    !
    integer(ik),allocatable :: nchars_quanta(:)  ! max number of characters used for each quantum number
    !
    character(len=9) :: npoints_fmt  !text variable containing formats for reads/writes
    character(len=9) :: b_fmt
+   character(len=9) :: a_fmt
    integer(hik):: Nintens(-60:60)
    !   
    logical :: eof
-   character(len=cl) :: w
+   character(len=cl) :: w,print_fmt
    !
    integer(ik) :: imol,iostat_,isotope
    real(rk)    :: gf,gi,mem_t,temp_gamma_n,offset_
@@ -1475,6 +1476,18 @@ module spectrum
         call ArrayStart('energies_vib',info,size(energies_vib),kind(energies_vib))
         call ArrayStart('ivib_state',info,size(ivib_state),kind(ivib_state))
         !
+        if (vibpopulation_do) then 
+          allocate(dens_vib(Nvib_states),stat=info)
+          call ArrayStart('dens_vib',info,size(dens_vib),kind(dens_vib))
+          !
+          if (QN%dens_col-4>maxitems) then 
+             write(out,"('Vib. density column error: the valu is larger than the number of columns in .states = ',2i4)") &
+                  QN%dens_col,maxitems+4
+             stop 'Vib. density column error: the valu is larger than the number of columns in .states'
+          endif
+          !
+        endif
+        !
         allocate(quantum_numbers_vib(1:maxitems,Nvib_states),stat=info)
         call ArrayStart('quantum_numbers_vib',info,size(quantum_numbers_vib),kind(quantum_numbers_vib))
         !
@@ -1487,6 +1500,7 @@ module spectrum
         !
         ivib = 0 
         i = -imin
+        iline = 0
         !
         do
            !
@@ -1514,6 +1528,13 @@ module spectrum
              do kitem = 5,nitems
                 call reada(quantum_numbers_vib(kitem-4,ivib))
              enddo
+             !
+             ! extract vibrational population
+             !           
+             if(vibpopulation_do) then
+                read(quantum_numbers_vib(QN%dens_col-4,ivib),*) ndensity
+                dens_vib(ivib) = ndensity
+             endif
              !
            endif
            !
@@ -1674,7 +1695,7 @@ module spectrum
                ener_vib = energies_vib(ivib)
                ener_rot = energy-ener_vib
                !
-               if (ener_rot<small_) then
+               if (ener_rot<-small_) then
                  !
                  ! reassign vibrational energy to the lowest  
                  !
@@ -1682,6 +1703,14 @@ module spectrum
                  !
                  !write(out,"(a,a,f15.6,a,f15.6,a,f7.1)") 'Non-LTE Warning: negative rotational energies will be set to |Erot|',&
                  !      ' E = ',energy,'Evib = ',ener_vib,'J = ',jrot(i)
+                 !
+                 ! extract and reassign vibrational population
+                 !           
+                 if(vibpopulation_do) then
+                    read(quantum_numbers(QN%dens_col-4,i),*) ndensity
+                    !dens_vib(ivib) = ndensity
+                 endif
+                 !
                endif
                !
                exit loop_vib
@@ -1695,14 +1724,24 @@ module spectrum
       end do
       !
       ! printout vibrational reference energies 
-      if (vibtemperature_do.and.verbose>=2) then
+      if (vibtemperature_do.and.verbose>=3) then
          !
          write(out,"('Vibrational energies prepared for non-LTE')")
+         !
+         if(vibpopulation_do) then
+            write(print_fmt,'(a,i3,a)') '(i4,f15.6,1x,',ivib2-ivib1+1,'a5,2x,e11.4)'
+         else
+            write(print_fmt,'(a,i3,a)') '(i4,f15.6,1x,',ivib2-ivib1+1,'a5)'
+         endif
          !
          do ivib  = 1,Nvib_states
            ener_vib = energies_vib(ivib)
            !
-           write(out,"(i4,f15.6)") ivib,ener_vib
+           if(vibpopulation_do) then
+              write(out,print_fmt) ivib,ener_vib,quantum_numbers_vib(ivib1:ivib2,ivib),dens_vib(ivib)
+           else
+              write(out,print_fmt) ivib,ener_vib,quantum_numbers_vib(ivib1:ivib2,ivib)
+           endif
            !
          enddo
       endif
@@ -1737,7 +1776,10 @@ module spectrum
               !           
               if(vibpopulation_do) then
                  ! apply vibrational population keeping the rotational part as Boltzmann
-                 read(quantum_numbers(QN%dens_col-4,i),*) ndensity
+                 !read(quantum_numbers(QN%dens_col-4,i),*) ndensity
+                 !
+                 ndensity = dens_vib(ivib)
+                 !
                  partfunc=partfunc+gtot(i)*exp(-c2/temp*ener_rot)*ndensity
               else 
                  ! split PF into a product of vib and rot parts 
@@ -2712,10 +2754,14 @@ module spectrum
                   !
                   ! let's assume that negative rotational energies can be made positive without breaking the physics
                   ener_rot = abs(energyi-ener_vib)
+                  !
                 else
                   ivib = ivib_state(ilevelf)
                   ener_vib = energies_vib(ivib)
                   ener_rot = abs(energyf-ener_vib)
+                  !
+                  ndensity = dens_vib(ivib)
+                  !
                 endif
              endif
              !
@@ -2759,9 +2805,11 @@ module spectrum
                   abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
                elseif(vibpopulation_do) then
                   ! apply vibrational population
-                  read(quantum_numbers(QN%dens_col-4,ileveli),*) ndensity
+                  !read(quantum_numbers(QN%dens_col-4,ileveli),*) ndensity
+                  !
                   abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*ndensity*&
                           (1.0_rk-exp(-c2/temp*ener_rot*tranfreq))/(tranfreq**2*partfunc)
+                  !
                   ! split into a product of vib and rot parts 
                else
                   abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)*&
@@ -2777,7 +2825,7 @@ module spectrum
 
                elseif(vibpopulation_do) then
                   ! apply vibrational population
-                  read(quantum_numbers(QN%dens_col-4,ilevelf),*) ndensity
+                  !read(quantum_numbers(QN%dens_col-4,ilevelf),*) ndensity
                   !
                   abscoef=emcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*ndensity*&
                           tranfreq/(partfunc)
