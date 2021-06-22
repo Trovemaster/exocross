@@ -2760,9 +2760,12 @@ module spectrum
                   ener_vib = energies_vib(ivib)
                   ener_rot = abs(energyf-ener_vib)
                   !
-                  ndensity = dens_vib(ivib)
-                  !
                 endif
+                !
+                if(vibpopulation_do) then
+                  ndensity = dens_vib(ivib)
+                endif
+                !
              endif
              !
              jf = jrot(ilevelf)
