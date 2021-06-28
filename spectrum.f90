@@ -1439,7 +1439,7 @@ module spectrum
             !
             !if (info>0) cycle
             !
-            if (nint(Ji-QN%Jref)==0) then 
+            if (nint(Ji-QN%Jref)<=0) then 
               Nvib_states = Nvib_states + 1
             endif 
             !  info = 1
@@ -1518,7 +1518,7 @@ module spectrum
            !
            ! check of Jref is appropriate, integer/half integer
            !
-           if (nint(Ji-QN%Jref)==0) then
+           if (nint(Ji-QN%Jref)<=0) then
              !
              ivib = ivib + 1 
              !           
@@ -2811,7 +2811,7 @@ module spectrum
                   !read(quantum_numbers(QN%dens_col-4,ileveli),*) ndensity
                   !
                   abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*ndensity*&
-                          (1.0_rk-exp(-c2/temp*ener_rot*tranfreq))/(tranfreq**2*partfunc)
+                          (1.0_rk-exp(-c2/temp*tranfreq))/(tranfreq**2*partfunc)
                   !
                   ! split into a product of vib and rot parts 
                else
