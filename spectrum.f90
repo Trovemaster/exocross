@@ -1273,6 +1273,9 @@ module spectrum
    !
    use  input
    !
+   use, intrinsic :: ieee_arithmetic, only: IEEE_Value, IEEE_QUIET_NAN
+   use, intrinsic :: iso_fortran_env, only: real32
+   !
    !
    real(rk)    :: hitran_Tref = 296_rk
    integer(ik) :: info,ipoint,ipoint_,nlevels,i,itemp,enunit,tunit,sunit,wunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf
@@ -1308,6 +1311,8 @@ module spectrum
    integer(ik) :: imol,iostat_,isotope
    real(rk)    :: gf,gi,mem_t,temp_gamma_n,offset_
    character(55) ch_q,ch_broad
+   character(len=cl)   :: my_fmt100K,my_fmt0
+   real(real32) :: nan   
    !
    ln2=log(2.0_rk)
    ln22 = ln2*2.0_rk
@@ -1546,12 +1551,14 @@ module spectrum
       !
       if (trim(proftype)=='LIFETIME'.or.trim(proftype)=='T-LIFETIME') THEN
         !
+        nan = IEEE_VALUE(nan, IEEE_QUIET_NAN)
+        !
         ! allocate the matrix for the sum of the A-coeffs
         !
         allocate(Asum(nlines),stat=info)
         call ArrayStart('Asum',info,size(Asum),kind(Asum))
         !
-        Asum = -1.0_rk
+        Asum = nan ! -1.0_rk
         !
       endif
       !
@@ -1729,9 +1736,9 @@ module spectrum
          write(out,"('Vibrational energies prepared for non-LTE')")
          !
          if(vibpopulation_do) then
-            write(print_fmt,'(a,i3,a)') '(i4,f15.6,1x,',ivib2-ivib1+1,'a5,2x,e11.4)'
+            write(print_fmt,'(a,i3,a)') '(i8,f15.6,1x,',ivib2-ivib1+1,'a5,2x,e11.4)'
          else
-            write(print_fmt,'(a,i3,a)') '(i4,f15.6,1x,',ivib2-ivib1+1,'a5)'
+            write(print_fmt,'(a,i3,a)') '(i8,f15.6,1x,',ivib2-ivib1+1,'a5)'
          endif
          !
          do ivib  = 1,Nvib_states
@@ -3116,7 +3123,7 @@ module spectrum
               !
               acoef = acoef_ram(iswap)
               !
-              if (Asum(ilevelf)<0) Asum(ilevelf) = 0
+              if (isnan(Asum(ilevelf))) Asum(ilevelf) = 0
               !
               Asum(ilevelf) = Asum(ilevelf) + acoef
               !
@@ -3136,7 +3143,7 @@ module spectrum
               !
               acoef = acoef_ram(iswap)
               !
-              if (Asum(ilevelf)<0) Asum(ilevelf) = 0
+              if (isnan(Asum(ilevelf))) Asum(ilevelf) = 0
               !
               Asum(ilevelf) = Asum(ilevelf) + acoef+acoef/(exp(c2/temp*tranfreq)-1.0_rk)
               !
@@ -3467,19 +3474,25 @@ module spectrum
      open(unit=tunit,file=trim(output)//".life",action='write',status='replace')
      !
      if ( mod(nint(2.0_rk*jrot(1)),2)==0 ) then 
-       write(my_fmt,'(a)')  '(1x,i11,1x,f12.6,1x,i6,1x,i7,1x,es12.4,3x)'
+       write(my_fmt,'(a)')      '(1x,i11,1x,f12.6,1x,i6,1x,i7,1x,es12.4,3x)'
+       write(my_fmt100K,'(a)')  '(1x,i11,1x,f12.5,1x,i6,1x,i7,1x,es12.4,3x)'
      else
-       write(my_fmt,'(a)')  '(1x,i11,1x,f12.6,1x,i6,1x,f7.1,1x,es12.4,3x)'
+       write(my_fmt,'(a)')      '(1x,i11,1x,f12.6,1x,i6,1x,f7.1,1x,es12.4,3x)'
+       write(my_fmt100K,'(a)')  '(1x,i11,1x,f12.5,1x,i6,1x,f7.1,1x,es12.4,3x)'
      endif
      !
      do ilevelf = 1,nlines
        !
        ! write to .life-file
        !
+       my_fmt0 = my_fmt
+       !
+       if (energies(ilevelf)>99999.99999_rk) my_fmt0 = my_fmt100K
+       !
        if ( mod(nint(2.0_rk*jrot(1)),2)==0 ) then 
-          write(tunit,my_fmt,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),nint(jrot(ilevelf)),1.0_rk/Asum(ilevelf)
+          write(tunit,my_fmt0,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),nint(jrot(ilevelf)),1.0_rk/Asum(ilevelf)
        else
-          write(tunit,my_fmt,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),jrot(ilevelf),1.0_rk/Asum(ilevelf)
+          write(tunit,my_fmt0,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),jrot(ilevelf),1.0_rk/Asum(ilevelf)
        endif
        !
        do kitem = 1,maxitems
