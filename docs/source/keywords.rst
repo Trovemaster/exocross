@@ -267,30 +267,32 @@ Currently this makes sense only in combination with Gaussian and Doppler.
 * `mem`: maximal memory allocated for the job. It is used to estimate how many transitions can be put into RAM. Should be less than or equal too the memory of the system. 
 
 
-* `ioffset` is a in integer factor to compute the wavenumber offset in units of HWHM: 
+     
 
-::
-
-      offset = ioffset*hwhm
-        
-
-* `offset` is a factor to compute the wavenumber offset in cm-1
+* `offset` (alias `line-cutoff`) is to define line-width cut-off in wavenumbers (cm-1). The default value is 25 cm-1. 
 
 ::
 
     offset 25 (cm-1)
 
 
-`offset` can be defined in terms of HWHM
+* `line-cutoff` (alias `offset`) is to define line-width cut-off in wavenumbers (cm-1). The default value is 25 cm-1. 
 
 ::
 
-    offset HWHM
+    offset 25 (cm-1)
+
+
+
+`offset` or `line-cutoff` (line-wings cut-off)  can be defined in terms of HWHM:
+
+::
+
+    offset 50 HWHM
 
 
 `offset`s can allow using different values for different regions, see the multi-grid section 
 `grid`. 
-
 
 
 
@@ -418,7 +420,7 @@ Example
     end
      
     
-
+Here `offset` can be substituted by `LINE-CUTOFF`.
 
 
 + `error-E` and `error-S` are used to specify the ranges for the quantum numbers for different Energy and intensity error-codes, respectively.

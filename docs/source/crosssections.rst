@@ -171,6 +171,31 @@ Example:
     Transitions  ScH.trans
     
 
+Line-width cut-offs
+^^^^^^^^^^^^^^^^^^^
+
+
+A line width cut-off can be defined using `offset` or `line-cutoff`
+
+
+::
+
+    offset 25 (cm-1)
+
+
+::
+
+    line-cutoff 25 (cm-1)
+
+
+where the offset value is in wavenumbers (cm-1). The default value is 25 cm-1. Alternatively, 
+one can define the cut-off in terms of the HWHM as follows: 
+
+::
+
+    offset 50 HWHM
+
+
 
 multi-grid
 ^^^^^^^^^^
@@ -190,6 +215,6 @@ A multi-grid with regions of different resolutions can be defined using the foll
 The maximal number of sub-grids is 100. Currently this option only works with 
 simple sampling-type profiles, such as `Voigt`, `Doppler Sampling`,  `Gaussian Sampling` or `Bin`. 
 The latter is commonly used to generate super-lines.  
-`offset` is an optional keyword to allow region-dependent cutoffs for line profiles. If undefined, the value of the 
-global keyword `offset` or the corresponding default value (25 cm-1) is used.
+`offset` or `line-cutoff` is an optional keyword to allow region-dependent cutoffs for line profiles. If undefined, the value of the 
+global keyword `offset`  the corresponding default value (25 cm-1) is used.
 

@@ -946,7 +946,7 @@ module spectrum
           !
           call readi(ioffset)
           !
-       case ("OFFSET")
+       case ("OFFSET","LINE-CUTOFF")
           !
           call readf(offset) 
           if (nitems>2) then
