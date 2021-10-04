@@ -1076,7 +1076,7 @@ module spectrum
                 !
                 call readi(grid(igrid)%npoints)
                 !
-              case('OFFSET')
+              case('OFFSET',"LINE-CUTOFF")
                 !
                 call readf(grid(igrid)%offset)
                 !
