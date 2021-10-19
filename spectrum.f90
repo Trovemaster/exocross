@@ -3490,9 +3490,9 @@ module spectrum
        if (energies(ilevelf)>99999.99999_rk) my_fmt0 = my_fmt100K
        !
        if ( mod(nint(2.0_rk*jrot(1)),2)==0 ) then 
-          write(tunit,my_fmt0,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),nint(jrot(ilevelf)),1.0_rk/Asum(ilevelf)
+        write(tunit,my_fmt0,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),nint(jrot(ilevelf)),1.0_rk/Asum(ilevelf)
        else
-          write(tunit,my_fmt0,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),jrot(ilevelf),1.0_rk/Asum(ilevelf)
+        write(tunit,my_fmt0,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),jrot(ilevelf),1.0_rk/Asum(ilevelf)
        endif
        !
        do kitem = 1,maxitems
@@ -3612,12 +3612,86 @@ module spectrum
    !
    if (sunit/=0) close(sunit,status='keep')
    !
-   call ArrayStop('frequency')
-   call ArrayStop('intens')
-   if (allocated(energies)) call ArrayStop('energies')
-   if (allocated(Jrot)) call ArrayStop('Jrot')
-   if (allocated(gtot)) call ArrayStop('gtot')
-   if (specttype(1:4)=='PART') call ArrayStop('pf')
+   ! cleaning up memory allocations:
+   !
+   if (allocated(freq)) then 
+      deallocate(freq)
+      call ArrayStop('frequency')
+   endif 
+   !
+   if (allocated(intens)) then 
+      deallocate(intens)
+      call ArrayStop('intens')
+   endif 
+   !
+   if (allocated(energies)) then 
+     deallocate(energies)
+     call ArrayStop('energies')
+   endif
+   !
+   if (allocated(indices)) then 
+      call ArrayStop('indices')
+      deallocate(indices)
+   endif
+   !
+   if (allocated(Jrot)) then 
+      call ArrayStop('Jrot')
+      deallocate(Jrot)
+   endif
+   !
+   if (allocated(gtot)) then 
+      deallocate(gtot)
+      call ArrayStop('gtot')
+   endif 
+   !
+   if (allocated(pf)) then 
+        deallocate(pf)
+        call ArrayStop('pf')
+   endif
+   !
+   if (allocated(energies_vib)) then 
+        deallocate(energies_vib)
+        call ArrayStop('energies_vib')
+   endif
+   !
+   if (allocated(ivib_state)) then 
+        deallocate(ivib_state)
+        call ArrayStop('ivib_state')
+   endif
+   !
+   if (allocated(dens_vib)) then 
+        deallocate(dens_vib)
+        call ArrayStop('dens_vib')
+   endif
+   !
+   if (allocated(quantum_numbers_vib)) then 
+        deallocate(quantum_numbers_vib)
+        call ArrayStop('quantum_numbers_vib')
+   endif
+   !
+   if (allocated(Asum)) then 
+        deallocate(Asum)
+        call ArrayStop('Asum')
+   endif
+   !
+   if (allocated(quantum_numbers)) then 
+        deallocate(quantum_numbers)
+        call ArrayStop('quantum_numbers')
+   endif
+   !
+   if (allocated(nchars_quanta)) then 
+        deallocate(nchars_quanta)
+        call ArrayStop('nchars_quanta')
+   endif
+
+   if (allocated(weight)) then 
+        deallocate(weight)
+        deallocate(abciss)
+        deallocate(bnormq)
+        call ArrayStop('weight-abciss')
+   endif
+   !
+   if (verbose>=4) call MemoryReport
    !
    return
    !
