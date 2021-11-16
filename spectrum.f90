@@ -1288,7 +1288,7 @@ module spectrum
    character(len=cl) :: ioname,intname
    !
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
-   integer(ik),allocatable :: gtot(:),indices(:)
+   integer(ik),allocatable :: gtot(:),indices(:),level_IDs(:)
    character(len=20),allocatable :: quantum_numbers(:,:),quantum_numbers_vib(:,:)
    !
    real(rk),allocatable :: acoef_RAM(:),abscoef_ram(:),nu_ram(:),intens_omp(:,:),gamma_ram(:)
@@ -1474,6 +1474,9 @@ module spectrum
       call ArrayStart('Jrot',info,size(Jrot),kind(Jrot))
       call ArrayStart('gtot',info,size(gtot),kind(gtot))
       call ArrayStart('indices',info,size(indices),kind(indices))
+      !
+      allocate(level_IDs(nlines),stat=info)
+      call ArrayStart('level_IDs',info,size(level_IDs),kind(level_IDs))
       !
       if (vibtemperature_do) then
         write(out,"('Number of vibrational states = ',i6)") Nvib_states
@@ -1683,7 +1686,11 @@ module spectrum
            !
          endif
          !
+         ! from ID to a counting number 
          indices(itemp) = i
+         !
+         ! from the coounting number back to ID
+         level_IDs(i) = itemp
          !
          j = 2*int(jrot(i))+1
          energy = energies(i)
@@ -3490,9 +3497,9 @@ module spectrum
        if (energies(ilevelf)>99999.99999_rk) my_fmt0 = my_fmt100K
        !
        if ( mod(nint(2.0_rk*jrot(1)),2)==0 ) then 
-        write(tunit,my_fmt0,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),nint(jrot(ilevelf)),1.0_rk/Asum(ilevelf)
+        write(tunit,my_fmt0,advance="no") level_IDs(ilevelf),energies(ilevelf),gtot(ilevelf),nint(jrot(ilevelf)),1.0_rk/Asum(ilevelf)
        else
-        write(tunit,my_fmt0,advance="no") indices(ilevelf),energies(ilevelf),gtot(ilevelf),jrot(ilevelf),1.0_rk/Asum(ilevelf)
+        write(tunit,my_fmt0,advance="no") level_IDs(ilevelf),energies(ilevelf),gtot(ilevelf),jrot(ilevelf),1.0_rk/Asum(ilevelf)
        endif
        !
        do kitem = 1,maxitems
@@ -3632,6 +3639,11 @@ module spectrum
    if (allocated(indices)) then 
       call ArrayStop('indices')
       deallocate(indices)
+   endif
+   !
+   if (allocated(level_IDs)) then 
+      call ArrayStop('level_IDs')
+      deallocate(level_IDs)
    endif
    !
    if (allocated(Jrot)) then 
