@@ -360,6 +360,18 @@ Example 2:
 * `TRANS` is used to partitioning the line list (.trans) files into weak and strong part defined for a reference temperature. Currently used in combination with 
    `cutoff exp`. 
 
+* `WATT` or `WATT/STR/MOLECULE` can be used after the `emission` keyword to switch to the watt/str/molecule untis. E.g.
+   
+
+    emission watt
+    
+
+* `PHOTONS` or `PHOTONS/S` can be used after the `emission` keyword to switch to the photons/s untis. E.g.
+   
+
+    emission photons/s
+    
+
 
 * `SPECTRA` is to use the SPECTRA-format (IAO.ru, Tomsk) of the transition file.  This will also require the definition of the (i) reference temperature, (ii)  partition function for the target temperature, (iii)
 partition function for the reference temperature, and (iv) the molecule/isotope pair  (`iso`). 

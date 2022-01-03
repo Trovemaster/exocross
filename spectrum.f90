@@ -36,6 +36,7 @@ module spectrum
   character(9) b_fmt
   real(rk) :: temp_vib = -1.0, temp_ref = 296.0
   real(rk) :: unc_threshold = -1.0_rk ! uncertainty threshold 
+  character(len=cl) :: units="DEFAULT"
   !
   !VoigtKampff parameters
   integer :: voigt_index=0
@@ -305,6 +306,54 @@ module spectrum
         case ("ABSORPTION","EMISSION","GF")
           !
           specttype = trim(w)
+          !
+          select case (trim(specttype))
+            !
+          case ('ABSORPTION')
+            !
+            units = 'CM/MOLECULE'
+            !
+          case ('EMISSION')
+            !
+            units = 'ERG/MOLECULE'
+            !
+          end select 
+          
+          !
+          ! change default units to user-defined
+          !
+          if (nitems>2) then 
+            !
+            call readu(units)
+            !
+            select case (trim(units))
+              !
+            case ('WATT/STR/MOLECULE','WATT')
+              !
+              if (trim(specttype)/='EMISSION') then
+                write(out,"('Input error: illegal units ',a,' for ',a)") trim(units),trim(specttype)
+                stop 'Input error: illegal spectral units'
+              endif
+              !
+              units = 'WATT'
+              !
+            case ('PHOTONS/S','PHOTON/S')
+              !
+              if (trim(specttype)/='EMISSION') then
+                write(out,"('Input error: illegal units ',a,' for ',a)") trim(units),trim(specttype)
+                stop 'Input error: illegal spectral units'
+              endif
+              !
+              units = 'PHOTONS'
+              !
+            case default
+              !
+              write(out,"('Input error: unrecognized units ',a,' for ',a)") trim(units),trim(specttype)
+              stop 'Input error: unrecognized spectral units'
+              !
+            end select
+            !
+          endif
           !
        case ("MEM","MEMORY")
           !
@@ -1335,6 +1384,9 @@ module spectrum
    !
    dpwcoef=sqrt(2.0*ln2*boltz*avogno)/vellgt
    dpwcoef = dpwcoef*sqrt(temp/meanmass)
+   !
+   ! switch to Watt per molecule per str 
+   if (trim(units)=='WATT') emcoef = emcoef*1e-7
    !
    if (Ngrids>0) npoints = sum(grid(1:Ngrids)%npoints)+1
    !
@@ -3469,11 +3521,46 @@ module spectrum
          intens(ipoint) = max(intens_omp(ipoint,iomp),intens(ipoint))
        enddo
      enddo  
-   endif  
+   endif
+   !
+   ! convert units
+   !
+   select case (trim(units))
+     !
+   case ('PHOTONS')
+     !
+     if (microns) then 
+       write(out,"('Units conversion to photons/s is not implemented for microns')")
+       stop 'Units conversion to photons/s is not implemented for microns'
+     endif 
+     !
+     ! divide by h c nu 
+     !
+     do ipoint = 1,npoints
+       intens(ipoint) =intens(ipoint)/(freq(ipoint)*planck*vellgt)
+     enddo
+     !
+     write(out,"(/'The emission is in photons/s/str per cm-1')")
+     !
+   case ('WATT')
+     !
+     write(out,"(/'The emission is in watt/str/molecule per cm-1')")
+     !
+   case ('ERG/MOLECULE')
+     !
+     write(out,"(/'The emission is in er g /str/molecule per cm-1')")
+     !
+   case ('CM/MOLECULE')
+     !
+     write(out,"(/'The emission is in er cm / molecule per cm-1')")
+     !
+   end select     
    !
    call IOstop(trim(ioname))
    !
    if (trim(proftype)=='LIFETIME'.or.trim(proftype)=='T-LIFETIME') THEN
+     !
+     write(out,"(/'Life times are in seconds')")
      !
      write(ioname, '(a)') 'Life times'
      call IOstart(trim(ioname),tunit)
@@ -3525,6 +3612,8 @@ module spectrum
      close(tunit,status='keep')
      !
    elseif (trim(proftype)=='COOLING') then
+     !
+     write(out,"('The cooling is in the emission units')")
      !
      write(ioname, '(a)') 'Cooling'
      call IOstart(trim(ioname),tunit)
