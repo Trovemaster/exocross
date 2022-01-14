@@ -315,14 +315,14 @@ module spectrum
             !
           case ('EMISSION')
             !
-            units = 'ERG/MOLECULE'
+            units = 'ERG/MOLECULE/S'
             !
           end select 
           
           !
           ! change default units to user-defined
           !
-          if (nitems>2) then 
+          if (nitems>=2) then 
             !
             call readu(units)
             !
@@ -2550,7 +2550,7 @@ module spectrum
                !
              case ('EMISSION')
                !
-               ! emission coefficient [Ergs/mol/Sr]
+               ! emission coefficient [Ergs/molecule/Sr]
                !
                abscoef=emcoef*acoef*gf*exp(-beta*energyf)*tranfreq/(partfunc)
                !
@@ -3540,15 +3540,15 @@ module spectrum
        intens(ipoint) =intens(ipoint)/(freq(ipoint)*planck*vellgt)
      enddo
      !
-     write(out,"(/'The emission is in photons/s/str per cm-1')")
+     write(out,"(/'The emission is in photons/s/str per cm-1 per molecule')")
      !
    case ('WATT')
      !
      write(out,"(/'The emission is in watt/str/molecule per cm-1')")
      !
-   case ('ERG/MOLECULE')
+   case ('ERG/MOLECULE/S')
      !
-     write(out,"(/'The emission is in er g /str/molecule per cm-1')")
+     write(out,"(/'The emission is in erg/(s str molecule) per cm-1')")
      !
    case ('CM/MOLECULE')
      !
