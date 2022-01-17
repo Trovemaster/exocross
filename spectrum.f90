@@ -328,7 +328,7 @@ module spectrum
             !
             select case (trim(units))
               !
-            case ('WATT/STR/MOLECULE','WATT')
+            case ('WATT/STR/MOLECULE','WATT','WATTS')
               !
               if (trim(specttype)/='EMISSION') then
                 write(out,"('Input error: illegal units ',a,' for ',a)") trim(units),trim(specttype)
