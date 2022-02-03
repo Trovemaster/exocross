@@ -122,7 +122,7 @@ module spectrum
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
              stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false., spectra_do = .false., &
              vibpopulation_do = .false., super_energies_do = .false., super_Einstein_do = .false., &
-             uncertainty_filter_do = .false.
+             uncertainty_filter_do = .false.,stick_vald = .false.
   logical :: lineprofile_do = .false., use_width_offset = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
@@ -913,7 +913,7 @@ module spectrum
           !
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
             'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX',&
-            'LIFETIME','LIFETIMES','VOI-FAST','VOI-FNORM','VOI-916','T-LIFETIME','TRANS')
+            'LIFETIME','LIFETIMES','VOI-FAST','VOI-FNORM','VOI-916','T-LIFETIME','TRANS','VALD')
           !
           if (pressure<small_.and.(w(1:3)=='VOI'.or.w(1:3)=='PSE')) then
              !
@@ -1351,7 +1351,6 @@ module spectrum
    !
    character(len=9) :: npoints_fmt  !text variable containing formats for reads/writes
    character(len=9) :: b_fmt
-   character(len=9) :: a_fmt
    integer(hik):: Nintens(-60:60)
    !   
    logical :: eof
@@ -2317,6 +2316,22 @@ module spectrum
           !
        endif
        !
+   case ('VALD')
+       !
+       write(ioname, '(a)') 'Vald spectrum'
+       call IOstart(trim(ioname),sunit)
+       open(unit=sunit,file=trim(output)//".vald",action='write',status='replace')
+       !
+       if (verbose>=2) then
+          !
+          write(out,"(10x,/'Stick pectra of type ',a,' using the VALD format:')") 
+          write(out,"(a)") 'wavelength in Angstrom, lower state energy in eV, log10(gf), 0.0, the stat. weight 2Ju+1 (upper state J), zero' 
+
+          write(out,"(10x,'Range = ',f18.7,'-',f18.7)") freql,freqr
+          write(out,"(10x,'Spectrum type = ',a/)") trim(specttype)
+          !
+       endif
+       !
    end select
    !   
    if (verbose>=2) then
@@ -2345,6 +2360,17 @@ module spectrum
      !
      if (trim(specttype)/="GF") then 
        write(out,"('Change the spectral type to GF (oscillator strength) for Phoenix'/)")
+       specttype = "GF"
+     endif
+     !
+   endif
+   !
+   if ( trim(proftype)=='VALD' ) then
+     !
+     if (verbose>=4) write(out,"('    iel          wv   ener     gf gamma1     n1 gamma2     n2')") 
+     !
+     if (trim(specttype)/="GF") then 
+       write(out,"('Change the spectral type to GF (oscillator strength) for VALD'/)")
        specttype = "GF"
      endif
      !
@@ -3247,6 +3273,13 @@ module spectrum
               enddo
               !
             enddo
+            !
+            call TimerStop('Calc')
+            cycle loop_tran
+            !
+        case ('VALD')
+            !
+            call do_stick_vald(sunit,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram)
             !
             call TimerStop('Calc')
             cycle loop_tran
@@ -4872,6 +4905,54 @@ module spectrum
 
   end subroutine do_stick
 
+
+  subroutine do_stick_vald(sunit,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,&
+                      abscoef_ram,acoef_ram)
+     !
+     implicit none
+     !
+     integer(ik),intent(in) :: sunit,nswap,nlines,ilevelf_ram(nswap),ileveli_ram(nswap),gtot(nlines)
+     real(rk),intent(in) :: abscoef_ram(nswap),acoef_ram(nswap),jrot(nlines),energies(nlines)
+     real(rk)  :: Jf,Ji,abscoef,acoef,tranfreq,energyf,energyi
+     integer(ik) :: ilevelf,ileveli,iswap,gtot_f
+     character(len=cl) :: h_fmt
+     real(rk)    ::lambda,E_low_eV,loggf
+     !
+     integer(ik),parameter :: toeV = 8065.54429_ark 
+     !
+     write(h_fmt,"(a)") "(ef14.3,2x,f6.3,2x,f7.3,2x,f7.3,2x,i4,2x,f7.3)"
+     !
+     do iswap = 1,nswap
+       !
+       ilevelf = ilevelf_ram(iswap)
+       ileveli = ileveli_ram(iswap)
+       abscoef = abscoef_ram(iswap)
+       acoef   = acoef_ram(iswap)
+       energyf = energies(ilevelf)
+       energyi = energies(ileveli)
+       tranfreq = energyf - energyi
+       !
+       jf = jrot(ilevelf)
+       ji = jrot(ileveli)
+       !
+       ! wavelength in Ang
+       lambda = 100000000.0_rk/tranfreq
+       !
+       if (log10(lambda)>12) cycle 
+       !
+       E_low_eV = energyi/toeV
+       !
+       loggf=log10(acoef)
+       !
+       ! using astronomical convention of gtot
+       !
+       gtot_f = nint(2.0_rk*jf+1.0_rk)
+       !
+       write(sunit,'(1x,f17.3,2x,f6.3,2x,f7.3,2x,f7.3,2x,i4,2x,f7.3)') lambda,E_low_eV,loggf,0.0_rk,gtot_f,0.0_rk
+       !
+    enddo
+
+  end subroutine do_stick_vald
 
 
   subroutine voi_quad(npoints,ib,ie,freq,abscoef,intens,dfreq,tranfreq,alpha,gamma,nquad,abciss,weight)

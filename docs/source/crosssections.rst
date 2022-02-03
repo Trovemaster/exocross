@@ -218,3 +218,23 @@ The latter is commonly used to generate super-lines.
 `offset` or `line-cutoff` is an optional keyword to allow region-dependent cutoffs for line profiles. If undefined, the value of the 
 global keyword `offset`  the corresponding default value (25 cm-1) is used.
 
+
+
+gf line list
+^^^^^^^^^^^^
+
+A stick spectrum is produced with the gf-factors in place of the Einstein coefficients. Here is the example for the VALD format, where 
+the columns are the wavelength in Angstrom, the lower state energy in eV, log10(gf), 0.0, the statistical weight 2J'+1 (upper state J') and zero. 
+
+::
+
+    temperature 5000     
+    Range 100.  16000.0
+    
+    gf
+    vald
+    threshold 1e-29
+    
+    output ScH_gf
+    States       ScH.states
+    Transitions  ScH.trans
