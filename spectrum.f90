@@ -2367,8 +2367,6 @@ module spectrum
    !
    if ( trim(proftype)=='VALD' ) then
      !
-     if (verbose>=4) write(out,"('    iel          wv   ener     gf gamma1     n1 gamma2     n2')") 
-     !
      if (trim(specttype)/="GF") then 
        write(out,"('Change the spectral type to GF (oscillator strength) for VALD'/)")
        specttype = "GF"
