@@ -31,7 +31,7 @@ Example::
 
 The filter command has the following structure:
 
-    upper col Label 
+    upper col Label
     lower col Label 
 
 
