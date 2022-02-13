@@ -463,16 +463,19 @@ Here `offset` can be substituted by `LINE-CUTOFF`.
 
 
 * `Vald`: a single keyword trigering the conversion to the VALD format with log10(gf) factors using the astronomical convention for the statistical weight.
-   To convert to the Astrophysical convention of the degeneracy factors, use `g_factor`. For example, for water the convertion factor is 0.25. 
+   To convert to the Astrophysical convention of the degeneracy factors, use `gf_factor`. For example, for water the convertion factor is 0.25. 
    This will modify both gf and the g-factor. 
 
 
 ::     
     
-    g_factor 0.25
+    gf_factor 0.25
 
    
 
-* `GF`: computer gf-factors. See the note about the g_factor in `Vald` to convert to the astrophyical convention. 
+* `GF`: computer gf-factors. See the note about the gf_factor in `Vald` to convert to the astrophyical convention. 
+
+* `gf_factor`: a keyword to convert gf and g-factors to the Astrophysical convention of the degeneracy. For example for water it should 0.25 (see note for Vald).
+
 
 

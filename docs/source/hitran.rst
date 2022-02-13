@@ -1,7 +1,7 @@
 HITRAN
 ======
 
-ExoCross can be used with the standard HITRAN line list by adding the `HITRAN`keyword anywhere in the input file (outside any sections). This will also require the partition function (`pf`) and isotopologue number (`iso`) defined. 
+ExoCross can be used with the standard HITRAN line list by adding the `HITRAN` keyword anywhere in the input file (outside any sections). This will also require the partition function (`pf`) and isotopologue number (`iso`) defined. 
 
 HITRAN broadening parameters will be used unless the species-section is given, which specifies the broadening.  The .states file is not required and ignored if given. The HITRAN total statistical weights are used directly.
 
@@ -115,5 +115,41 @@ The intensity cut-off (stick) can be done using the HITRAN method:
     States       ScH.states
     Transitions  ScH.trans
      
+
+
+VALD
+====
+
+The Vald format has the following structure: 
+
+lambda   E_low_eV   loggf  0.0  gtot_f  0.0
+
+where lambda is the wavelength in nm, E_low_eV is the energy of the lower state in eV, loggf is  log10(gf), gf is the gf factor 
+in the Physics (ExoMol) convention, gtot_f is the total degeneracy in the ExoMol convention. To convert to the Astrophysics convention, 
+the keyword `gf_factor` canm be used. 
+
+Here is an example to generate a Vald-formatted line list for 13C__8states using `gf_factor 0.25` to convert to he Astrophysics convention. Here, the  
+nuclear statistical weights are 1 (A1,A2) and 3 (B1,B3), which gives the factor 1/(1+3) = 1/4. 
+
+
+::
+    
+    Temperature  8000
+    Range 1000 30000
+    
+    vald
+    gf
+    
+    gf_factor 0.25
+    threshold 1e-99
+    
+    output 13C2__8states_vald_T8000K_1e-99_10000-30000
+
+    States 13C2__8states.states
+    Transitions 13C2__8states.trans
+    
+
+
+
 
 
