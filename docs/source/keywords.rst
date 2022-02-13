@@ -357,6 +357,8 @@ Example 2:
 
 * `HITRAN` is to use the HITRAN-format of the transition file or output.  Reading from hitran (.par) requires also the definition of the partition function `pf` and the isotopologue number `iso`. No .states is needed. To read from HITRAN use `HITRAN READ` 
 
+* `OXFORD` is to convert to the Oxford-format. The input structure is the same as used for writing in the HITRAN format.
+
 * `TRANS` is used to partitioning the line list (.trans) files into weak and strong part defined for a reference temperature. Currently used in combination with 
    `cutoff exp`. 
 
@@ -460,8 +462,17 @@ Here `offset` can be substituted by `LINE-CUTOFF`.
 * `density`: a keyword specifying the column that contains the custom vibrational densities used in the non-LTE calculations.
 
 
-* `Vald`: a single keyword trigering the conversion to the VALD format with log10(gf) factors using the astronomical convention for the statistical weight. 
+* `Vald`: a single keyword trigering the conversion to the VALD format with log10(gf) factors using the astronomical convention for the statistical weight.
+   To convert to the Astrophysical convention of the degeneracy factors, use `g_factor`. For example, for water the convertion factor is 0.25. 
+   This will modify both gf and the g-factor. 
 
-* `GF`: computer gf-factors 
+
+::     
+    
+    g_factor 0.25
+
+   
+
+* `GF`: computer gf-factors. See the note about the g_factor in `Vald` to convert to the astrophyical convention. 
 
 

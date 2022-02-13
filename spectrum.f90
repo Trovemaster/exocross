@@ -2326,6 +2326,7 @@ module spectrum
           !
           write(out,"(10x,/'Stick pectra of type ',a,' using the VALD format:')") 
           write(out,"(a)") 'wavelength in Angstrom, lower state energy in eV, log10(gf), 0.0, the stat. weight 2Ju+1 (upper state J), zero' 
+          write(out,"(a,f11.4)") 'In order to convert to Astrophysical convention use  gf_factor keyword, gf_factor = ', gf_factor 
 
           write(out,"(10x,'Range = ',f18.7,'-',f18.7)") freql,freqr
           write(out,"(10x,'Spectrum type = ',a/)") trim(specttype)
@@ -4942,9 +4943,9 @@ module spectrum
        !
        loggf=log10(acoef)
        !
-       ! using astronomical convention of gtot
+       ! corrected to the astronomical convention using gf_factor
        !
-       gtot_f = nint(2.0_rk*jf+1.0_rk)
+       gtot_f = gf_factor*gtot(ilevelf)
        !
        write(sunit,'(1x,f17.3,2x,f6.3,2x,f7.3,2x,f7.3,2x,i4,2x,f7.3)') lambda,E_low_eV,loggf,0.0_rk,gtot_f,0.0_rk
        !
