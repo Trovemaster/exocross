@@ -1650,9 +1650,9 @@ module spectrum
           !
           if (ipartf<0.or.ipartf>3) stop "illegal partfunc component, can be only 0,1,2,3"
           !
-          if (verbose>=1) print("('0,1,2,3 stand for PF, 1st and 2d moments and Cp:')")
+          if (verbose>=1) print("('0,1,2,3 stand for PF, 1st and 2d moments and Cp')")
           !
-          if (verbose>=1) print('("!",5x,a4,( 1x,'//npoints_fmt//'( 5x,"T=",f8.2,5x) ) )'),'  J ',(i*dtemp,i=1,npoints)
+          !if (verbose>=1) print('("!",5x,a4,( 1x,'//npoints_fmt//'( 5x,"T=",f8.2,5x) ) )'),'  J ',(i*dtemp,i=1,npoints)
           !
         endif
         !
@@ -1825,7 +1825,7 @@ module spectrum
            if (j/=j0) then
               !
               if (proftype(1:4)=='PART') then
-                if (verbose>=1.and.npoints<1000) print('("!",f8.1,3(1x,'//npoints_fmt//'es20.8))'),jrot(i),pf(ipartf,1:npoints)
+                !if (verbose>=1.and.npoints<1000) print('("!",f8.1,3(1x,'//npoints_fmt//'es20.8))'),jrot(i),pf(ipartf,1:npoints)
               else
                 if (verbose>=4) print('("|",f8.1,1x,es16.8)'),jrot(i),partfunc
               endif
