@@ -531,7 +531,7 @@ module spectrum
              !
           endif
           !
-        case ("HISTOGRAM","SUPER-LINE","SUPER-LINES")
+        case ("HISTOGRAM","SUPER-LINE","SUPER-LINES","SUPERLINES")
           !
           histogram = .true.
           !
@@ -2310,8 +2310,8 @@ module spectrum
              call IOstop(intname)
              !
           case default 
-            write(out,"(a,2x,a)") "illegal cutoff_model",trim(cutoff_model)
-            stop "illegal cutoff_model"
+            write(out,"(a,2x,a)") "illegal cutoff_model needed for TRANS",trim(cutoff_model)
+            stop "illegal cutoff_model in TRANS"
           end select
           !
        endif
@@ -2808,7 +2808,10 @@ module spectrum
              ilevelf = indices(indexf)
              ileveli = indices(indexi)
              !
-             if (ilevelf==0.or.ileveli==0) cycle loop_swap
+             if (ilevelf==0.or.ileveli==0) then 
+                continue
+                cycle loop_swap
+             endif 
              !
              energyf = energies(ilevelf)
              energyi = energies(ileveli)
@@ -2873,9 +2876,7 @@ module spectrum
                tranfreq0 = 10000.0_rk/(tranfreq+small_)
              endif
              !
-             if (tranfreq0<freql.or.tranfreq0>freqr) cycle
-             !
-             if (energyf-energyi<-1e1) then
+             if (energyf-energyi<-30e1) then
                write(out,"('Error Ei>Ef+10: i,f,indi,indf,Aif,Ef,Ei = ',4i12,2x,3es16.8)") & 
                     ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
                stop 'wrong order of indices'
@@ -2883,6 +2884,8 @@ module spectrum
              elseif (energyf-energyi<small_) then
                cycle loop_swap
              endif
+             !
+             if (tranfreq0<freql.or.tranfreq0>freqr) cycle
              !
              select case (trim(specttype))
                !
@@ -3250,6 +3253,8 @@ module spectrum
                 ilevelf = ilevelf_ram(iswap)
                 ileveli = ileveli_ram(iswap)
                 !
+                indexf = indexf_ram(iswap)
+                indexi = indexi_ram(iswap)
                 !
                 select case (trim(cutoff_model))
                    !
@@ -3264,9 +3269,9 @@ module spectrum
                 energyi = energies(ileveli)
                 !
                 if (abscoef<cutoff.and.energyi>cutoffs%enercut) then
-                    write(wunit,my_fmt) ilevelf,ileveli,acoef !,tranfreq
+                    write(wunit,my_fmt) indexf,indexi,acoef !,tranfreq
                 else
-                    write(sunit,my_fmt) ilevelf,ileveli,acoef,tranfreq
+                    write(sunit,my_fmt) indexf,indexi,acoef,tranfreq
                 endif
                 !
               enddo
@@ -3584,7 +3589,7 @@ module spectrum
      !
    case ('CM/MOLECULE')
      !
-     write(out,"(/'The emission is in er cm / molecule per cm-1')")
+     write(out,"(/'The absorption is in cm / molecule')")
      !
    end select     
    !
