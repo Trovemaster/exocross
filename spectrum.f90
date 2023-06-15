@@ -122,7 +122,7 @@ module spectrum
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
              stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false., spectra_do = .false., &
              vibpopulation_do = .false., super_energies_do = .false., super_Einstein_do = .false., &
-             uncertainty_filter_do = .false.,stick_vald = .false.
+             uncertainty_filter_do = .false.,stick_vald = .false., error_cross_sections_do = .false.
   logical :: lineprofile_do = .false., use_width_offset = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
@@ -913,7 +913,8 @@ module spectrum
           !
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
             'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX',&
-            'LIFETIME','LIFETIMES','VOI-FAST','VOI-FNORM','VOI-916','T-LIFETIME','TRANS','VALD')
+            'LIFETIME','LIFETIMES','VOI-FAST','VOI-FNORM','VOI-916','T-LIFETIME','TRANS','VALD','ELORENTZ',&
+            'ELORENTZIAN')
           !
           if (pressure<small_.and.(w(1:3)=='VOI'.or.w(1:3)=='PSE')) then
              !
@@ -925,7 +926,7 @@ module spectrum
              !
           endif
           !
-          if (any( w(1:3)==(/'VOI','PSE','LOR','PHO'/))) lineprofile_do = .true.
+          if (any( w(1:3)==(/'VOI','PSE','LOR','PHO','ELO'/))) lineprofile_do = .true.
           !
           proftype = trim(w)
           !
@@ -990,6 +991,10 @@ module spectrum
           species(1)%gamma = halfwidth
           !
           if_halfwidth_defined = .true.
+          !
+       case ("ERROR")
+          !
+          error_cross_sections_do = .true.
           !
        case ("IOFFSET")
           !
@@ -1286,8 +1291,13 @@ module spectrum
       stop 'Input Error: For non-LTE (Tvib/=Trot) denisty is illegal'
     endif
     !
+    if (error_cross_sections_do.and.proftype(1:5)/='ELORE') then
+      write(out,"('Input Error: For ERROR calculations use profile ELORE, not ',a)") proftype(1:5)
+      stop 'Input Error: for ERROR illegal profile used'
+    endif
+    !
     !   half width for Doppler profiling
-    if (any( proftype(1:3)==(/'VOI','PSE','LOR','PHO'/)).and.Nspecies>0) then
+    if (any( proftype(1:3)==(/'VOI','PSE','LOR','PHO','ELO'/)).and.Nspecies>0) then
       !
       halfwidth = 0
       !
@@ -2333,6 +2343,20 @@ module spectrum
           !
        endif
        !
+   case ('ELOREN')
+       !
+       if (verbose>=2) then
+          !
+          write(out,"(10x,/'Cross-sections Errors using ',a,' profile with HWHM = ',f17.8)") trim(proftype),halfwidth
+          write(out,"(10x,'Number of grid points = ',i8)") Npoints
+          write(out,"(10x,'Range = ',f18.7,'-',f18.7)") freql,freqr
+          write(out,"(10x,'Temperature = ',f18.7)") temp
+          write(out,"(10x,'Partition function = ',f17.4)") partfunc
+          write(out,"(10x,'Spectrum type = ',a/)") trim(specttype)
+          if (offset<0) write(out,"(10x,'Line truncated at ',f9.2/)") offset
+          !
+       endif
+       !
    end select
    !   
    if (verbose>=2) then
@@ -2390,7 +2414,7 @@ module spectrum
      stop 'Undefined reference Temperature'
    endif
    !
-   if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE','COO'/)) ) then
+   if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE','COO','ELO'/)) ) then
      allocate(intens_omp(npoints,N_omp_procs),stat=info)
      intens_omp = 0
      call ArrayStart('swap:intens_omp',info,size(intens_omp),kind(intens_omp))
@@ -3020,9 +3044,17 @@ module spectrum
              if (lineprofile_do) then
                 gamma_ram(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji)
                 temp_gamma_n = get_Voigt_gamma_n(Nspecies,Jf,Ji,gamma_idx_RAM(iswap))
+                !
+                if (error_cross_sections_do) then 
+                  !
+                  read(quantum_numbers(QN%unc_col-4,ilevelf),*,err=116) unc_f
+                  read(quantum_numbers(QN%unc_col-4,ileveli),*,err=116) unc_i
+                  !
+                  abscoef_ram(iswap) = abscoef*(unc_f**2+unc_i**2)
+                  !
+                endif
+                !
              endif
-             !
-             !do do_log_intensity
              !
            enddo loop_swap
            !$omp end parallel do
@@ -3193,6 +3225,24 @@ module spectrum
                 halfwidth = gamma_ram(iswap)
                 !
                 call do_lorentz(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens_omp(:,iomp))
+                !
+              enddo
+              !
+            enddo
+            !$omp end parallel do
+            !
+        case ('ELORE')
+            !
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                halfwidth = gamma_ram(iswap)
+                !
+                call do_lorentz_error(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3546,7 +3596,7 @@ module spectrum
    !
    !Do all the summation at the end
    !
-   if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','PSE','COO'/)) ) then
+   if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','PSE','COO','ELO'/)) ) then
      !
      do i=1,N_omp_procs
       intens(:) = intens(:) + intens_omp(:,i)
@@ -3589,7 +3639,15 @@ module spectrum
      !
    case ('CM/MOLECULE')
      !
-     write(out,"(/'The absorption is in cm / molecule')")
+     if (trim(proftype)=='STICK') then 
+       !
+       write(out,"(/'The absorption is in cm / molecule')")
+       !
+     else
+       !
+       write(out,"(/'The absorption is in cm / molecule per cm-1')")
+       !
+     endif
      !
    end select     
    !
@@ -3669,7 +3727,7 @@ module spectrum
      !
      close(tunit,status='keep')
      !
-   elseif (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE'/)) ) then
+   elseif (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE','ELO'/)) ) then
      !
      write(ioname, '(a)') 'Cross sections or intensities'
      call IOstart(trim(ioname),tunit)
@@ -4117,6 +4175,47 @@ module spectrum
      !$omp end parallel do
      !
   end subroutine do_lorentz
+  
+  !
+  ! computing cross sections errors using energy uncertainties and Lorentz line profile
+  subroutine do_lorentz_error(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens)
+     !
+     implicit none
+     !
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql
+     real(rk),intent(in) :: freq(npoints)
+     real(rk),intent(inout) :: intens(npoints)
+     real(rk) :: dfreq_,de,xp,xm,b,dnu_half,offset_,dfreq_2,abscoef_,lor,lor2,flor
+     integer(ik) :: ib,ie,ipoint
+     !
+     offset_ = offset
+     if ( use_width_offset ) offset_ = offset*halfwidth
+     !
+     ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+     !
+     !abscoef_=abscoef*sqrt(ln2/pi)/halfwidth
+     !
+     !f := gamma/(Pi*((nu-x)^2+gamma^2))
+     !
+     lor = 2.0_rk*halfwidth/pi*abscoef
+     lor2 = halfwidth**2
+     !
+     !$omp parallel do private(ipoint,dfreq_,dfreq_2,flor) shared(intens) schedule(dynamic)
+     do ipoint=ib,ie
+        !
+        dfreq_=freq(ipoint)-tranfreq
+        !
+        dfreq_2=( dfreq_**2+lor2 )**2
+        !
+        flor=dfreq_/dfreq_2
+        !
+        intens(ipoint)=intens(ipoint)+flor**2*lor
+        !
+     enddo
+     !$omp end parallel do
+     !
+  end subroutine do_lorentz_error  
 
   subroutine do_pseud(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
      !
