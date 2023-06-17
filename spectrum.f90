@@ -914,7 +914,7 @@ module spectrum
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
             'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX',&
             'LIFETIME','LIFETIMES','VOI-FAST','VOI-FNORM','VOI-916','T-LIFETIME','TRANS','VALD','ELORENTZ',&
-            'ELORENTZIAN')
+            'ELORENTZIAN','LORENTZ0','LORENTZIAN0')
           !
           if (pressure<small_.and.(w(1:3)=='VOI'.or.w(1:3)=='PSE')) then
              !
@@ -925,6 +925,8 @@ module spectrum
              write(out,"('This is P=0 atm Voigt, which will be treated as Doppler')")
              !
           endif
+          !
+          if (trim(w)=='LORENTZ0'.or.trim(w)=='LORENTZIAN0') w = 'LORE0'
           !
           if (any( w(1:3)==(/'VOI','PSE','LOR','PHO','ELO'/))) lineprofile_do = .true.
           !
@@ -964,11 +966,14 @@ module spectrum
               !
               select case(w)
                 !
+              case("BINNING")
+                !
+                if (trim(proftype)=="LOREN")    proftype = 'LORE0'
+                !
               case("SAMPLING")
                 !
                 if (trim(proftype)=="DOPPLER")  proftype = 'DOPP0'
                 if (trim(proftype)=="GAUSSIAN") proftype = 'GAUS0'
-                if (trim(proftype)=="VOIGT")    proftype = 'VOIGT'
                 !
               case ("NORM","NORMALIZED","AVERAGED")
                 !
@@ -1735,10 +1740,10 @@ module spectrum
              !
            enddo
            !
-           ! check unc-field
+           ! check unc column field is present 
            !
-           ! filter based on the uncertainty 
-           if (uncertainty_filter_do) then
+           ! filter or errors based on the uncertainty
+           if (uncertainty_filter_do.or.error_cross_sections_do) then
               !
               ! reconstruct the uncertainty from 
               read(quantum_numbers(QN%unc_col-4,i),*,err=116) unc_i
@@ -2226,7 +2231,7 @@ module spectrum
    !
    select case (trim(proftype(1:5)))
        !
-   case ('GAUSS','DOPPL','LOREN','GAUS0','DOPP0','VOIGT','PSEUD','PSE-R','PSE-L','VOI-Q','VOI-F','VOI-9')
+   case ('GAUSS','DOPPL','LOREN','LORE0','GAUS0','DOPP0','VOIGT','PSEUD','PSE-R','PSE-L','VOI-Q','VOI-F','VOI-9')
        !
        if (verbose>=2) then
           !
@@ -2819,7 +2824,8 @@ module spectrum
            abscoef_ram = 0
            !
            !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,ifilter,&
-           !$omp& ivib,ener_vib,ener_rot,jf,ji,tranfreq,tranfreq0,offset,abscoef,ndensity,cutoff,abscoef_ref)&
+           !$omp& ivib,ener_vib,ener_rot,jf,ji,tranfreq,tranfreq0,offset,abscoef,ndensity,cutoff,abscoef_ref,&
+           !$omp& temp_gamma_n,unc_f,unc_i)&
            !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,Asum,gamma_ram)
            loop_swap : do iswap = 1,nswap_
              !
@@ -3047,10 +3053,10 @@ module spectrum
                 !
                 if (error_cross_sections_do) then 
                   !
-                  read(quantum_numbers(QN%unc_col-4,ilevelf),*,err=116) unc_f
-                  read(quantum_numbers(QN%unc_col-4,ileveli),*,err=116) unc_i
+                  read(quantum_numbers(QN%unc_col-4,ilevelf),*) unc_f
+                  read(quantum_numbers(QN%unc_col-4,ileveli),*) unc_i
                   !
-                  abscoef_ram(iswap) = abscoef*(unc_f**2+unc_i**2)
+                  abscoef_ram(iswap) = abscoef**2*(unc_f**2+unc_i**2)
                   !
                 endif
                 !
@@ -3151,7 +3157,7 @@ module spectrum
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
                 !
-                call do_gauss0(tranfreq,abscoef,dfreq,freq,halfwidth,freql,intens_omp(:,iomp))
+                call do_gauss_sampling(tranfreq,abscoef,dfreq,freq,halfwidth,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3170,7 +3176,7 @@ module spectrum
                 halfwidth0=dpwcoef*tranfreq
                 if (halfwidth0<100.0_rk*small_) cycle
                 !
-                call do_gauss(tranfreq,abscoef,dfreq,freq,halfwidth0,offset,freql,intens_omp(:,iomp))
+                call do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth0,offset,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3189,7 +3195,7 @@ module spectrum
                 halfwidth0=dpwcoef*tranfreq
                 if (halfwidth0<100.0_rk*small_) cycle
                 !
-                call do_gauss0(tranfreq,abscoef,dfreq,freq,halfwidth0,freql,intens_omp(:,iomp))
+                call do_gauss_sampling(tranfreq,abscoef,dfreq,freq,halfwidth0,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3206,7 +3212,7 @@ module spectrum
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
                 !
-                call do_gauss(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens_omp(:,iomp))
+                call do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3225,6 +3231,25 @@ module spectrum
                 halfwidth = gamma_ram(iswap)
                 !
                 call do_lorentz(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens_omp(:,iomp))
+                !
+              enddo
+              !
+            enddo
+            !$omp end parallel do
+            !
+            ! binning version of Lorentian 
+        case ('LORE0')
+            !
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                halfwidth = gamma_ram(iswap)
+                !
+                call do_lorentz_binning(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3596,11 +3621,19 @@ module spectrum
    !
    !Do all the summation at the end
    !
-   if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','PSE','COO','ELO'/)) ) then
+   if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','PSE','COO'/)) ) then
      !
      do i=1,N_omp_procs
       intens(:) = intens(:) + intens_omp(:,i)
      enddo
+     !
+   elseif (any( trim(proftype(1:3))==(/'ELO'/)) ) then
+     !
+     do i=1,N_omp_procs
+      intens(:) = intens(:) + intens_omp(:,i)
+     enddo
+     !
+     intens(:) = sqrt(intens(:))
      !
    else if (trim(proftype(1:3))== 'MAX') then
      do iomp = 1,N_omp_procs
@@ -3937,7 +3970,7 @@ module spectrum
    end subroutine do_log_intensity
 
 
-  subroutine do_gauss0(tranfreq,abscoef0,dfreq,freq,halfwidth,freql,intens)
+  subroutine do_gauss_sampling(tranfreq,abscoef0,dfreq,freq,halfwidth,freql,intens)
      !
      implicit none
      !
@@ -3969,7 +4002,7 @@ module spectrum
         !
      enddo
      !
-  end subroutine do_gauss0
+  end subroutine do_gauss_sampling
   !
   !
   ! Obtain left and right grid points around the current frequency
@@ -4080,7 +4113,7 @@ module spectrum
   end subroutine get_grid_ipoint
   !
   !
-  subroutine do_gauss(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens)
+  subroutine do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens)
      !
      implicit none
      !
@@ -4117,10 +4150,10 @@ module spectrum
      enddo
      !omp end parallel do
 
-  end subroutine do_gauss
+  end subroutine do_gauss_binning
   !
   !
-  subroutine do_lorentz(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens)
+  subroutine do_lorentz_binning(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens)
      !
      implicit none
      !
@@ -4174,6 +4207,45 @@ module spectrum
      enddo
      !$omp end parallel do
      !
+  end subroutine do_lorentz_binning
+  !
+  ! 
+  ! A sampling version of the Lorentzian line profile
+  !
+  subroutine do_lorentz(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens)
+     !
+     implicit none
+     !
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql
+     real(rk),intent(in) :: freq(npoints)
+     real(rk),intent(inout) :: intens(npoints)
+     real(rk) :: dfreq_,de,xp,xm,b,dnu_half,offset_,gamma2,lor,dfreq_2
+     integer(ik) :: ib,ie,ipoint
+     !
+     offset_ = offset
+     if ( use_width_offset ) offset_ = offset*halfwidth
+     !
+     ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+     !
+     !f := gamma/(Pi*((nu-x)^2+gamma^2))*A
+     !
+     lor = halfwidth/pi*abscoef
+     !
+     gamma2 = halfwidth**2
+     !
+     !$omp parallel do private(ipoint,dfreq_,dfreq_2) shared(intens) schedule(dynamic)
+     do ipoint=ib,ie
+        !
+        dfreq_=freq(ipoint)-tranfreq
+        !
+        dfreq_2=(freq(ipoint)-tranfreq)**2+gamma2
+        !
+        intens(ipoint)=intens(ipoint)+lor/dfreq_2
+        !
+     enddo
+     !$omp end parallel do
+     !
   end subroutine do_lorentz
   
   !
@@ -4194,11 +4266,9 @@ module spectrum
      ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
      ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
      !
-     !abscoef_=abscoef*sqrt(ln2/pi)/halfwidth
-     !
      !f := gamma/(Pi*((nu-x)^2+gamma^2))
      !
-     lor = 2.0_rk*halfwidth/pi*abscoef
+     lor = (2.0_rk*halfwidth/pi)**2*abscoef
      lor2 = halfwidth**2
      !
      !$omp parallel do private(ipoint,dfreq_,dfreq_2,flor) shared(intens) schedule(dynamic)
