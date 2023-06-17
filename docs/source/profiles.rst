@@ -135,8 +135,8 @@ Here, ExoCross uses the energies uncertainties to define uncertainties of the cr
 
 where :math:`\Delta \tilde{E}_i` and :math:`\Delta \tilde{E}_j` are the uncertainties of the upper and lower states. Assuming a given line-profile :math:`f(\tilde\nu)`, the derivative wrt the energy is given by
 
-.. math:
-
+.. math::
+    
     \frac{\partial \sigma(\tilde{\nu})}{\partial \tilde{\nu}_{ij}} = I_{if} \frac{\partial f(\tilde{\nu})}{\partial \tilde{\nu}_{ij}}.
 
 
@@ -160,15 +160,17 @@ Error cross sections for the Lorentzian profile (Elorentz)
 
 
 For the Lorenztian line profile centred at :math:`\tilde{\nu}_{ij}` with HWHM :math:`\gamma` given by 
-.. math: 
+
+.. math:: 
 
   f(\tilde\nu,\tilde\nu_{ij},\gamma)_{\rm Lo} = \frac{\gamma}{\pi} \frac{1}{(\tilde{\nu}-\tilde{\nu}_{ij})^2+\gamma^2}
   
   
 the corresponding derivative wrt :math:`\tilde{\nu}_{ij}` is given by 
-.. math:
 
-  \frac{\partial f(\tilde\nu)_{\rm Lo}}{\partial \tilde\nu_{ij}} = \frac{\gamma}{\pi} \frac{2(\tilde{\nu}_{ij}-\tilde{\nu})}{\left[(\tilde{\nu}-\tilde{\nu}_{ij})^2+\gamma^2\right]^2}
+.. math::
+
+    \frac{\partial f(\tilde\nu)_{\rm Lo}}{\partial \tilde\nu_{ij}} = \frac{\gamma}{\pi} \frac{2(\tilde{\nu}_{ij}-\tilde{\nu})}{\left[(\tilde{\nu}-\tilde{\nu}_{ij})^2+\gamma^2\right]^2}
 
 
 
