@@ -122,7 +122,8 @@ module spectrum
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
              stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false., spectra_do = .false., &
              vibpopulation_do = .false., super_energies_do = .false., super_Einstein_do = .false., &
-             uncertainty_filter_do = .false.,stick_vald = .false., error_cross_sections_do = .false.
+             uncertainty_filter_do = .false.,stick_vald = .false., error_cross_sections_do = .false., &
+             phoenix_do = .false.
   logical :: lineprofile_do = .false., use_width_offset = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
@@ -927,6 +928,8 @@ module spectrum
           endif
           !
           if (trim(w)=='LORENTZ0'.or.trim(w)=='LORENTZIAN0') w = 'LORE0'
+          !
+          if (trim(w)=='PHOENIX') phoenix_do = .true.
           !
           if (any( w(1:3)==(/'VOI','PSE','LOR','PHO','ELO'/))) lineprofile_do = .true.
           !
@@ -2166,7 +2169,7 @@ module spectrum
        !
        close(bunit)
        !
-    elseif (stick_hitran.or.stick_oxford) then
+    elseif (stick_hitran.or.stick_oxford.or.phoenix_do) then
        !
        Jmax = JmaxAll
        !
@@ -2872,19 +2875,19 @@ module spectrum
              !
              if (vibtemperature_do) then
                 !
-                if (trim(specttype)=='ABSORPTION') then 
+                !if (trim(specttype)=='ABSORPTION') then 
                   ivib = ivib_state(ileveli)
                   ener_vib = energies_vib(ivib)
                   !
                   ! let's assume that negative rotational energies can be made positive without breaking the physics
                   ener_rot = abs(energyi-ener_vib)
                   !
-                else
-                  ivib = ivib_state(ilevelf)
-                  ener_vib = energies_vib(ivib)
-                  ener_rot = abs(energyf-ener_vib)
-                  !
-                endif
+                !else
+                !  ivib = ivib_state(ilevelf)
+                !  ener_vib = energies_vib(ivib)
+                !  ener_rot = abs(energyf-ener_vib)
+                !  !
+                !endif
                 !
                 if(vibpopulation_do) then
                   ndensity = dens_vib(ivib)
