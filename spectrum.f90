@@ -92,6 +92,7 @@ module spectrum
     integer(ik) :: Nsym=1                ! Number of symmetries
     integer(ik) :: Rotcol(2)=(/5,6/)     ! Columns with Rot-QNs
     integer(ik) :: dens_col = 0          ! column with number density 
+    integer(ik) :: lifetime_col = 6      ! column with lifetimes 
     integer(ik) :: unc_col = 5           ! column with uncertainty (5 is default)
     real(rk)    :: Jref = 0              ! Reference J used to define the vibronic contribution
     !
@@ -123,7 +124,7 @@ module spectrum
              stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false., spectra_do = .false., &
              vibpopulation_do = .false., super_energies_do = .false., super_Einstein_do = .false., &
              uncertainty_filter_do = .false.,stick_vald = .false., error_cross_sections_do = .false., &
-             phoenix_do = .false.
+             phoenix_do = .false., predissociation_do = .false.
   logical :: lineprofile_do = .false., use_width_offset = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
@@ -471,6 +472,10 @@ module spectrum
               !
               call readi(QN%Kcol)
               !
+            case ("LIFETIME","LIFETIMES")
+              !
+              call readi(QN%lifetime_col)
+              !
             case ("ROT")
               !
               call readi(QN%rotcol(1))
@@ -549,6 +554,10 @@ module spectrum
         case ("SPECTRA")
           !
           spectra_do = .true.
+          !
+        case("PREDISSOCIATION","PRE-DISSOCIATION")
+          !
+          predissociation_do = .true.
           !
         case ("SUPER-EINSTEIN")
           !
@@ -1351,7 +1360,7 @@ module spectrum
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
    real(rk)    :: acoef_,cutoff,ndensity,abscoef_ref
    integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin
-   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc_i,unc_f
+   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc_i,unc_f,time_
    character(len=cl) :: ioname,intname
    !
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
@@ -1362,7 +1371,7 @@ module spectrum
    integer(ik),allocatable :: indexi_RAM(:),indexf_RAM(:)
    integer(ik),allocatable :: ileveli_RAM(:),ilevelf_RAM(:),gamma_idx_RAM(:)
    integer(ik) :: nswap_,nswap,iswap,iswap_,iomp,ichunk
-   real(rk),allocatable :: energies_vib(:),dens_vib(:)
+   real(rk),allocatable :: energies_vib(:),dens_vib(:),gamma_radiative(:)
    integer(ik),allocatable :: ivib_state(:)
    !
    integer(ik),allocatable :: nchars_quanta(:)  ! max number of characters used for each quantum number
@@ -1546,6 +1555,14 @@ module spectrum
       !
       allocate(level_IDs(nlines),stat=info)
       call ArrayStart('level_IDs',info,size(level_IDs),kind(level_IDs))
+      !
+      if (predissociation_do) then
+        write(out,"('Predissociation case: using radiative lifetimes to estimate gamma')") 
+        !
+        allocate(gamma_radiative(nlevels),stat=info)
+        call ArrayStart('gamma_radiative',info,size(gamma_radiative),kind(gamma_radiative))
+        !
+      endif
       !
       if (vibtemperature_do) then
         write(out,"('Number of vibrational states = ',i6)") Nvib_states
@@ -1763,6 +1780,20 @@ module spectrum
          !
          j = 2*int(jrot(i))+1
          energy = energies(i)
+         !
+         !
+         ! For predissociated states the line profile is estimated using the lifetime
+         if (predissociation_do) then
+           !
+           read(quantum_numbers(QN%lifetime_col-4,i),*) time_
+           !
+           if (isnan(time_)) then
+             gamma_radiative(i) = 0
+           else
+             gamma_radiative(i) = 1.0_rk/(2.0*pi*vellgt*time_)*0.5_rk
+           endif
+           !
+         endif
          !
          if (vibtemperature_do) then
            !if (nint(jrot(i)-QN%Jref)==0) then
@@ -3051,8 +3082,17 @@ module spectrum
              nu_ram(iswap) = tranfreq
              !
              if (lineprofile_do) then
+                !
                 gamma_ram(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji)
                 temp_gamma_n = get_Voigt_gamma_n(Nspecies,Jf,Ji,gamma_idx_RAM(iswap))
+                !
+                ! for predissociative case we redefine collisional gamma by a radiative gamma if the latter is larger
+                !
+                if (predissociation_do) then 
+                  !
+                  gamma_ram(iswap) = max(gamma_radiative(ilevelf),gamma_ram(iswap))
+                  !
+                endif
                 !
                 if (error_cross_sections_do) then 
                   !
@@ -3884,6 +3924,11 @@ module spectrum
    if (allocated(energies_vib)) then 
         deallocate(energies_vib)
         call ArrayStop('energies_vib')
+   endif
+   !
+   if (allocated(gamma_radiative)) then 
+        deallocate(gamma_radiative)
+        call ArrayStop('gamma_radiative')
    endif
    !
    if (allocated(ivib_state)) then 
