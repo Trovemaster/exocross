@@ -126,17 +126,17 @@ Error cross sections
 To invoke the error cross section calculations, a free floating ``ERROR`` keyword is used.
 
 
-Here, ExoCross uses the energies uncertainties to define uncertainties of the cross-sections in a form of absorption (emission) error cross-sections for different line profiles as given by 
+Here, ExoCross uses the energies uncertainties to define uncertainties of the cross-sections in a form of absorption (emission) error cross-sections for different line profiles as given by
 
 .. math::
-   
+
    \left(\Delta \sigma(\tilde{\nu})\right)^2 = \sum_{i,j} \left(\frac{\partial \sigma(\tilde{\nu})}{\partial \tilde{\nu}_{ij}}\right)^2 \left[(\Delta \tilde{E}_i)^2 + (\Delta \tilde{E}_j)^2  \right],
-   
+
 
 where :math:`\Delta \tilde{E}_i` and :math:`\Delta \tilde{E}_j` are the uncertainties of the upper and lower states. Assuming a given line-profile :math:`f(\tilde\nu)`, the derivative wrt the energy is given by
 
 .. math::
-    
+
     \frac{\partial \sigma(\tilde{\nu})}{\partial \tilde{\nu}_{ij}} = I_{if} \frac{\partial f(\tilde{\nu})}{\partial \tilde{\nu}_{ij}}.
 
 
@@ -146,32 +146,56 @@ Here is an input example:
      elorentz
      error
      hwhm 0.2
-     
+
 
 It is important that the energy uncertainties are provided in the column 5 of the States file. The error cross sections can be combined with the uncertainty filters: ::
 
    filter
      unc 0.01
    end
-   
+
 
 Error cross sections for the Lorentzian profile (Elorentz)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
-For the Lorenztian line profile centred at :math:`\tilde{\nu}_{ij}` with HWHM :math:`\gamma` given by 
+For the Lorenztian line profile centred at :math:`\tilde{\nu}_{ij}` with HWHM :math:`\gamma` given by
 
-.. math:: 
+.. math::
 
   f(\tilde\nu,\tilde\nu_{ij},\gamma)_{\rm Lo} = \frac{\gamma}{\pi} \frac{1}{(\tilde{\nu}-\tilde{\nu}_{ij})^2+\gamma^2}
-  
-  
-the corresponding derivative wrt :math:`\tilde{\nu}_{ij}` is given by 
+
+
+the corresponding derivative wrt :math:`\tilde{\nu}_{ij}` is given by
 
 .. math::
 
     \frac{\partial f(\tilde\nu)_{\rm Lo}}{\partial \tilde\nu_{ij}} = \frac{\gamma}{\pi} \frac{2(\tilde{\nu}_{ij}-\tilde{\nu})}{\left[(\tilde{\nu}-\tilde{\nu}_{ij})^2+\gamma^2\right]^2}
 
+
+
+Pre-dissociative line profiles
+------------------------------
+
+In case of pre-dissociative effects, the lines van be broadened beyond the collisional or Doppler broadening. For these cases, ExoCross can use the lifetimes :math:`\tau`  from the States file (usually column 6 after the uncertainty column) to estimate the pre-dissociative line broadening (HWHM) via
+
+
+.. math::
+
+    \gamma_{\rm prediss}  = \frac{1}{2\pi C \tau} \frac{1}{2}
+
+where :math`C` is the speed of light in cm/s, :math:`\tau` is the lifetime in s and the factor :math:`1/2` is to convert to the HWHM :math:`\gamma`. ExoCross will apply the largest of the two line broadening values, :math:`\gamma_{\rm prediss}` and :math:`\gamma_{\rm collis}`.  This option is activated via a free floating keyword ``PREDISSOCIATION``. By default, the lifetimes column is assumed to be column 6. Otherwise it is important to specify the number of the lifetime column as part of the ``QN`` section using the keyword ``lifetime``
+::
+
+     predissociation
+     
+     QN
+      lifetime 5
+     END
+     
+
+.. note:: The lifetime column specification can be combined with the ``non-LTE`` section, since ``QN`` and ``non-LTE`` are essentially aliases of each other. 
+ 
 
 
 

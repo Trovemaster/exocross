@@ -2456,7 +2456,7 @@ module spectrum
    if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE','COO','ELO'/)) ) then
      allocate(intens_omp(npoints,N_omp_procs),stat=info)
      intens_omp = 0
-     call ArrayStart('swap:intens_omp',info,size(intens_omp),kind(intens_omp))
+     call ArrayStart('swap:intens_omp',info,1_ik,kind(intens_omp),size(intens_omp,kind=hik))
    endif
    !
    ! estimate how many transitions we can out into RAM
