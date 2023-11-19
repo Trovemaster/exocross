@@ -238,3 +238,48 @@ the columns are the wavelength in Angstrom, the lower state energy in eV, log10(
     output ScH_gf
     States       ScH.states
     Transitions  ScH.trans
+
+
+
+Using HITRAN .par with ExoCross
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Here is an example of an ExoCross input file for computing absorption cross sections from a HITRAN .par with ExoCross:
+
+::
+
+    Temperature  400
+    Range 0 8000
+    
+    Npoints 800001
+    
+    absorption
+    voigt
+    
+    pf 274.56910  ref 1.74581257E+02
+    
+    HITRAN
+    
+    mass 18
+    iso 1 1
+    
+    abundance 0.99734
+    
+    pressure  1.0
+    
+    transitions HTRAN_H2O_2020.par
+    
+    species
+         air   gamma 0.075  n 0.40 t0 296.0  ratio 0.70 delta 0.000000
+         self  gamma 0.670  n 1.00 t0 296.0  ratio 0.30 delta 0.000000
+    end
+    
+    
+    output H2O_HITRAN_400K_voigt_1bar
+    
+    
+
+It is important to provide two partition functions, for the target temperature (here 400 K) as well as for 296 K (HITRAN reference temperature). 
+One also needs to define the air:self ratio as well as as the mass, isotopologe number etc. 
+
+
