@@ -188,14 +188,14 @@ where :math`C` is the speed of light in cm/s, :math:`\tau` is the lifetime in s 
 ::
 
      predissociation
-     
+
      QN
       lifetime 5
      END
-     
 
-.. note:: The lifetime column specification can be combined with the ``non-LTE`` section, since ``QN`` and ``non-LTE`` are essentially aliases of each other. 
- 
+
+.. note:: The lifetime column specification can be combined with the ``non-LTE`` section, since ``QN`` and ``non-LTE`` are essentially aliases of each other.
+
 
 
 
@@ -297,7 +297,7 @@ Example
      end
 
 
-A :math:`J`-dependent set of broadening parameters can be provided in an external file, e.g.
+A :math:`J`-dependent set of broadening parameters can be provided in an external file using the ExoMol Diet structure, e.g.
 ::
 
      mass 16.0
@@ -305,23 +305,35 @@ A :math:`J`-dependent set of broadening parameters can be provided in an externa
      Temperature 1300.0
 
      species
-       H2  gamma 0.0207 n 0.44 t0 298.0 file 1H2-16O__H2.broad model JJ ratio 0.84
-       He  gamma 0.043  n 0.02 t0 298.0 file  1H2-16O__He.broad model JJ ratio 0.16
+       H2  gamma 0.0207 n 0.44 t0 298.0 file 1H2-16O__H2.broad  ratio 0.84
+       He  gamma 0.043  n 0.02 t0 298.0 file  1H2-16O__He.broad ratio 0.16
      end
 
 
-where `file` is the filename with parameters and JJ (alias a1) is the name of  the model. Two models are available:
-J (or a0) and JJ (or a1), which stand for the broadening dependent on the lower only and the lower/upper Js.
+where `file` is the filename with parameters. Two Diet models are available in ExoCross are
+``a0`` (J"-dependence),  ``a1`` (J", PQR-dependence), ``m0`` (|m|-dependence) and ``m1`` (m-dependence), where
+:math:`m=-J,J,J+1` for P, Q, R branches, respectively.
 
 The broadening file has the following structure
 ::
+    
+    a1   0.0145 0.500       0       1
+    a1   0.0156 0.417       1       2
+    a1   0.0164 0.350       2       3
+    
 
-     0.0145 0.500       0       1
-     0.0156 0.417       1       2
-     0.0164 0.350       2       3
+where the 1st column describes the Diet model, the following two columns are the Voigt's gamma and n, and the last two are J" and J' (i.e. in the opposite to the conventional order). The values ``gamma`` and ``n`` in the ``species`` section are the default values in case of missing :math:`J`s in the broadening file. For :math:`J>J_{\rm max}`, the values :math:`\gamma` and :math:`n` the values of :math:`J=J_{\rm max}` are assumed. 
 
+More examples of .broad:
+::
+     
+    m1   0.0156 0.417      -2
+    m1   0.0164 0.350      -1
+    m1   0.0145 0.500       0
+    m1   0.0156 0.417       1
+    m1   0.0164 0.350       2
+    
 
-where the first two columns are Voigt's gamma and n, and the last two are J" and J' (i.e. in the opposite to the conventional order). The values `gamma` and `n` in the `species` section are the default values in case of missing Js in the broadening file.
 
 
 

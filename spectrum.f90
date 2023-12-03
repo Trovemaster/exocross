@@ -49,7 +49,7 @@ module spectrum
   type speciesT ! broadener
     !
     real(rk)       :: N = 0.5_rk      ! Voigt parameter N
-    real(rk)       :: gamma = 0.0_rk  ! Voigt parameter gamma
+    real(rk)       :: gamma = 0.05_rk  ! Voigt parameter gamma
     real(rk)       :: ratio = 1.0_rk  ! Ratio
     real(rk)       :: T0    = 296_rk  ! Reference T, K
     real(rk)       :: P0    = 1.0_rk  ! Reference P, bar
@@ -1357,7 +1357,7 @@ module spectrum
    integer(ik) :: info,ipoint,ipoint_,nlevels,i,itemp,enunit,tunit,sunit,wunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf
    integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems,iline,intunit,inu
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air,beta_ref
-   real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef
+   real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef,m0
    real(rk)    :: acoef_,cutoff,ndensity,abscoef_ref
    integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin
    real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc_i,unc_f,time_
@@ -2092,7 +2092,7 @@ module spectrum
          ! Scan and find Jmax
          read(bunit,*,end=14) ch_broad(1:3),gamma_,n_,J_
          !
-         if (all(trim(ch_broad(1:2))/=(/'a0','a1','A0','A1'/))) cycle 
+         if (all(trim(ch_broad(1:2))/=(/'a0','a1','A0','A1','m0','M0','m1','M1'/))) cycle 
          !
          Jmax = max(Jmax,nint(J_+0.5_rk))
          JmaxAll = max(nint(J_+0.5_rk),JmaxAll)
@@ -2135,7 +2135,7 @@ module spectrum
          call readu(ch_broad)
          !
          ! Ignore all models if not implemented 
-         if (all(trim(ch_broad(1:2))/=(/'A0','A1','J ','JJ'/))) cycle 
+         if (all(trim(ch_broad(1:2))/=(/'A0','A1','J ','JJ','M0','m0','a0','a1','m1','M1'/))) cycle 
          !  write(out,"('Error, illegal model in .broad: ',a3,' inly a0 and a1 are implemented')") ch_broad(1:3)
          !  stop 'Error, illegal model in .broad: '
          !endif
@@ -2183,6 +2183,105 @@ module spectrum
            !
            species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
            species(i)%nQN(Jpp,Jp-Jpp) = n_
+           !
+         case ('m0','M0')
+           !
+           if (nitems<4) call report ("not enough data in .broad for "//trim(w),.true.)
+           !
+           call readf(gamma_)
+           call readf(n_)
+           call readf(m0)
+           !
+           if (m0<=0) call report ("Illegal m<=0 for m0 in .broad for "//trim(w),.true.)
+           !
+           ! |m| = m0
+           !
+           ! P branch
+           !
+           Jpp = m0
+           Jp  = Jpp-1.0_rk
+           !
+           species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
+           species(i)%nQN(Jpp,Jp-Jpp) = n_
+           !
+           ! Q branch
+           !
+           Jpp = m0
+           Jp = Jpp
+           !
+           species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
+           species(i)%nQN(Jpp,Jp-Jpp) = n_
+           !
+           ! R branch
+           !
+           Jpp = m0-1.0_rk
+           Jp = Jpp+1.0_rk
+           !
+           species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
+           species(i)%nQN(Jpp,Jp-Jpp) = n_
+           !
+           Jmax = max(Jmax,min(Jp,Jpp))
+           !
+           if (abs(Jp-Jpp)>1) then 
+             write(out,'("Jp-Jpp>1 in broadening file:",2i8)') Jp,Jpp
+             stop 'Jp-Jpp>1 in broadening file'
+           endif
+           !
+           !
+         case ('m1','M1')
+           !
+           if (nitems<4) call report ("not enough data in .broad for a1"//trim(w),.true.)
+           !
+           call readf(gamma_)
+           call readf(n_)
+           call readf(m0)
+           !
+           if (m0<0) then
+             !
+             ! P branch
+             !
+             Jpp = abs(m0)
+             Jp  = Jpp-1.0_rk
+             !
+             species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
+             species(i)%nQN(Jpp,Jp-Jpp) = n_
+             !
+           elseif(m0==0) then
+             !
+             ! Q branch
+             !
+             Jpp = m0
+             Jp = Jpp
+             !
+             species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
+             species(i)%nQN(Jpp,Jp-Jpp) = n_
+             !
+           else 
+             !
+             ! Q branch
+             !
+             Jpp = m0
+             Jp = Jpp
+             !
+             species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
+             species(i)%nQN(Jpp,Jp-Jpp) = n_
+             !
+             ! R branch
+             !
+             Jpp = m0-1.0_rk
+             Jp = Jpp+1.0_rk
+             !
+             species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
+             species(i)%nQN(Jpp,Jp-Jpp) = n_
+             !
+           endif
+           !
+           Jmax = max(Jmax,min(Jp,Jpp))
+           !
+           if (abs(Jp-Jpp)>1) then 
+             write(out,'("Jp-Jpp>1 in broadening file:",2i8)') Jp,Jpp
+             stop 'Jp-Jpp>1 in broadening file'
+           endif
            !
          case default
            !
