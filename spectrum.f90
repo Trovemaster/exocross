@@ -1359,7 +1359,7 @@ module spectrum
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air,beta_ref
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef,m0
    real(rk)    :: acoef_,cutoff,ndensity,abscoef_ref
-   integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin
+   integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin,gtot_
    real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc_i,unc_f,time_
    character(len=cl) :: ioname,intname
    !
@@ -1372,7 +1372,7 @@ module spectrum
    integer(ik),allocatable :: ileveli_RAM(:),ilevelf_RAM(:),gamma_idx_RAM(:)
    integer(ik) :: nswap_,nswap,iswap,iswap_,iomp,ichunk
    real(rk),allocatable :: energies_vib(:),dens_vib(:),gamma_radiative(:)
-   integer(ik),allocatable :: ivib_state(:)
+   integer(ik),allocatable :: ivib_state(:),ivib_state_pf(:)
    !
    integer(ik),allocatable :: nchars_quanta(:)  ! max number of characters used for each quantum number
    !
@@ -1565,10 +1565,16 @@ module spectrum
       endif
       !
       if (vibtemperature_do) then
+        !
         write(out,"('Number of vibrational states = ',i6)") Nvib_states
         allocate(energies_vib(Nvib_states),ivib_state(nlines),stat=info)
         call ArrayStart('energies_vib',info,size(energies_vib),kind(energies_vib))
         call ArrayStart('ivib_state',info,size(ivib_state),kind(ivib_state))
+        !
+        if (partfunc_do) then
+           allocate(ivib_state_pf(nlines),stat=info)
+           call ArrayStart('ivib_state_pf',info,size(ivib_state_pf),kind(ivib_state_pf))
+        endif 
         !
         if (vibpopulation_do) then 
           allocate(dens_vib(Nvib_states),stat=info)
@@ -1717,20 +1723,26 @@ module spectrum
       endif
       j0 = 0
       i = 0
+      iline = 0 
       !
       ! start reading the energies
       !
-      do
+      loop_energy_read : do
          !
          call read_line(eof,enunit) ; if (eof) exit
+         !
          i = i + 1
+         iline = iline + 1
          !
          call readi(itemp)
          call readf(energy)
          !
          energies(i) = energy
          !
-         call readi(gtot(i))
+         call readi(gtot_)
+         !
+         gtot(i) = real(gtot_,rk)
+         !
          call readf(jrot(i))
          !
          if (mod(nint(jrot(i)*2),2)/=0) then
@@ -1772,42 +1784,19 @@ module spectrum
            !
          endif
          !
-         ! from ID to a counting number 
-         indices(itemp) = i
-         !
-         ! from the coounting number back to ID
-         level_IDs(i) = itemp
-         !
-         j = 2*int(jrot(i))+1
-         energy = energies(i)
-         !
-         !
-         ! For predissociated states the line profile is estimated using the lifetime
-         if (predissociation_do) then
-           !
-           read(quantum_numbers(QN%lifetime_col-4,i),*) time_
-           !
-           if (isnan(time_)) then
-             gamma_radiative(i) = 0
-           else
-             gamma_radiative(i) = 1.0_rk/(2.0*pi*vellgt*time_)*0.5_rk
-           endif
-           !
-         endif
-         !
          if (vibtemperature_do) then
-           !if (nint(jrot(i)-QN%Jref)==0) then
-           !   !energies_vib(i) = energy
-           !   ivib_state(i) = i
-           !   ener_vib = energy
-           !   ener_rot = 0
-           !else
+           !
            loop_vib : do ivib  = 1,Nvib_states
+             !
              if (all(quantum_numbers(ivib1:ivib2,i)==quantum_numbers_vib(ivib1:ivib2,ivib))) then
                !
                ivib_state(i) = ivib
                ener_vib = energies_vib(ivib)
                ener_rot = energy-ener_vib
+               !
+               if (partfunc_do) then 
+                 ivib_state_pf(iline) = ivib
+               endif
                !
                if (ener_rot<-small_) then
                  !
@@ -1834,8 +1823,67 @@ module spectrum
            !endif
          endif
          !
+         ! we can exclude states that do not pass the filler on energies already at this stage
          !
-      end do
+         if (filter) then
+           !
+           do ifilter = 1,Nfilters
+             !
+             if ( ( upper(ifilter)%mask/=trim( quantum_numbers( upper(ifilter)%i,i ) ).and.&
+                 trim( upper(ifilter)%mask )/="" ).or. &
+                 ( lower(ifilter)%mask/=trim( quantum_numbers( lower(ifilter)%i,i ) ).and.&
+                 trim( lower(ifilter)%mask )/="" ) ) then 
+                 !
+                 ! remove the state by skipping the rest of processing list and unrolling the state index: 
+                 !
+                 i = i - 1
+                 cycle loop_energy_read
+                 !
+             endif
+             !
+           enddo
+           !
+           ! filter based on the uncertainty 
+           if (uncertainty_filter_do) then
+              !
+              ! reconstruct the uncertainty from 
+              read(quantum_numbers(QN%unc_col-4,i),*) unc_f
+              read(quantum_numbers(QN%unc_col-4,i),*) unc_i
+              !
+              if (unc_f>unc_threshold.or.unc_i>unc_threshold) then
+                 !
+                 ! remove the state by skipping the rest of processing list and unrolling the state index: 
+                 !
+                 i = i - 1
+                 cycle loop_energy_read
+              endif
+              !
+           endif
+           !
+         endif
+         !
+         ! from ID to a counting number 
+         indices(itemp) = i
+         !
+         ! from the coounting number back to ID
+         level_IDs(i) = itemp
+         !
+         ! For predissociated states the line profile is estimated using the lifetime
+         if (predissociation_do) then
+           !
+           read(quantum_numbers(QN%lifetime_col-4,i),*) time_
+           !
+           if (isnan(time_)) then
+             gamma_radiative(i) = 0
+           else
+             gamma_radiative(i) = 1.0_rk/(2.0*pi*vellgt*time_)*0.5_rk
+           endif
+           !
+         endif
+         !
+      enddo loop_energy_read
+      !
+      nlines = i
       !
       ! printout vibrational reference energies 
       if (vibtemperature_do.and.verbose>=3) then
@@ -1862,76 +1910,104 @@ module spectrum
       !
       ! Partitiion function 
       !
-      if (partfunc_do) partfunc = 0
-      !
-      ! start reading the energies
-      !
-      do i = 1,nlines
-         !
-         energy = energies(i)
-         !
-         if (partfunc_do) then
-           if (j/=j0) then
-              !
-              if (proftype(1:4)=='PART') then
-                !if (verbose>=1.and.npoints<1000) print('("!",f8.1,3(1x,'//npoints_fmt//'es20.8))'),jrot(i),pf(ipartf,1:npoints)
-              else
-                if (verbose>=4) print('("|",f8.1,1x,es16.8)'),jrot(i),partfunc
-              endif
-              !
-           endif
-           !
-           if (.not.vibtemperature_do) then
-              partfunc=partfunc+gtot(i)*exp(-beta*energy)
-           else
-              ivib = ivib_state(i)
-              ener_vib = energies_vib(ivib)
-              ener_rot = energy-ener_vib
-              !           
-              if(vibpopulation_do) then
-                 ! apply vibrational population keeping the rotational part as Boltzmann
-                 !read(quantum_numbers(QN%dens_col-4,i),*) ndensity
+      if (partfunc_do) then 
+          !
+          partfunc = 0
+          !
+          ! start reading the energies
+          !
+          rewind(enunit)
+          !
+          i = 0 
+          !
+          do
+            !
+            call read_line(eof,enunit) ; if (eof) exit
+             !
+             i = i + 1
+             !
+             call readi(itemp)
+             call readf(energy)
+             !
+             call readi(gtot_)
+             call readf(ji)
+             !
+             j = nint(2.0_rk*ji)-1
+             !
+             if (j/=j0) then
+                !
+                if (proftype(1:4)=='PART') then
+                  !if (verbose>=1.and.npoints<1000) print('("!",f8.1,3(1x,'//npoints_fmt//'es20.8))'),jrot(i),pf(ipartf,1:npoints)
+                else
+                  if (verbose>=4) print('("|",f8.1,1x,es16.8)'),jrot(i),partfunc
+                endif
+                !
+             endif
+             !
+             if (.not.vibtemperature_do) then
+                !
+                partfunc=partfunc+gtot_*exp(-beta*energy)
+                !
+             else
+                !
+                ivib = ivib_state_pf(i)
+                ener_vib = energies_vib(ivib)
+                ener_rot = energy-ener_vib
+                !
+                if (ener_rot<-small_) then
+                  !
+                  ! reassign vibrational energy to the lowest  
+                  !
+                  energies_vib(ivib) = energy
+                  !
+                endif
+                !           
+                if(vibpopulation_do) then
+                   ! apply vibrational population keeping the rotational part as Boltzmann
+                   !read(quantum_numbers(QN%dens_col-4,i),*) ndensity
+                   !
+                   ndensity = dens_vib(ivib)
+                   !
+                   partfunc=partfunc+gtot_*exp(-c2/temp*ener_rot)*ndensity
+                   !
+                else 
+                   ! split PF into a product of vib and rot parts 
+                   partfunc=partfunc+real(gtot_)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)
+                   !
+                endif
+                ! 
+             endif
+             !
+             j0 = j
+             !
+             if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL') then
+               !
+               do itemp = 1,npoints
                  !
-                 ndensity = dens_vib(ivib)
+                 if (energy>enermax) cycle
                  !
-                 partfunc=partfunc+gtot(i)*exp(-c2/temp*ener_rot)*ndensity
-              else 
-                 ! split PF into a product of vib and rot parts 
-                 partfunc=partfunc+gtot(i)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)
-              endif
-              ! 
-           endif
-           !
-           j0 = j
-           !
-         endif
-         !
-         if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL') then
-           !
-           do itemp = 1,npoints
+                 temp0 = real(itemp,rk)*dtemp
+                 !
+                 beta0 = c2/temp0
+                 !
+                 !beta0 = planck*vellgt/(boltz*temp0)
+                 !
+                 pf(0,itemp) = pf(0,itemp) + real(gtot_)*exp(-beta0*energy)
+                 pf(1,itemp) = pf(1,itemp) + real(gtot_)*exp(-beta0*energy)*(beta0*energy)
+                 pf(2,itemp) = pf(2,itemp) + real(gtot_)*exp(-beta0*energy)*(beta0*energy)**2
+                 !
+               enddo
+               !
+             endif
              !
-             if (energy>enermax) cycle
+          end do
+          !
+          if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL') then
              !
-             temp0 = real(itemp,rk)*dtemp
+             pf(3,:) = ( pf(2,:)/pf(0,:)-(pf(1,:)/pf(0,:))**2 )*R_ + 2.5_rk*R_
              !
-             beta0 = c2/temp0
-             !
-             !beta0 = planck*vellgt/(boltz*temp0)
-             !
-             pf(0,itemp) = pf(0,itemp) + gtot(i)*exp(-beta0*energy)
-             pf(1,itemp) = pf(1,itemp) + gtot(i)*exp(-beta0*energy)*(beta0*energy)
-             pf(2,itemp) = pf(2,itemp) + gtot(i)*exp(-beta0*energy)*(beta0*energy)**2
-             !
-           enddo
-           !
-         endif
-         !
-      end do
-      !
-      if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL') then
-         !
-         pf(3,:) = ( pf(2,:)/pf(0,:)-(pf(1,:)/pf(0,:))**2 )*R_ + 2.5_rk*R_
-         !
+          endif
+          !
       endif
       !
       close(enunit)
@@ -2991,15 +3067,15 @@ module spectrum
                enddo
                !
                ! filter based on the uncertainty 
-               if (uncertainty_filter_do) then
-                  !
-                  ! reconstruct the uncertainty from 
-                  read(quantum_numbers(QN%unc_col-4,ilevelf),*) unc_f
-                  read(quantum_numbers(QN%unc_col-4,ileveli),*) unc_i
-                  !
-                  if (unc_f>unc_threshold.or.unc_i>unc_threshold) cycle loop_swap
-                  !
-               endif
+               !if (uncertainty_filter_do) then
+               !   !
+               !   ! reconstruct the uncertainty from 
+               !   read(quantum_numbers(QN%unc_col-4,ilevelf),*) unc_f
+               !   read(quantum_numbers(QN%unc_col-4,ileveli),*) unc_i
+               !   !
+               !   if (unc_f>unc_threshold.or.unc_i>unc_threshold) cycle loop_swap
+               !   !
+               !endif
                !
              endif
              !
