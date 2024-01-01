@@ -1349,7 +1349,7 @@ module spectrum
    !
    use  input
    !
-   use, intrinsic :: ieee_arithmetic, only: IEEE_Value, IEEE_QUIET_NAN
+   use, intrinsic :: ieee_arithmetic !, only: IEEE_Value, IEEE_QUIET_NAN
    use, intrinsic :: iso_fortran_env, only: real32
    !
    !
