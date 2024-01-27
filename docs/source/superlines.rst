@@ -52,7 +52,7 @@ For example:
     mass 18
     
     output H2O_voi-q_1000K_1bar
-    offset 25.0
+    cutoff 25.0
     nquad  40
     
     States  1H2-16O__BT2.states

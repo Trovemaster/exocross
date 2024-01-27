@@ -74,7 +74,7 @@ Example
      voigt
      hwhm .321
      mass 16.0313
-     offset 25 (cm-1)
+     cutoff 25 (cm-1)
 
 
 
@@ -91,7 +91,7 @@ Example
      absorption
      lorentzian
      hwhm .321
-     offset 25 (cm-1)
+     cutoff 25 (cm-1)
 
 
 
@@ -102,7 +102,7 @@ A binned version can be invoked using the ``BINNING`` keyword or with the ``Lore
      absorption
      lorentz0
      hwhm .321
-     offset 25 (cm-1)
+     cutoff 25 (cm-1)
 
 
 or
@@ -112,7 +112,7 @@ or
      absorption
      lorentzian binning
      hwhm .321
-     offset 25 (cm-1)
+     cutoff 25 (cm-1)
 
 
 
@@ -235,7 +235,7 @@ Example
      pseudo
      hwhm .321
      mass 16.0313
-     offset 25 (cm-1)
+     cutoff 25 (cm-1)
 
 
 Pseudo-Liu
@@ -251,7 +251,7 @@ Example
      pseudo-Liu
      hwhm .321
      mass 16.0313
-     offset 25 (cm-1)
+     cutoff 25 (cm-1)
 
 Pseudo-Rocco
 ^^^^^^^^^^^^
@@ -265,7 +265,7 @@ Example
      pseudo-Rocco
      hwhm .321
      mass 16.0313
-     offset 25 (cm-1)
+     cutoff 25 (cm-1)
 
 
 Voigt-parameters
@@ -340,7 +340,7 @@ More examples of .broad:
 Voigt-Quad
 ^^^^^^^^^^
 
-`Voigt-Quad` is the Voigt obtained using the Guass-Hermite quadrature integrations. An analytical integration of the Lorentzian is used for the average contribution for each bin. The effect of the line truncation with offset parameter is folded back into the main part using the analytical expression. The line guarantees the area to conserve.
+`Voigt-Quad` is the Voigt obtained using the Guass-Hermite quadrature integrations. An analytical integration of the Lorentzian is used for the average contribution for each bin. The effect of the line truncation with cutoff parameter is folded back into the main part using the analytical expression. The line guarantees the area to conserve.
 
 
 Example
@@ -352,7 +352,7 @@ Example
      absorption
      Voigt-Quad
      mass 16.0313
-     offset 25 (cm-1)
+     cutoff 25 (cm-1)
      nquad   20   (N quadrature points)
 
      Species

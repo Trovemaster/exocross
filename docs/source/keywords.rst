@@ -269,29 +269,29 @@ Currently this makes sense only in combination with Gaussian and Doppler.
 
 
 
-* `offset` (alias `line-cutoff`) is to define line-width cut-off in wavenumbers (cm-1). The default value is 25 cm-1.
+* ``cutoff`` (alias `line-cutoff`) is to define line-width cut-off in wavenumbers (cm-1). The default value is 25 cm-1.
 
 ::
 
-    offset 25 (cm-1)
+    cutoff 25 (cm-1)
 
 
-* `line-cutoff` (alias `offset`) is to define line-width cut-off in wavenumbers (cm-1). The default value is 25 cm-1.
-
-::
-
-    offset 25 (cm-1)
-
-
-
-`offset` or `line-cutoff` (line-wings cut-off)  can be defined in terms of HWHM:
+* `line-cutoff` (alias `cutoff`) is to define line-width cut-off in wavenumbers (cm-1). The default value is 25 cm-1.
 
 ::
 
-    offset 50 HWHM
+    cutoff 25 (cm-1)
 
 
-`offset`s can allow using different values for different regions, see the multi-grid section
+
+`cutoff` or `line-cutoff` (line-wings cut-off)  can be defined in terms of HWHM:
+
+::
+
+    cutoff 50 HWHM
+
+
+`cutoff`s can allow using different values for different regions, see the multi-grid section
 `grid`.
 
 
@@ -428,13 +428,13 @@ Example
 ::
 
     grid
-      Range   0    100   Npoints 10000 offset 25.
+      Range   0    100   Npoints 10000 cutoff 25.0
       Range 100   1000  Npoints 1000
       Range 1000 10000  Npoints 100
     end
 
 
-Here `offset` can be substituted by `LINE-CUTOFF`.
+Here `cutoff` can be substituted by `LINE-CUTOFF`.
 
 
 + `error-E` and `error-S` are used to specify the ranges for the quantum numbers for different Energy and intensity error-codes, respectively.

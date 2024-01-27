@@ -175,12 +175,12 @@ Line-width cut-offs
 ^^^^^^^^^^^^^^^^^^^
 
 
-A line width cut-off can be defined using `offset` or `line-cutoff`
+A line width cut-off can be defined using ``cutoff`` or ``line-cutoff``
 
 
 ::
 
-    offset 25 (cm-1)
+    cutoff 25 (cm-1)
 
 
 ::
@@ -193,7 +193,7 @@ one can define the cut-off in terms of the HWHM as follows:
 
 ::
 
-    offset 50 HWHM
+    cutoff 50 HWHM
 
 
 
@@ -206,8 +206,8 @@ A multi-grid with regions of different resolutions can be defined using the foll
 ::     
     
     grid
-      Range   0    100   Npoints 10000 offset 10 
-      Range 100   1000  Npoints 1000  offset 25
+      Range   0    100   Npoints 10000 cutoff 10 
+      Range 100   1000  Npoints 1000  cutoff 25
       Range 1000 10000  Npoints 100
     end
      
@@ -215,8 +215,8 @@ A multi-grid with regions of different resolutions can be defined using the foll
 The maximal number of sub-grids is 100. Currently this option only works with 
 simple sampling-type profiles, such as `Voigt`, `Doppler Sampling`,  `Gaussian Sampling` or `Bin`. 
 The latter is commonly used to generate super-lines.  
-`offset` or `line-cutoff` is an optional keyword to allow region-dependent cutoffs for line profiles. If undefined, the value of the 
-global keyword `offset`  the corresponding default value (25 cm-1) is used.
+`cutoff` or `line-cutoff` is an optional keyword to allow region-dependent cutoffs for line profiles. If undefined, the value of the 
+global keyword `cutoff`  the corresponding default value (25 cm-1) is used.
 
 
 

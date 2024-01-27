@@ -16,15 +16,15 @@ module spectrum
   integer(hik),parameter :: max_transitions_to_ram = 1000000000
   integer(ik) :: N_omp_procs=1
   !
-  integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,ioffset = 10,iso=1,imolecule =-1
+  integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,icutoff = 10,iso=1,imolecule =-1
   real(rk)      :: temp=298.0,partfunc=-1.0,partfunc_ref=-1.0,freql=-small_,freqr= 200000.0,thresh=1.0d-70
-  real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, offset = 25.0, pressure = 1.0_rk,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
+  real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, cutoff = 25.0, pressure = 1.0_rk,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
   real(rk)      :: lineshift=0
   real(rk)      :: enermax = 1e7, abscoef_thresh = 1.0d-50, abundance = 1.0d0, gf_factor = 1.0d0
   real(rk)      :: S_crit = 1e-29      ! cm/molecule, HITRAN cut-off paramater
   real(rk)      :: nu_crit = 2000.0d0  ! cm-1, HITRAN cut-off paramater
   real(rk)      :: resolving_power  = 1e6,resolving_f ! using resolving_power to set up grid
-  character(len=cl) :: cutoff_model = "NONE"
+  character(len=cl) :: cutoff_intensity_model = "NONE"
   integer(ik)   :: nquad = 20      ! Number of quadrature points
   integer(hik)   :: N_to_RAM = -1000 ! Lines to keep in RAM
   !
@@ -72,7 +72,7 @@ module spectrum
     !
   end type HitranErrorT
 
-  type CutoffT ! cutoff
+  type Int_CutoffT ! cutoff
     !
     real(rk)          :: threshold 
     character(len=cl) :: filename="NONE"
@@ -81,7 +81,7 @@ module spectrum
     real(rk)          :: enercut
     real(rk),pointer  :: intensity(:) ! reference intensity
     !
-  end type CutoffT
+  end type Int_CutoffT
 
   type QNT ! Quantum numbers identified by columns
     !
@@ -104,7 +104,7 @@ module spectrum
     real(rk)     :: freql=-small_
     real(rk)     :: freqr= 200000.0
     real(rk)     :: dfreq
-    real(rk)     :: offset = -100000.0_rk
+    real(rk)     :: cutoff = -100000.0_rk
   end type gridT
   !
   type(selectT),save :: upper(filtermax),lower(filtermax)
@@ -116,7 +116,7 @@ module spectrum
   type(HitranErrorT),target,save :: HITRAN_E(HITRAN_max_ierr),HITRAN_S(HITRAN_max_ierr)
   type(HitranErrorT),target,save :: HITRAN_Air,HITRAN_Self,HITRAN_N,HITRAN_Delta
   !
-  type(CutoffT),save :: cutoffs
+  type(Int_CutoffT),save :: Int_Cutoffs
   !
   integer(ik),allocatable,save  :: gamma_idx(:,:) !Used for indexing the gamma for the fast_voigt
   real(rk),allocatable,save  :: gamma_comb(:,:) !Used for indexing the gamma for the fast_voigt
@@ -125,7 +125,7 @@ module spectrum
              vibpopulation_do = .false., super_energies_do = .false., super_Einstein_do = .false., &
              uncertainty_filter_do = .false.,stick_vald = .false., error_cross_sections_do = .false., &
              phoenix_do = .false., predissociation_do = .false.
-  logical :: lineprofile_do = .false., use_width_offset = .false.
+  logical :: lineprofile_do = .false., use_width_cutoff = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
   logical :: ready_for_work = .false.
@@ -282,8 +282,8 @@ module spectrum
                 call report ("Using zero micron is Illegal"//trim(w),.true.)
               endif
               !
-              ioffset = 0
-              offset = 0
+              icutoff = 0
+              cutoff = 0
               !
             case ("CM-1")
               !
@@ -820,13 +820,13 @@ module spectrum
             !
          endif
           !
-       case ("THRESHOLD","CUTOFF")
+       case ("THRESHOLD")
           !
           if (Nitems>2) then
             !
             call readu(w)
             !
-            cutoff_model = trim(w)
+            cutoff_intensity_model = trim(w)
             !
             select case(w)
               !
@@ -855,23 +855,23 @@ module spectrum
                   !
                 case("FILENAME","NAME","FILE")
                   !
-                  call reada(cutoffs%filename)
+                  call reada(Int_Cutoffs%filename)
                   !
                 case ("NPOINTS")
                   !
-                  call readi(cutoffs%npoints)
+                  call readi(Int_Cutoffs%npoints)
                   !
                 case("THRESHOLD","THRESH")
                   !
-                  call readf(cutoffs%threshold)
+                  call readf(Int_Cutoffs%threshold)
                   !
                 case("FACTOR")
                   !
-                  call readf(cutoffs%factor)
+                  call readf(Int_Cutoffs%factor)
                   !
                 case("ENERCUT")
                   !
-                  call readf(cutoffs%enercut)
+                  call readf(Int_Cutoffs%enercut)
                   !
                 case default
                   !
@@ -883,7 +883,7 @@ module spectrum
               !
             case ("EXP","EXP-WEAK","EXP-STRONG")
               !
-              cutoff_model = trim(w)
+              cutoff_intensity_model = trim(w)
               !
               call readf(thresh)
               !
@@ -903,7 +903,7 @@ module spectrum
               if (trim(w)/="ENERCUT") &
                  call report ("Expected: keyword = ENERCUT with the switching frequency"//trim(w),.true.)
               !
-              call readf(cutoffs%enercut)
+              call readf(Int_Cutoffs%enercut)
               !
             case default
               !
@@ -944,10 +944,10 @@ module spectrum
           !
           proftype = trim(w)
           !
-          if (trim(w(1:5))=="LOREN") ioffset = 500
-          if (trim(w(1:))=="VOI") ioffset = 500
-          if (trim(w(1:3))=="PSE") ioffset = 500
-          !offset = 25.0_rk
+          if (trim(w(1:5))=="LOREN") icutoff = 500
+          if (trim(w(1:))=="VOI") icutoff = 500
+          if (trim(w(1:3))=="PSE") icutoff = 500
+          !cutoff = 25.0_rk
           !
           if (trim(w(1:5))=="STICK".and.Nitems>1) then
             call readu(w)
@@ -968,8 +968,8 @@ module spectrum
           endif
           !
           if (microns) then
-            ioffset = 0
-            offset = 0
+            icutoff = 0
+            cutoff = 0
           endif
           !
           if (nitems>1) then
@@ -1013,23 +1013,23 @@ module spectrum
           !
           error_cross_sections_do = .true.
           !
-       case ("IOFFSET")
+       case ("Icutoff")
           !
-          call readi(ioffset)
+          call readi(icutoff)
           !
-       case ("OFFSET","LINE-CUTOFF")
+       case ("OFFSET","LINE-CUTOFF","CUTOFF")
           !
-          call readf(offset) 
+          call readf(cutoff) 
           if (nitems>2) then
             call readu(w)
             if (trim(w)/='HWHM') then
-              write(out,"('illegal units of offset ',a,' must be HWHM')") trim(w)
-              stop "Illegal units of offset"
+              write(out,"('illegal units of cutoff ',a,' must be HWHM')") trim(w)
+              stop "Illegal units of cutoff"
             endif
-            use_width_offset = .true.
+            use_width_cutoff = .true.
           endif
           !
-          if (offset<=0) stop 'offset cannot be negative or zero'
+          if (cutoff<=0) stop 'cutoff cannot be negative or zero'
           !
        case ("MASS")
           !
@@ -1147,9 +1147,9 @@ module spectrum
                 !
                 call readi(grid(igrid)%npoints)
                 !
-              case('OFFSET',"LINE-CUTOFF")
+              case('OFFSET',"LINE-CUTOFF","CUTOFF")
                 !
-                call readf(grid(igrid)%offset)
+                call readf(grid(igrid)%cutoff)
                 !
               case default
                 !
@@ -1189,7 +1189,7 @@ module spectrum
     endif
     !
     if (proftype(1:3)=='BIN'.or.proftype(1:3)=='MAX') then
-      offset = 0
+      cutoff = 0
     endif
     !
     if (proftype(1:3)/='BIN'.and.microns) then
@@ -1358,8 +1358,8 @@ module spectrum
    integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems,iline,intunit,inu
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air,beta_ref
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef,m0
-   real(rk)    :: acoef_,cutoff,ndensity,abscoef_ref
-   integer(ik) :: Jmax,Jp,Jpp,Noffset,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin,gtot_
+   real(rk)    :: acoef_,int_cutoff,ndensity,abscoef_ref
+   integer(ik) :: Jmax,Jp,Jpp,Ncutoff,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin,gtot_
    real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc_i,unc_f,time_
    character(len=cl) :: ioname,intname
    !
@@ -1384,7 +1384,7 @@ module spectrum
    character(len=cl) :: w,print_fmt
    !
    integer(ik) :: imol,iostat_,isotope
-   real(rk)    :: gf,gi,mem_t,temp_gamma_n,offset_
+   real(rk)    :: gf,gi,mem_t,temp_gamma_n,cutoff_
    character(55) ch_q,ch_broad
    character(len=cl)   :: my_fmt100K,my_fmt0
    real(real32) :: nan   
@@ -1444,7 +1444,7 @@ module spectrum
           freq(ipoint_) = grid(igrid)%freql+real(ipoint-1,rk)*dfreq
        enddo
        grid(igrid)%dfreq = dfreq
-       if (grid(igrid)%offset<0) grid(igrid)%offset = offset
+       if (grid(igrid)%cutoff<0) grid(igrid)%cutoff = cutoff
      enddo
      ! last point 
      freq(npoints) = grid(Ngrids)%freqr
@@ -2131,15 +2131,15 @@ module spectrum
    !Prepare VoigtKampff
    if(trim(proftype(1:5))=='VOI-F') then
      !
-     offset_ = offset
-     if ( use_width_offset ) offset_ = max(offset*halfwidth,25._rk)
+     cutoff_ = cutoff
+     if ( use_width_cutoff ) cutoff_ = max(cutoff*halfwidth,25._rk)
      !
      if(trim(proftype(1:6))=='VOI-FN') then
-      call fast_voigt%construct(dpwcoef,offset_,dfreq,.true.)
-      !call initalize_voigt_kampff(dpwcoef,dfreq,offset,voigt_index,1)
+      call fast_voigt%construct(dpwcoef,cutoff_,dfreq,.true.)
+      !call initalize_voigt_kampff(dpwcoef,dfreq,cutoff,voigt_index,1)
      else
-      call fast_voigt%construct(dpwcoef,offset_,dfreq,.false.)
-      !call initalize_voigt_kampff(dpwcoef,dfreq,offset,voigt_index,0)
+      call fast_voigt%construct(dpwcoef,cutoff_,dfreq,.false.)
+      !call initalize_voigt_kampff(dpwcoef,dfreq,cutoff,voigt_index,0)
      endif
      !call add_lorentzian(halfwidth,voigt_index,i)
    endif
@@ -2450,7 +2450,7 @@ module spectrum
           write(out,"(10x,'Temperature = ',f18.7)") temp
           write(out,"(10x,'Partition function = ',f17.4)") partfunc
           write(out,"(10x,'Spectrum type = ',a/)") trim(specttype)
-          if (offset<0) write(out,"(10x,'Line truncated at ',f9.2/)") offset
+          if (cutoff<0) write(out,"(10x,'Line truncated at ',f9.2/)") cutoff
           !
        endif
        !
@@ -2477,7 +2477,7 @@ module spectrum
        endif
        if (verbose>=2) then
           !
-          select case(trim(cutoff_model))
+          select case(trim(cutoff_intensity_model))
             !
           case("HITRAN")
              write(out,"(10x,/'Stick pectra of type ',a,' with the HITRAN cut-off model, Scrit = ',e18.5,' nu_crit = ',f16.4)") &
@@ -2504,38 +2504,38 @@ module spectrum
           !
           write(out,"(10x,a)") 'Re-print .trans file'
           !
-          select case(trim(cutoff_model))
+          select case(trim(cutoff_intensity_model))
              !
           case ("EXP") 
              write(out,"(10x,/'Strong/weak lines ',a,' with the EXP cut-off model, Scrit = ',e18.5,' nu_crit = ',f16.4)") &
-             trim(cutoff_model),S_crit,nu_crit
+             trim(cutoff_intensity_model),S_crit,nu_crit
              write(out,"(10x,'EXP intensity cut-off model I0*exp(-nu/nucrit)')")
           case("GRID")
              !
-             write(out,"(10x,/'Strong/weak lines using precomputed grids from ',a)")  trim(cutoffs%filename)
-             write(out,"('... with the EXP cut-off model',a,'; enercut = ',e18.5)") trim(cutoff_model),cutoffs%enercut
-             write(out,"('... with factor = ',e18.5)") cutoffs%factor
+             write(out,"(10x,/'Strong/weak lines using precomputed grids from ',a)")  trim(Int_Cutoffs%filename)
+             write(out,"('... with the EXP cut-off model',a,'; enercut = ',e18.5)") trim(cutoff_intensity_model),Int_Cutoffs%enercut
+             write(out,"('... with factor = ',e18.5)") Int_Cutoffs%factor
              !
-             if (cutoffs%npoints==0) then
-               write(out,"('npoints is undefined for cutoff gids')")
-               stop 'npoints is undefined for cutoff gids'
+             if (Int_Cutoffs%npoints==0) then
+               write(out,"('npoints is undefined for Int_Cutoff gids')")
+               stop 'npoints is undefined for Int_Cutoff gids'
              endif
              !
-             allocate(cutoffs%intensity(cutoffs%npoints),stat=info)
-             call ArrayStart('cutoff%intensity',info,size(cutoffs%intensity),kind(cutoffs%intensity))
+             allocate(Int_Cutoffs%intensity(Int_Cutoffs%npoints),stat=info)
+             call ArrayStart('Int_Cutoff%intensity',info,size(Int_Cutoffs%intensity),kind(Int_Cutoffs%intensity))
              !
              write(intname, '(a)') 'Reference intensity'
              call IOstart(trim(intname),intunit)
-             open(unit=intunit,file=trim(cutoffs%filename),action='read',status='old',form='formatted')
+             open(unit=intunit,file=trim(Int_Cutoffs%filename),action='read',status='old',form='formatted')
              !
-             read(intunit,*) cutoffs%intensity
+             read(intunit,*) Int_Cutoffs%intensity
              !
              close(intunit)
              call IOstop(intname)
              !
           case default 
-            write(out,"(a,2x,a)") "illegal cutoff_model needed for TRANS",trim(cutoff_model)
-            stop "illegal cutoff_model in TRANS"
+            write(out,"(a,2x,a)") "illegal cutoff_intensity_model needed for TRANS",trim(cutoff_intensity_model)
+            stop "illegal cutoff_intensity_model in TRANS"
           end select
           !
        endif
@@ -2567,7 +2567,7 @@ module spectrum
           write(out,"(10x,'Temperature = ',f18.7)") temp
           write(out,"(10x,'Partition function = ',f17.4)") partfunc
           write(out,"(10x,'Spectrum type = ',a/)") trim(specttype)
-          if (offset<0) write(out,"(10x,'Line truncated at ',f9.2/)") offset
+          if (cutoff<0) write(out,"(10x,'Line truncated at ',f9.2/)") cutoff
           !
        endif
        !
@@ -2575,7 +2575,7 @@ module spectrum
    !   
    if (verbose>=2) then
           !
-      select case(cutoff_model)
+      select case(cutoff_intensity_model)
         !
       case("EXP","EXP-WEAK","EXP-STRONG")
          write(out,"(10x,/'Strong/weak lines ',a,' with the EXP cut-off model, Scrit = ',e18.5,' nu_crit = ',f16.4)") &
@@ -2670,7 +2670,7 @@ module spectrum
    if (verbose>=4) call MemoryReport
    !
    nswap = 0
-   Noffset = max(nint(offset/dfreq,ik),1)
+   Ncutoff = max(nint(cutoff/dfreq,ik),1)
    !
    if (verbose>=3) print('(/"Computing ",a," with ",a," ... "/)'), trim(specttype),trim(proftype)
    !
@@ -3033,7 +3033,7 @@ module spectrum
            abscoef_ram = 0
            !
            !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,ifilter,&
-           !$omp& ivib,ener_vib,ener_rot,jf,ji,tranfreq,tranfreq0,offset,abscoef,ndensity,cutoff,abscoef_ref,&
+           !$omp& ivib,ener_vib,ener_rot,jf,ji,tranfreq,tranfreq0,cutoff,abscoef,ndensity,int_cutoff,abscoef_ref,&
            !$omp& temp_gamma_n,unc_f,unc_i)&
            !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,Asum,gamma_ram)
            loop_swap : do iswap = 1,nswap_
@@ -3111,7 +3111,7 @@ module spectrum
              tranfreq0 = tranfreq
              !
              if (microns) then
-               offset = offset/tranfreq**2
+               cutoff = cutoff/tranfreq**2
                tranfreq0 = 10000.0_rk/(tranfreq+small_)
              endif
              !
@@ -3196,9 +3196,9 @@ module spectrum
              !
              !if (abscoef<abscoef_thresh) cycle loop_swap
              !
-             cutoff = thresh
+             int_cutoff = thresh
              !
-             select case (trim(cutoff_model))
+             select case (trim(cutoff_intensity_model))
                 !
              case ("EXP","GRID")
                 !
@@ -3212,9 +3212,9 @@ module spectrum
                 abscoef_ref =cmcoef*acoef*gtot(ilevelf)*exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))/&
                              (tranfreq**2*partfunc_ref)
                 !
-                cutoff = S_crit*exp(-tranfreq/nu_crit)
+                int_cutoff = S_crit*exp(-tranfreq/nu_crit)
                 !
-                if ((abscoef>=cutoff.or.abscoef_ref>=cutoff).or.energyi<=cutoffs%enercut) then
+                if ((abscoef>=int_cutoff.or.abscoef_ref>=int_cutoff).or.energyi<=Int_Cutoffs%enercut) then
                   cycle loop_swap
                 endif
                 !
@@ -3223,27 +3223,27 @@ module spectrum
                 abscoef_ref =cmcoef*acoef*gtot(ilevelf)*exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))/&
                              (tranfreq**2*partfunc_ref)
                 !
-                cutoff = S_crit*exp(-tranfreq/nu_crit)
+                int_cutoff = S_crit*exp(-tranfreq/nu_crit)
                 !
-                if ((abscoef<cutoff.and.abscoef_ref<cutoff).and.energyi>cutoffs%enercut) then
+                if ((abscoef<int_cutoff.and.abscoef_ref<int_cutoff).and.energyi>Int_Cutoffs%enercut) then
                   cycle loop_swap
                 endif
                 !
              case ("HITRAN") 
                 !
                 if (tranfreq<=nu_crit) then
-                  cutoff = S_crit*tranfreq/nu_crit*tanh(0.5_rk*c2/temp*tranfreq)
+                  int_cutoff = S_crit*tranfreq/nu_crit*tanh(0.5_rk*c2/temp*tranfreq)
                 else
-                  cutoff = S_crit
+                  int_cutoff = S_crit
                 endif
                 !
-                if (abscoef<cutoff) then
+                if (abscoef<int_cutoff) then
                   cycle loop_swap
                 endif
                 !
              case default
                !
-               if (abscoef<cutoff) then
+               if (abscoef<int_cutoff) then
                  cycle loop_swap
                endif
                !
@@ -3311,7 +3311,7 @@ module spectrum
            !
         endif
         !
-        !if (offset<0) offset = ioffset*halfwidth
+        !if (cutoff<0) cutoff = ioffset*halfwidth
         !
         !   if transition frequency is out of selected range
         !
@@ -3358,7 +3358,7 @@ module spectrum
                 tranfreq = nu_ram(iswap)
                 halfwidth = gamma_ram(iswap)
                 !
-                call do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth,dpwcoef,offset,freql,intens_omp(:,iomp))
+                call do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth,dpwcoef,cutoff,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3394,7 +3394,7 @@ module spectrum
                 halfwidth0=dpwcoef*tranfreq
                 if (halfwidth0<100.0_rk*small_) cycle
                 !
-                call do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth0,offset,freql,intens_omp(:,iomp))
+                call do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth0,cutoff,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3430,7 +3430,7 @@ module spectrum
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
                 !
-                call do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens_omp(:,iomp))
+                call do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3448,7 +3448,7 @@ module spectrum
                 tranfreq = nu_ram(iswap)
                 halfwidth = gamma_ram(iswap)
                 !
-                call do_lorentz(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens_omp(:,iomp))
+                call do_lorentz(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3467,7 +3467,7 @@ module spectrum
                 tranfreq = nu_ram(iswap)
                 halfwidth = gamma_ram(iswap)
                 !
-                call do_lorentz_binning(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens_omp(:,iomp))
+                call do_lorentz_binning(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3485,7 +3485,7 @@ module spectrum
                 tranfreq = nu_ram(iswap)
                 halfwidth = gamma_ram(iswap)
                 !
-                call do_lorentz_error(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens_omp(:,iomp))
+                call do_lorentz_error(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3549,19 +3549,19 @@ module spectrum
                 indexf = indexf_ram(iswap)
                 indexi = indexi_ram(iswap)
                 !
-                select case (trim(cutoff_model))
+                select case (trim(cutoff_intensity_model))
                    !
                 case ("EXP","EXP-WEAK","EXP-STRONG")
-                  cutoff = S_crit*exp(-tranfreq/nu_crit)
+                  int_cutoff = S_crit*exp(-tranfreq/nu_crit)
                 case ("GRID")
-                  inu  = min(max(1,nint(tranfreq/ ( (freqr-freql)/cutoffs%npoints ) )),cutoffs%npoints)
-                  cutoff = cutoffs%intensity(inu)*cutoffs%factor
+                  inu  = min(max(1,nint(tranfreq/ ( (freqr-freql)/Int_Cutoffs%npoints ) )),Int_Cutoffs%npoints)
+                  int_cutoff = Int_Cutoffs%intensity(inu)*Int_Cutoffs%factor
                 end select 
                 !
                 ileveli = ileveli_ram(iswap)
                 energyi = energies(ileveli)
                 !
-                if (abscoef<cutoff.and.energyi>cutoffs%enercut) then
+                if (abscoef<int_cutoff.and.energyi>Int_Cutoffs%enercut) then
                     write(wunit,my_fmt) indexf,indexi,acoef !,tranfreq
                 else
                     write(sunit,my_fmt) indexf,indexi,acoef,tranfreq
@@ -3632,7 +3632,7 @@ module spectrum
                 tranfreq = nu_ram(iswap)
                 halfwidth = gamma_ram(iswap)
                 !
-                call do_pseud(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens_omp(:,iomp))
+                call do_pseud(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,dpwcoef,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3658,7 +3658,7 @@ module spectrum
                 tranfreq = nu_ram(iswap)
                 halfwidth = gamma_ram(iswap)
                 !
-                call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth,offset,freql,dpwcoef,intens_omp(:,iomp))
+                call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth,cutoff,freql,dpwcoef,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3676,7 +3676,7 @@ module spectrum
                 tranfreq = nu_ram(iswap)
                 halfwidth = gamma_ram(iswap)
                 !
-                call do_Voigt_916(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,offset,freql,intens_omp(:,iomp))
+                call do_Voigt_916(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,cutoff,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3695,7 +3695,7 @@ module spectrum
                 halfwidth = gamma_ram(iswap)
                 !
                 call do_Voigt_Fast(tranfreq,abscoef,use_resolving_power, &
-                     freq,gamma_idx_RAM(iswap),dpwcoef,offset,freql,intens_omp(:,iomp))
+                     freq,gamma_idx_RAM(iswap),dpwcoef,cutoff,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3704,7 +3704,7 @@ module spectrum
             !
         case ('MAX')
             !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,cutoff,ipoint) shared(intens_omp) schedule(dynamic)
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,int_cutoff,ipoint) shared(intens_omp) schedule(dynamic)
             do iomp = 1,N_omp_procs
               !
               do iswap = iomp,nswap,N_omp_procs
@@ -3712,9 +3712,9 @@ module spectrum
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
                 !
-                cutoff =  apply_HITRAN_cutoff(tranfreq)
+                int_cutoff =  apply_HITRAN_cutoff(tranfreq)
                 !
-                if (abscoef<cutoff) cycle
+                if (abscoef<int_cutoff) cycle
                 !
                 call get_grid_ipoint(tranfreq,freq,ipoint)
                 !
@@ -3737,7 +3737,7 @@ module spectrum
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
                 !
-                call do_rect(tranfreq,abscoef,dfreq,freq,offset,freql,intens_omp(:,iomp))
+                call do_rect(tranfreq,abscoef,dfreq,freq,cutoff,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3754,9 +3754,9 @@ module spectrum
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
                 !
-                !cutoff =  apply_HITRAN_cutoff(tranfreq)
+                !int_cutoff =  apply_HITRAN_cutoff(tranfreq)
                 !
-                !if (abscoef<cutoff) cycle
+                !if (abscoef<int_cutoff) cycle
                 !
                 call get_grid_ipoint(tranfreq,freq,ipoint)
                 !
@@ -4155,22 +4155,22 @@ module spectrum
   end subroutine intensity
   !
   !
-  function apply_HITRAN_cutoff(tranfreq) result(cutoff)
+  function apply_HITRAN_cutoff(tranfreq) result(int_cutoff)
       !
       implicit none
       !
       real(rk),intent(in) :: tranfreq
-      real(rk)  :: cutoff
+      real(rk)  :: int_cutoff
       !
-      ! HITRAN cutoff model as an intensity threshold
-      if (trim(cutoff_model)=="HITRAN") then
+      ! HITRAN int_cutoff model as an intensity threshold
+      if (trim(cutoff_intensity_model)=="HITRAN") then
          if (tranfreq<=nu_crit) then
-           cutoff = S_crit*tranfreq/nu_crit*tanh(0.5_rk*c2/temp*tranfreq)
+           int_cutoff = S_crit*tranfreq/nu_crit*tanh(0.5_rk*c2/temp*tranfreq)
          else
-           cutoff = S_crit
+           int_cutoff = S_crit
          endif
       else
-         cutoff = thresh
+         int_cutoff = thresh
       endif
       !
    end function apply_HITRAN_cutoff
@@ -4200,15 +4200,15 @@ module spectrum
      real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,freql
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
-     real(rk) :: alpha,abscoef,dfreq_,de,ln2,offset_
+     real(rk) :: alpha,abscoef,dfreq_,de,ln2,cutoff_
      integer(ik) :: ib,ie,ipoint
      !
      if (halfwidth<small_) return
      !
-     offset_ = offset
-     if ( use_width_offset ) offset_ = offset*halfwidth
+     cutoff_ = cutoff
+     if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth
      !
-     call get_ipoint_ranges(tranfreq,freq,offset_,ib,ie)
+     call get_ipoint_ranges(tranfreq,freq,cutoff_,ib,ie)
      !
      ln2=log(2.0_rk)
      alpha = -ln2/halfwidth**2
@@ -4229,13 +4229,13 @@ module spectrum
   !
   !
   ! Obtain left and right grid points around the current frequency
-  subroutine get_ipoint_ranges(tranfreq,freq,offset,ib,ie)
+  subroutine get_ipoint_ranges(tranfreq,freq,cutoff,ib,ie)
      !
-     real(rk),intent(in) :: tranfreq,offset
+     real(rk),intent(in) :: tranfreq,cutoff
      real(rk),intent(in) :: freq(npoints)
      integer(ik),intent(out) :: ib,ie
      !
-     real(rk) :: dfreq_t,freql_t,offset_
+     real(rk) :: dfreq_t,freql_t,cutoff_
      integer(ik) :: igrid
      !
      ib = 1
@@ -4244,10 +4244,10 @@ module spectrum
      if (use_resolving_power) then
          !
          dfreq_t = log(freq(2)) - log(freq(1))
-         ib = nint((log(tranfreq - offset) - log(freql))/dfreq_t) + 1
+         ib = nint((log(tranfreq - cutoff) - log(freql))/dfreq_t) + 1
          ib = max(ib, 1)
          !
-         ie = nint((log(tranfreq + offset) - log(freql))/dfreq_t) + 1
+         ie = nint((log(tranfreq + cutoff) - log(freql))/dfreq_t) + 1
          ie = min(ie,npoints)
          !
          return
@@ -4262,21 +4262,21 @@ module spectrum
        !
        dfreq_t = grid(igrid)%dfreq
        freql_t = grid(igrid)%freql
-       offset_ = grid(igrid)%offset
+       cutoff_ = grid(igrid)%cutoff
        !
-       if (tranfreq-offset_>=grid(igrid)%freql) then
-         ib =  max(nint( ( tranfreq-offset_-freql_t)/dfreq_t )+1,1)
+       if (tranfreq-cutoff_>=grid(igrid)%freql) then
+         ib =  max(nint( ( tranfreq-cutoff_-freql_t)/dfreq_t )+1,1)
          ib = grid(igrid)%i1+ib-1
        elseif(igrid>1) then
-         ib =  max(nint( ( tranfreq-offset_-grid(igrid-1)%freql)/grid(igrid-1)%dfreq )+1,1)
+         ib =  max(nint( ( tranfreq-cutoff_-grid(igrid-1)%freql)/grid(igrid-1)%dfreq )+1,1)
          ib = grid(igrid-1)%i1+ib-1
        endif
        !
-       if (tranfreq+offset_<=grid(igrid)%freqr) then
-         ie =  min(nint( ( tranfreq+offset_-freql_t)/dfreq_t )+1,npoints)
+       if (tranfreq+cutoff_<=grid(igrid)%freqr) then
+         ie =  min(nint( ( tranfreq+cutoff_-freql_t)/dfreq_t )+1,npoints)
          ie = grid(igrid)%i1+ie-1
        elseif(igrid<Ngrids) then
-         ie =  min(nint( ( tranfreq+offset_-grid(igrid+1)%freql)/grid(igrid+1)%dfreq )+1,npoints)
+         ie =  min(nint( ( tranfreq+cutoff_-grid(igrid+1)%freql)/grid(igrid+1)%dfreq )+1,npoints)
          ie = grid(igrid+1)%i1+ie-1
        endif
        !
@@ -4285,8 +4285,8 @@ module spectrum
        freql_t = freq(1)
        dfreq_t = freq(2) - freq(1)
        !
-       ib =  max(nint( ( tranfreq-offset-freql_t)/dfreq_t )+1,1)
-       ie =  min(nint( ( tranfreq+offset-freql_t)/dfreq_t )+1,npoints)
+       ib =  max(nint( ( tranfreq-cutoff-freql_t)/dfreq_t )+1,1)
+       ie =  min(nint( ( tranfreq+cutoff-freql_t)/dfreq_t )+1,npoints)
        !
      endif
      !
@@ -4336,14 +4336,14 @@ module spectrum
   end subroutine get_grid_ipoint
   !
   !
-  subroutine do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens)
+  subroutine do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,cutoff,freql
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
-     real(rk) :: dfreq_,de,xp,xm,ln2,x0,offset_
+     real(rk) :: dfreq_,de,xp,xm,ln2,x0,cutoff_
      integer(ik) :: ib,ie,ipoint
      !
      if (halfwidth<small_) return 
@@ -4352,11 +4352,11 @@ module spectrum
      !
      x0 = sqrt(ln2)/halfwidth*dfreq*0.5_rk
      !
-     offset_ = offset
-     if ( use_width_offset ) offset_ = offset*halfwidth
+     cutoff_ = cutoff
+     if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth
      !
-     ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+offset_-freql)/dfreq )+1,npoints)
+     ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+cutoff_-freql)/dfreq )+1,npoints)
      !
      !omp parallel do private(ipoint,dfreq_,xp,xm,de) shared(intens) schedule(dynamic)
      do ipoint=ib,ie
@@ -4376,21 +4376,21 @@ module spectrum
   end subroutine do_gauss_binning
   !
   !
-  subroutine do_lorentz_binning(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens)
+  subroutine do_lorentz_binning(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,cutoff,freql
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
-     real(rk) :: dfreq_,de,xp,xm,b,dnu_half,offset_
+     real(rk) :: dfreq_,de,xp,xm,b,dnu_half,cutoff_
      integer(ik) :: ib,ie,ipoint
      !
-     offset_ = offset
-     if ( use_width_offset ) offset_ = offset*halfwidth
+     cutoff_ = cutoff
+     if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth
      !
-     ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+     ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+cutoff-freql)/dfreq )+1,npoints)
      !
      !abscoef=abscoef*sqrt(ln2/pi)/halfwidth
      !
@@ -4435,21 +4435,21 @@ module spectrum
   ! 
   ! A sampling version of the Lorentzian line profile
   !
-  subroutine do_lorentz(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens)
+  subroutine do_lorentz(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,cutoff,freql
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
-     real(rk) :: dfreq_,de,xp,xm,b,dnu_half,offset_,gamma2,lor,dfreq_2
+     real(rk) :: dfreq_,de,xp,xm,b,dnu_half,cutoff_,gamma2,lor,dfreq_2
      integer(ik) :: ib,ie,ipoint
      !
-     offset_ = offset
-     if ( use_width_offset ) offset_ = offset*halfwidth
+     cutoff_ = cutoff
+     if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth
      !
-     ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+     ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+cutoff-freql)/dfreq )+1,npoints)
      !
      !f := gamma/(Pi*((nu-x)^2+gamma^2))*A
      !
@@ -4473,21 +4473,21 @@ module spectrum
   
   !
   ! computing cross sections errors using energy uncertainties and Lorentz line profile
-  subroutine do_lorentz_error(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,intens)
+  subroutine do_lorentz_error(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,cutoff,freql
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
-     real(rk) :: dfreq_,de,xp,xm,b,dnu_half,offset_,dfreq_2,abscoef_,lor,lor2,flor
+     real(rk) :: dfreq_,de,xp,xm,b,dnu_half,cutoff_,dfreq_2,abscoef_,lor,lor2,flor
      integer(ik) :: ib,ie,ipoint
      !
-     offset_ = offset
-     if ( use_width_offset ) offset_ = offset*halfwidth
+     cutoff_ = cutoff
+     if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth
      !
-     ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+     ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+cutoff-freql)/dfreq )+1,npoints)
      !
      !f := gamma/(Pi*((nu-x)^2+gamma^2))
      !
@@ -4510,14 +4510,14 @@ module spectrum
      !
   end subroutine do_lorentz_error  
 
-  subroutine do_pseud(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
+  subroutine do_pseud(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,dpwcoef,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql,dpwcoef
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,cutoff,freql,dpwcoef
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
-     real(rk) :: dfreq_,de,xp,xm,ln2,dnu_half,bnorm,f,eta1,eta2,intens2,halfwidth0,x0,intens1,offset_
+     real(rk) :: dfreq_,de,xp,xm,ln2,dnu_half,bnorm,f,eta1,eta2,intens2,halfwidth0,x0,intens1,cutoff_
      integer(ik) :: ib,ie,ipoint
 
       !
@@ -4525,11 +4525,11 @@ module spectrum
       halfwidth0=dpwcoef*tranfreq
       x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
       !
-      offset_ = offset
-      if ( use_width_offset ) offset_ = offset*max(halfwidth0,halfwidth)
+      cutoff_ = cutoff
+      if ( use_width_cutoff ) cutoff_ = cutoff*max(halfwidth0,halfwidth)
       !
-      ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
-      ie =  min(nint( ( tranfreq+offset_-freql)/dfreq )+1,npoints)
+      ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
+      ie =  min(nint( ( tranfreq+cutoff_-freql)/dfreq )+1,npoints)
       !
       !abscoef=abscoef*sqrt(ln2/pi)/halfwidth
       !
@@ -4577,26 +4577,26 @@ module spectrum
 
   end subroutine do_pseud
 
-  subroutine do_pse_R(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
+  subroutine do_pse_R(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,dpwcoef,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql,dpwcoef
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,cutoff,freql,dpwcoef
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
      real(rk) :: dfreq_,de,xp,xm,ln2,dnu_half,bnorm,eta1,eta2,intens2,halfwidth0,x0,a,wg,va0
-     real(rk) :: gammaV,intens1,offset_
+     real(rk) :: gammaV,intens1,cutoff_
      integer(ik) :: ib,ie,ipoint
      !
      ln2=log(2.0_rk)
      halfwidth0=dpwcoef*tranfreq
      x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
      !
-     offset_ = offset
-     if ( use_width_offset ) offset_ = offset*max(halfwidth0,halfwidth)
+     cutoff_ = cutoff
+     if ( use_width_cutoff ) cutoff_ = cutoff*max(halfwidth0,halfwidth)
      !
-     ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+offset_-freql)/dfreq )+1,npoints)
+     ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+cutoff_-freql)/dfreq )+1,npoints)
      !
      dfreq_=freq(ib)-tranfreq
      !
@@ -4647,26 +4647,26 @@ module spectrum
      !
   end subroutine do_pse_R
       !
-  subroutine  do_pse_L(tranfreq,abscoef,dfreq,freq,halfwidth,offset,freql,dpwcoef,intens)
+  subroutine  do_pse_L(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,dpwcoef,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql,dpwcoef
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,cutoff,freql,dpwcoef
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
      real(rk) :: dfreq_,de,xp,xm,ln2,bnorm,eta1,eta2,intens2,halfwidth0
-     real(rk) :: d,x0,intens1,dnu_half,offset_
+     real(rk) :: d,x0,intens1,dnu_half,cutoff_
      integer(ik) :: ib,ie,ipoint
      !
      ln2=log(2.0_rk)
      halfwidth0=dpwcoef*tranfreq
      x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
      !
-     offset_ = offset
-     if ( use_width_offset ) offset_ = offset*max(halfwidth0,halfwidth)
+     cutoff_ = cutoff
+     if ( use_width_cutoff ) cutoff_ = cutoff*max(halfwidth0,halfwidth)
      !
-     ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+offset_-freql)/dfreq )+1,npoints)
+     ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+cutoff_-freql)/dfreq )+1,npoints)
      !
      dfreq_=freq(ib)-tranfreq
      !
@@ -4714,29 +4714,29 @@ module spectrum
   end subroutine  do_pse_L
 
 
-  subroutine do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth,offset,freql,dpwcoef,intens)
+  subroutine do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth,cutoff,freql,dpwcoef,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,offset,freql,dpwcoef
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,cutoff,freql,dpwcoef
      real(rk),intent(in) :: freq(npoints),abciss(nquad),weight(nquad)
      real(rk),intent(inout) :: intens(npoints)
      real(rk) :: alpha,ln2,halfwidth0,gamma,xp
-     real(rk) :: ln22,y,dx2,x0,sigma,xi,x1,x2,l1,l2,bnormq(1:nquad),Lorentz(nquad),dxp,voigt_,offset_
+     real(rk) :: ln22,y,dx2,x0,sigma,xi,x1,x2,l1,l2,bnormq(1:nquad),Lorentz(nquad),dxp,voigt_,cutoff_
      integer(ik) :: ib,ie,ipoint,iquad
      !
      halfwidth0=dpwcoef*tranfreq
      if (halfwidth0<100.0_rk*small_) return
      !
-     offset_ = offset
-     if ( use_width_offset ) offset_ = offset*max(halfwidth0,halfwidth)
+     cutoff_ = cutoff
+     if ( use_width_cutoff ) cutoff_ = cutoff*max(halfwidth0,halfwidth)
      !
      ln2=log(2.0_rk)
      ln22 = ln2*2.0_rk
      x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
      !
-     ib =  max(nint( ( tranfreq-offset_-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+offset_-freql)/dfreq )+1,npoints)
+     ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+cutoff_-freql)/dfreq )+1,npoints)
      !
      if (ie<=ib) return
      !
@@ -4797,37 +4797,37 @@ module spectrum
      !
   end subroutine  do_Voi_Q
   !
-  subroutine  do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth_Lorentz,dpwcoef,offset,freql,intens)
+  subroutine  do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth_Lorentz,dpwcoef,cutoff,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,halfwidth_Lorentz,offset,freql,dpwcoef
+     real(rk),intent(in) :: tranfreq,abscoef,halfwidth_Lorentz,cutoff,freql,dpwcoef
      real(rk),intent(in) :: freq(:)
      real(rk),intent(out) :: intens(:)
-     real(rk) :: tranfreq_i,halfwidth_doppler,offset_
+     real(rk) :: tranfreq_i,halfwidth_doppler,cutoff_
      integer(ik) :: ib,ie,ipoint
      logical, intent(in) :: use_resolving_power
       !
       halfwidth_doppler=dpwcoef*tranfreq
       !
-      offset_ = offset
-      if ( use_width_offset ) offset_ = offset*halfwidth_Lorentz
+      cutoff_ = cutoff
+      if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth_Lorentz
       !
-      call get_ipoint_ranges(tranfreq,freq,offset_,ib,ie)
+      call get_ipoint_ranges(tranfreq,freq,cutoff_,ib,ie)
       !
       if (halfwidth_doppler<100.0_rk*small_) return
       !
       !if (use_resolving_power) then
       !   d_ln_freq = log(freq(2)) - log(freq(1))
-      !   ib = nint((log(tranfreq - offset) - log(freql))/d_ln_freq) + 1
+      !   ib = nint((log(tranfreq - cutoff) - log(freql))/d_ln_freq) + 1
       !   ib = max(ib, 1)
       !   
-      !   ie = nint((log(tranfreq + offset) - log(freql))/d_ln_freq) + 1
+      !   ie = nint((log(tranfreq + cutoff) - log(freql))/d_ln_freq) + 1
       !   ie = min(ie, npoints)
       !else
       !   d_freq = freq(2) - freq(1)
-      !   ib =  max(nint( ( tranfreq-offset-freql)/d_freq )+1,1)
-      !   ie =  min(nint( ( tranfreq+offset-freql)/d_freq )+1,npoints)
+      !   ib =  max(nint( ( tranfreq-cutoff-freql)/d_freq )+1,1)
+      !   ie =  min(nint( ( tranfreq+cutoff-freql)/d_freq )+1,npoints)
       !   !
       !endif
       !
@@ -4847,11 +4847,11 @@ module spectrum
   end subroutine  do_Voigt
   !
 
-  subroutine  do_Voigt_Fast(tranfreq,abscoef,use_resolving_power,freq,index_Lorentz,dpwcoef,offset,freql,intens)
+  subroutine  do_Voigt_Fast(tranfreq,abscoef,use_resolving_power,freq,index_Lorentz,dpwcoef,cutoff,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,offset,freql,dpwcoef
+     real(rk),intent(in) :: tranfreq,abscoef,cutoff,freql,dpwcoef
      real(rk),intent(in) :: freq(:)
      integer,intent(in)  :: index_Lorentz
      real(rk),intent(out) :: intens(:)
@@ -4864,15 +4864,15 @@ module spectrum
       !
       if (use_resolving_power) then
          d_ln_freq = log(freq(2)) - log(freq(1))
-         ib = nint((log(tranfreq - offset) - log(freql))/d_ln_freq) + 1
+         ib = nint((log(tranfreq - cutoff) - log(freql))/d_ln_freq) + 1
          ib = max(ib, 1)
          
-         ie = nint((log(tranfreq + offset) - log(freql))/d_ln_freq) + 1
+         ie = nint((log(tranfreq + cutoff) - log(freql))/d_ln_freq) + 1
          ie = min(ie, npoints)
       else
          d_freq = freq(2) - freq(1)
-         ib =  max(nint( ( tranfreq-offset-freql)/d_freq )+1,1)
-         ie =  min(nint( ( tranfreq+offset-freql)/d_freq )+1,npoints)
+         ib =  max(nint( ( tranfreq-cutoff-freql)/d_freq )+1,1)
+         ie =  min(nint( ( tranfreq+cutoff-freql)/d_freq )+1,npoints)
       endif
       !
       call fast_voigt%compute(freq,intens, abscoef,ib,ie,freql,tranfreq,index_Lorentz)
@@ -4880,11 +4880,11 @@ module spectrum
   end subroutine  do_Voigt_Fast
   !
   !
-  subroutine  do_Voigt_916(tranfreq,abscoef,dfreq,freq,halfwidth_Lorentz,dpwcoef,offset,freql,intens)
+  subroutine  do_Voigt_916(tranfreq,abscoef,dfreq,freq,halfwidth_Lorentz,dpwcoef,cutoff,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth_Lorentz,offset,freql,dpwcoef
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth_Lorentz,cutoff,freql,dpwcoef
      real(rk),intent(in) :: freq(:)
      real(rk),intent(out) :: intens(:)
      real(rk) :: tranfreq_i,halfwidth_doppler
@@ -4894,8 +4894,8 @@ module spectrum
       !
       halfwidth_doppler=dpwcoef*tranfreq
       if (halfwidth_doppler<100.0_rk*small_) return
-      ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
-      ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+      ib =  max(nint( ( tranfreq-cutoff-freql)/dfreq )+1,1)
+      ie =  min(nint( ( tranfreq+cutoff-freql)/dfreq )+1,npoints)
       !
       !$omp parallel do private(ipoint,tranfreq_i) shared(intens) schedule(dynamic)
       do ipoint=ib,ie
@@ -4910,18 +4910,18 @@ module spectrum
   end subroutine  do_Voigt_916
   !
 
-  subroutine  do_rect(tranfreq,abscoef,dfreq,freq,offset,freql,intens)
+  subroutine  do_rect(tranfreq,abscoef,dfreq,freq,cutoff,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,offset,freql
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,cutoff,freql
      real(rk),intent(in) :: freq(:)
      real(rk),intent(out) :: intens(:)
      real(rk) :: tranfreq_i
      integer(ik) :: ib,ie,ipoint
       !
-      ib =  max(nint( ( tranfreq-offset-freql)/dfreq )+1,1)
-      ie =  min(nint( ( tranfreq+offset-freql)/dfreq )+1,npoints)
+      ib =  max(nint( ( tranfreq-cutoff-freql)/dfreq )+1,1)
+      ie =  min(nint( ( tranfreq+cutoff-freql)/dfreq )+1,npoints)
       !
       !$omp parallel do private(ipoint,tranfreq_i) shared(intens) schedule(dynamic)
       do ipoint=ib,ie
