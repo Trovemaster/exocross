@@ -3026,6 +3026,19 @@ module spectrum
            if (verbose>=5.and.nswap_<N_to_RAM.and.proftype(1:5)/="STICK") print('(a,i12,a)'), &
                                                   "Now computing ... ",nswap_," transitions..."
            !
+           select case (trim(specttype))
+             !
+           case ('ABSORPTION','EMISSION','GF','LIFETIME','T-LIFETIME')
+             !
+             ! all good
+             !
+           case default
+             !
+             print('(a,2x,a)'),'Illegal key:',trim(specttype)
+             stop 'Illegal specttype-key'
+             !
+           end select
+           !
            !read(tunit,*,end=20) indexf,indexi,acoef
            iswap_ = 1
            !
@@ -3054,6 +3067,28 @@ module spectrum
              !
              energyf = energies(ilevelf)
              energyi = energies(ileveli)
+             !
+             tranfreq = energyf-energyi
+             !
+             tranfreq = tranfreq + lineshift
+             !
+             tranfreq0 = tranfreq
+             !
+             if (microns) then
+               cutoff = cutoff/tranfreq**2
+               tranfreq0 = 10000.0_rk/(tranfreq+small_)
+             endif
+             !
+             if (energyf-energyi<-30e1) then
+               write(out,"('Error Ei>Ef+10: i,f,indi,indf,Aif,Ef,Ei = ',4i12,2x,3es16.8)") & 
+                    ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
+               stop 'wrong order of indices'
+               cycle loop_swap
+             elseif (energyf-energyi<small_) then
+               cycle loop_swap
+             endif
+             !
+             if (tranfreq0<freql.or.tranfreq0>freqr) cycle
              !
              if (filter) then
                !
@@ -3101,37 +3136,7 @@ module spectrum
                 !
              endif
              !
-             jf = jrot(ilevelf)
-             ji = jrot(ileveli)
-             !
-             tranfreq = energyf-energyi
-             !
-             tranfreq = tranfreq + lineshift
-             !
-             tranfreq0 = tranfreq
-             !
-             if (microns) then
-               cutoff = cutoff/tranfreq**2
-               tranfreq0 = 10000.0_rk/(tranfreq+small_)
-             endif
-             !
-             if (energyf-energyi<-30e1) then
-               write(out,"('Error Ei>Ef+10: i,f,indi,indf,Aif,Ef,Ei = ',4i12,2x,3es16.8)") & 
-                    ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
-               stop 'wrong order of indices'
-               cycle loop_swap
-             elseif (energyf-energyi<small_) then
-               cycle loop_swap
-             endif
-             !
-             if (tranfreq0<freql.or.tranfreq0>freqr) cycle
-             !
              select case (trim(specttype))
-               !
-             case default
-               !
-               print('(a,2x,a)'),'Illegal key:',trim(specttype)
-               stop 'Illegal specttype-key'
                !
              case ('ABSORPTION')
                !
@@ -3200,6 +3205,12 @@ module spectrum
              !
              select case (trim(cutoff_intensity_model))
                 !
+             case ("NONE")
+                !
+                if (abscoef<int_cutoff) then
+                  cycle loop_swap
+                endif
+                !
              case ("EXP","GRID")
                 !
                 abscoef_ref =cmcoef*acoef*gtot(ilevelf)*exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))/&
@@ -3241,12 +3252,6 @@ module spectrum
                   cycle loop_swap
                 endif
                 !
-             case default
-               !
-               if (abscoef<int_cutoff) then
-                 cycle loop_swap
-               endif
-               !
              end select
              !
              ilevelf_ram(iswap) = ilevelf
@@ -3257,6 +3262,9 @@ module spectrum
              nu_ram(iswap) = tranfreq
              !
              if (lineprofile_do) then
+                !
+                jf = jrot(ilevelf)
+                ji = jrot(ileveli)
                 !
                 gamma_ram(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji)
                 temp_gamma_n = get_Voigt_gamma_n(Nspecies,Jf,Ji,gamma_idx_RAM(iswap))
