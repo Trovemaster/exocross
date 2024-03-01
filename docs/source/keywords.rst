@@ -419,7 +419,17 @@ Example
       error-E  qn 4 ierr 4  vmax  10 ierr 3  vmax  20 ierr 2  vmax  30  ierr 1  vmax  40 ierr 0  vmax  100
       error-S  qn 4 ierr 5  vmax  10 ierr 4  vmax  20 ierr 3  vmax  100
       error-Air   ierr 4
+      error-Self  ierr 4
+      error-N      ierr 4
+      error-delta  ierr 4
+      error-unc 
      end
+
+Here ``error-unc`` is to define the energies/frequency error using the ExoMol uncertanties from column 5 in States file. 
+
+``error-E`` and ``error-S`` define uncertanties of the frequencies and intensities based on the quantum numbers. 
+
+``error-Air``, ``error-self``, ``error-N``, ``error-delta`` define  ucertanties of the corresponding line shape parameters.
 
 
 * `grid` is to define a multi-grid with different resolutions in different sub-grids as follows
