@@ -125,6 +125,7 @@ module spectrum
              vibpopulation_do = .false., super_energies_do = .false., super_Einstein_do = .false., &
              uncertainty_filter_do = .false.,stick_vald = .false., error_cross_sections_do = .false., &
              phoenix_do = .false., predissociation_do = .false.
+  logical :: do_nu_error_based_on_unc = .false.
   logical :: lineprofile_do = .false., use_width_cutoff = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
@@ -599,6 +600,11 @@ module spectrum
             do while (trim(w)/="".and.trim(w)/="END")
                !
                select case(w)
+                 !
+               case("ERROR-UNC")  
+                 !
+                 ! activate the feature of error based on uncertanties of the energies 
+                 do_nu_error_based_on_unc = .true.
                  !
                case("ERROR-E","ERROR-S")
                  !
@@ -1847,10 +1853,9 @@ module spectrum
            if (uncertainty_filter_do) then
               !
               ! reconstruct the uncertainty from 
-              read(quantum_numbers(QN%unc_col-4,i),*) unc_f
               read(quantum_numbers(QN%unc_col-4,i),*) unc_i
               !
-              if (unc_f>unc_threshold.or.unc_i>unc_threshold) then
+              if (unc_i>unc_threshold) then
                  !
                  ! remove the state by skipping the rest of processing list and unrolling the state index: 
                  !
@@ -4957,11 +4962,11 @@ module spectrum
      integer(ik),intent(in) :: nchars_quanta(maxitems),gtot(nlines)
      character(len=20),intent(in) :: quantum_numbers(0:maxitems,nlines)
      integer(ik) :: nchars_,kitem,ierror_nu,iE,ierror_i,ierror,ierror_S,l,qni,qnf,ierror_f,&
-                    ilevelf,ileveli,iswap,nchars_tot
+                    ilevelf,ileveli,iswap,nchars_tot,ierror_nu_
      character(9) :: b_fmt
      character(len=cl) :: h_fmt
      integer(ik) :: Jpp,Jp,i
-     real(rk)    :: gamma1,gamma2,gamma3,n1,n2,n3
+     real(rk)    :: gamma1,gamma2,gamma3,n1,n2,n3,unc_i,unc_f,unc_tot
      !
      !
      do iswap = 1,nswap
@@ -5003,7 +5008,9 @@ module spectrum
          !
          do kitem = 3,maxitems
            !
-           l = len(trim(quantum_numbers(kitem,ilevelf)))
+           !l = len(trim(quantum_numbers(kitem,ilevelf)))
+           !
+           if (nchars_quanta(kitem)>9) cycle
            !
            write(b_fmt,"('(a',i1,')')") nchars_quanta(kitem)
            !
@@ -5020,7 +5027,9 @@ module spectrum
          !
          do kitem = 3,maxitems
            !
-           !l = len(trim(quantum_numbers(kitem,ileveli)))
+           l = len(trim(quantum_numbers(kitem,ileveli)))
+           !
+           if (nchars_quanta(kitem)>9) cycle
            !
            !b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
            !
@@ -5055,7 +5064,7 @@ module spectrum
            !
          endif
          !
-         ierror_nu = 0
+         ierror_nu = 10
          !
          do iE = 1,HITRAN_E(1)%N
             !
@@ -5071,6 +5080,21 @@ module spectrum
             ierror_nu = max(ierror_i,ierror_f)
             !
          enddo
+         !
+         ! use uncertanties from column 5
+         !
+         if (do_nu_error_based_on_unc) then
+           !
+           read(quantum_numbers(QN%unc_col-4,ilevelf),*,err=101) unc_f
+           read(quantum_numbers(QN%unc_col-4,ileveli),*,err=101) unc_i
+           !
+           unc_tot = sqrt((unc_f**2+unc_i**2))
+           !
+           ierror_nu_ = max(int(-log10(unc_tot)+1.0_rk),0)
+           !
+           ierror_nu = min(ierror_nu_,ierror_nu)
+           !
+         endif
          !
          ierror_S = 0
          !
@@ -5306,6 +5330,11 @@ module spectrum
        endif
        !
     enddo
+    !
+    101 continue
+    !
+    write(out,"('Error read of unc: missing or wrongly specified UNC in QN')") 
+    stop 'Error read of unc: missing or wrongly specified UNC in QN'
 
   end subroutine do_stick
 
