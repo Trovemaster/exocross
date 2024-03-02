@@ -10,8 +10,14 @@ build:
   tools:
     python: "3.12"
 
-mkdocs:
-  configuration: mkdocs.yml
+#mkdocs:
+#  configuration: mkdocs.yml
+
+sphinx:
+  builder: html
+  configuration: conf.py
+  fail_on_warning: true
+
 
 # Optionally declare the Python requirements required to build your docs
 #python:
