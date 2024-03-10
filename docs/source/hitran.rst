@@ -142,6 +142,55 @@ The intensity cut-off (stick) can be done using the HITRAN method:
 
 
 
+
+
+A complete example for an SO line list:
+::
+
+    Temperature  296
+    Range 0.0  45000.0 
+    
+    absorption
+    stick
+    threshold -1e-30
+    
+    hitran write 
+    
+    iso 50 1
+    
+    QN
+    Gamma  7
+    global   8 9 10 11
+    local    7
+    end
+    
+    hitran write
+       error-E     ierr 1
+       error-S     ierr 3
+       error-Air   ierr 0
+       error-self  ierr 0
+       error-n     ierr 0
+       error-delta ierr 0
+       error-unc
+    end
+    
+    abundance 0.947926
+    
+    pressure  1.0
+    species
+        air   gamma 0.0000 n 0.00 t0 296.0  ratio 0.00 delta 0.000
+        self  gamma 0.0000 n 0.00 t0 296.0  ratio 0.00 delta 0.000
+    end
+    
+    output SO_298K_HITRAN
+    
+    States 32S_16O__SOLIS_MARVELised.states
+    
+    Transitions  32S-16O__SOLIS.trans
+    
+
+
+              
 VALD
 ====
 
