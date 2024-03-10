@@ -12,8 +12,8 @@ module spectrum
   !
   integer(ik),parameter   :: nfiles_max =1000, max_items = 1000, nspecies_max = 10, nquadmax = 101, filtermax = 100
   integer(ik),parameter   :: Ngrids_max = 100
-  integer(ik),parameter :: HITRAN_max_ierr = 10            ! maximal number of QNs for error-specification in HITRAN
-  integer(hik),parameter :: max_transitions_to_ram = 1000000000
+  integer(ik),parameter   :: HITRAN_max_ierr = 10            ! maximal number of QNs for error-specification in HITRAN
+  integer(hik),parameter  :: max_transitions_to_ram = 1000000000
   integer(ik) :: N_omp_procs=1
   !
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,icutoff = 10,iso=1,imolecule =-1
@@ -63,12 +63,13 @@ module spectrum
     !
   end type speciesT
 
-  type HitranErrorT ! broadener
+  type HitranErrorT ! Error
     !
-    integer(ik) :: iqn                ! the QN-index used for error
-    integer(ik) :: error_vmax(0:6)=-1  ! errors vs range of qn
-    integer(ik) :: N=0                ! Number of QN-entries
-    integer(ik) :: ierr = 0           ! Number of QN-entries
+    integer(ik) :: iqn                 ! the QN-index used for error
+    integer(ik) :: error_vmax(0:10)=-1 ! errors vs range of qn
+    integer(ik) :: N=0                 ! Number of QN-entries
+    integer(ik) :: ierr = 0            ! Error code
+    integer(ik) :: vmax = -1            ! maximal number of QNs for error-specification in HITRAN
     !
   end type HitranErrorT
 
@@ -87,14 +88,18 @@ module spectrum
     !
     integer(ik) :: Kcol=1                ! Column with K 
     integer(ik) :: statecol=7            ! State column
-    integer(ik) :: vibcol(2)=8           ! Range of columns with vib quanta 
+    integer(ik) :: vibcol(10)=8          ! Range of columns with vib quanta 
+    integer(ik) :: Nvibcol = 0           ! Number of columns with vib quanta
     integer(ik) :: Nmodes= 1             ! Number of vib modes
     integer(ik) :: Nsym=1                ! Number of symmetries
-    integer(ik) :: Rotcol(2)=(/5,6/)     ! Columns with Rot-QNs
+    integer(ik) :: Rotcol(10)=7          ! Columns with Rot-QNs
+    integer(ik) :: NRotCol = 0           ! Number of columns with vib quanta
+    integer(ik) :: SymCol=7              ! Columns with Rot-QNs
     integer(ik) :: dens_col = 0          ! column with number density 
     integer(ik) :: lifetime_col = 6      ! column with lifetimes 
     integer(ik) :: unc_col = 5           ! column with uncertainty (5 is default)
     real(rk)    :: Jref = 0              ! Reference J used to define the vibronic contribution
+    !integer(ik) :: selected = (//)       ! column with uncertainty (5 is default)
     !
   end type QNT
   !
@@ -149,7 +154,7 @@ module spectrum
     logical :: eof,if_halfwidth_defined = .false., if_species_defined = .false., if_QN_defined = .false.
     character(len=cl) :: w
     character(len=wl) :: vl
-    integer(ik)   :: i,ifilter,iE,iS,npoints0,ierror,igrid
+    integer(ik)   :: i,ifilter,iE,iS,npoints0,ierror,igrid,i_t
     type(HitranErrorT),pointer :: HITRAN
     real(rk) :: f_t
     ! -----------------------------------------------------------
@@ -473,23 +478,27 @@ module spectrum
               !
               call readi(QN%Kcol)
               !
+            case ("SYMMETRY","SYM","GAMMA")
+              !
+              call readi(i_t)
+              QN%SymCol = i_t-4
+              !
             case ("LIFETIME","LIFETIMES")
               !
               call readi(QN%lifetime_col)
               !
-            case ("ROT")
+            case ("ROT","LOCAL")
               !
-              call readi(QN%rotcol(1))
+              do i = 1,Nitems-1
+                !
+                call readi(i_t)
+                QN%Rotcol(i) = i_t-4
+                !
+              enddo
               !
-              if (Nitems>2) then 
-                !
-                call readi(QN%Rotcol(2))
-                !
-              else
-                !
-                QN%Rotcol(2) = QN%Rotcol(1)
-                !
-              endif
+              QN%NRotcol = Nitems-1
+              !
+              if (QN%NRotcol==1)  QN%Rotcol(2)= QN%Rotcol(1)
               !
             case ("DENSITY","DENS")
               !
@@ -502,19 +511,20 @@ module spectrum
               !
               call readi(QN%unc_col)
               !
-            case ("VIB","VIBRATIONAL")
+            case ("VIB","VIBRATIONAL","GLOBAL")
               !
-              call readi(QN%Vibcol(1))
+              if (Nitems-1>10) call report (" number of Vib entries must be <=10 "//trim(w),.true.)
               !
-              if (Nitems>2) then 
+              do i = 1,Nitems-1
                 !
-                call readi(QN%Vibcol(2))
+                call readi(i_t)
+                QN%Vibcol(i) = i_t-4
                 !
-              else
-                !
-                QN%Vibcol(2) = QN%Vibcol(1)
-                !
-              endif
+              enddo
+              !
+              QN%Nvibcol = Nitems-1
+              !
+              if (QN%Nvibcol==1)  QN%Vibcol(2)= QN%Vibcol(1)
               !
             case ("STATE","STATES")
               !
@@ -642,11 +652,17 @@ module spectrum
                      if (ierror<0.or.ierror>6) &
                         call report("Illegal error code in HITRAN options, must be within [0..6] "//trim(w),.true.)
                      !
+                     HITRAN%ierr = ierror
+                     !
+                     if (item>=Nitems) cycle
+                     !
                      call readu(w)
                      !
                      if (trim(w)/="VMAX") call report("Illegal record, vmax is expected after ierr value in HITRAN"//trim(w),.true.)
                      !
                      call readi(hitran%error_vmax(ierror))
+                     !
+                     HITRAN%vmax = HITRAN%vmax + 1
                      !
                    end select
                  enddo
@@ -1599,8 +1615,8 @@ module spectrum
         !
         ivib_state = 1
         energies_vib = 0
-        ivib1 = QN%vibcol(1)-4
-        ivib2 = QN%vibcol(2)-4
+        ivib1 = QN%vibcol(1)
+        ivib2 = QN%vibcol(2)
         !
         ! read and define vibrational energies 
         !
@@ -2554,7 +2570,8 @@ module spectrum
        if (verbose>=2) then
           !
           write(out,"(10x,/'Stick pectra of type ',a,' using the VALD format:')") 
-          write(out,"(a)") 'wavelength in Angstrom, lower state energy in eV, log10(gf), 0.0, the stat. weight 2Ju+1 (upper state J), zero' 
+          write(out,"(a,a)") 'wavelength in Angstrom, lower state energy in eV, log10(gf), 0.0, ',&
+                             'the stat. weight 2Ju+1 (upper state J), zero' 
           write(out,"(a,f11.4)") 'In order to convert to Astrophysical convention use  gf_factor keyword, gf_factor = ', gf_factor 
 
           write(out,"(10x,'Range = ',f18.7,'-',f18.7)") freql,freqr
@@ -4962,8 +4979,9 @@ module spectrum
      integer(ik),intent(in) :: nchars_quanta(maxitems),gtot(nlines)
      character(len=20),intent(in) :: quantum_numbers(0:maxitems,nlines)
      integer(ik) :: nchars_,kitem,ierror_nu,iE,ierror_i,ierror,ierror_S,l,qni,qnf,ierror_f,&
-                    ilevelf,ileveli,iswap,nchars_tot,ierror_nu_
+                    ilevelf,ileveli,iswap,nchars_tot,ierror_nu_,icol
      character(9) :: b_fmt
+     character(9) :: char_tmp
      character(len=cl) :: h_fmt
      integer(ik) :: Jpp,Jp,i
      real(rk)    :: gamma1,gamma2,gamma3,n1,n2,n3,unc_i,unc_f,unc_tot
@@ -5006,41 +5024,51 @@ module spectrum
          nchars_ = 0
          nchars_tot = 0
          !
-         do kitem = 3,maxitems
+         do kitem = 1,QN%Nvibcol
            !
-           !l = len(trim(quantum_numbers(kitem,ilevelf)))
+           icol = QN%Vibcol(kitem)
            !
-           if (nchars_quanta(kitem)>9) cycle
+           ! no need to print Symmetry column which appears in the global sections
+           !if (icol==QN%SymCol) cycle
            !
-           write(b_fmt,"('(a',i1,')')") nchars_quanta(kitem)
+           l = len(trim(quantum_numbers(icol,ilevelf)))
            !
-           nchars_  = nchars_ + nchars_quanta(kitem)
+           if (nchars_quanta(icol)>9) cycle
+           !
+           write(b_fmt,"('(a',i1,')')") nchars_quanta(icol)
+           !
+           nchars_  = nchars_ + nchars_quanta(icol)
            !
            if (nchars_>21) cycle
-           nchars_tot = nchars_tot + nchars_quanta(kitem)
+           nchars_tot = nchars_tot + nchars_quanta(icol)
            !
-           write(sunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ilevelf))
+           write(sunit,b_fmt,advance="no") trim(quantum_numbers(icol,ilevelf))
            !
          enddo
          !
          nchars_ = 0
          !
-         do kitem = 3,maxitems
+         do kitem = 1,QN%Nvibcol
            !
-           l = len(trim(quantum_numbers(kitem,ileveli)))
+           icol = QN%Vibcol(kitem)
            !
-           if (nchars_quanta(kitem)>9) cycle
+           ! no need to print Symmetry column which appears in the global sections
+           !if (icol==QN%SymCol) cycle
+           !
+           l = len(trim(quantum_numbers(icol,ileveli)))
+           !
+           if (nchars_quanta(icol)>9) cycle
            !
            !b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
            !
-           write(b_fmt,"('(a',i1,')')") nchars_quanta(kitem)
+           write(b_fmt,"('(a',i1,')')") nchars_quanta(icol)
            !
-           nchars_  = nchars_ + nchars_quanta(kitem)
+           nchars_  = nchars_ + nchars_quanta(icol)
            !
            if (nchars_>21) cycle
-           nchars_tot = nchars_tot + nchars_quanta(kitem)
+           nchars_tot = nchars_tot + nchars_quanta(icol)
            !
-           write(sunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ileveli))
+           write(sunit,b_fmt,advance="no") trim(quantum_numbers(icol,ileveli))
            !
          enddo
          !
@@ -5051,20 +5079,45 @@ module spectrum
            !
          enddo
          !
+         ! writing Jf
          if ( mod(nint(2*Jf),2)==0 ) then
-           !
-           write(sunit,'(i4,a2,a2)',advance="no") nint(Jf),trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
-           write(sunit,'(1x,i4,a2,a2)',advance="no") nint(Ji),trim(quantum_numbers(1,ileveli)),&
-                                                           trim(quantum_numbers(2,ileveli))
-           !
+           write(sunit,'(i4)',advance="no") nint(Jf)
          else
-           !
-           write(sunit,'(f5.1,a1,a2)',advance="no") Jf,trim(quantum_numbers(1,ilevelf)),trim(quantum_numbers(2,ilevelf))
-           write(sunit,'(f5.1,a1,a2)',advance="no") Ji,trim(quantum_numbers(1,ileveli)),trim(quantum_numbers(2,ileveli))
-           !
+           write(sunit,'(f5.1)',advance="no") Jf
          endif
+         ! Writing local (f)
+         do kitem = 1,min(2,QN%NRotcol)
+           icol = QN%Rotcol(kitem)
+           write(sunit,'(a4)',advance="no") trim(quantum_numbers(icol,ilevelf))
+         enddo
          !
-         ierror_nu = 10
+         ! writing Ji
+         if ( mod(nint(2*Ji),2)==0 ) then
+           write(sunit,'(1x,i4)',advance="no") nint(Ji)
+         else
+           write(sunit,'(f5.1)',advance="no") Ji
+         endif
+         ! Writing local (f)
+         do kitem = 1,min(2,QN%NRotcol)
+           icol = QN%Rotcol(kitem)
+           write(sunit,'(a4)',advance="no") trim(quantum_numbers(icol,ileveli))
+         enddo
+         !
+         !if ( mod(nint(2*Jf),2)==0 ) then
+         !  !
+         !  write(char_Jf,'(i4)',advance="no") nint(Jf),trim(quantum_numbers(QN%SymCol,ilevelf))
+         !  write(sunit,'(1x,i4,a4)',advance="no") nint(Ji),trim(quantum_numbers(QN%SymCol,ileveli))
+         !  !
+         !else
+         !  !
+         !  write(sunit,'(f5.1,a4)',advance="no") Jf,trim(quantum_numbers(QN%SymCol,ilevelf))
+         !  write(sunit,'(f5.1,a4)',advance="no") Ji,trim(quantum_numbers(QN%SymCol,ileveli))
+         !  !
+         !endif
+         !
+         ierror_nu = HITRAN_E(1)%ierr
+         ierror_i = 0
+         ierror_f = 0
          !
          do iE = 1,HITRAN_E(1)%N
             !
@@ -5072,12 +5125,13 @@ module spectrum
             read(quantum_numbers(HITRAN_E(iE)%iqn,ilevelf),*) qnf
             !
             ierror_i = 0
-            do ierror = 0,6
+            ierror_f = 0
+            do ierror = 0,HITRAN_E(iE)%vmax
               if (qni<=HITRAN_E(iE)%error_vmax(ierror)) ierror_i = ierror
               if (qnf<=HITRAN_E(iE)%error_vmax(ierror)) ierror_f = ierror
             enddo
             !
-            ierror_nu = max(ierror_i,ierror_f)
+            ierror_nu = max(ierror_i,ierror_f,ierror_nu)
             !
          enddo
          !
@@ -5092,11 +5146,13 @@ module spectrum
            !
            ierror_nu_ = max(int(-log10(unc_tot)+1.0_rk),0)
            !
-           ierror_nu = min(ierror_nu_,ierror_nu)
+           ierror_nu = max(ierror_nu_,ierror_nu)
            !
          endif
          !
          ierror_S = 0
+         !
+         ierror_S = HITRAN_S(1)%ierr
          !
          do iE = 1,HITRAN_S(1)%N
             !
@@ -5104,12 +5160,13 @@ module spectrum
             read(quantum_numbers(HITRAN_S(iE)%iqn,ilevelf),*) qnf
             !
             ierror_i = 0
-            do ierror = 0,6
+            ierror_f = 0
+            do ierror = 0,HITRAN_S(iE)%vmax
               if (qni<=HITRAN_S(iE)%error_vmax(ierror)) ierror_i = ierror
               if (qnf<=HITRAN_S(iE)%error_vmax(ierror)) ierror_f = ierror
             enddo
             !
-            ierror_S = max(ierror_i,ierror_f)
+            ierror_S = max(ierror_i,ierror_f,ierror_S)
             !
          enddo
          !
@@ -5144,7 +5201,7 @@ module spectrum
          !
          do i = QN%Vibcol(1),QN%Vibcol(2)
            !
-           kitem=i-4
+           kitem=i
            !
            !l = len(trim(quantum_numbers(kitem,ilevelf)))
            !
@@ -5166,7 +5223,7 @@ module spectrum
          nchars_ = 1
          do i = QN%Vibcol(1),QN%Vibcol(2)
            !
-           kitem=i-4
+           kitem=i
            !
            write(b_fmt,"('(a',i1,')')") nchars_quanta(kitem)
            !
@@ -5331,7 +5388,7 @@ module spectrum
        !
     enddo
     !
-    101 continue
+    101 return
     !
     write(out,"('Error read of unc: missing or wrongly specified UNC in QN')") 
     stop 'Error read of unc: missing or wrongly specified UNC in QN'

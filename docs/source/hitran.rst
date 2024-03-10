@@ -28,7 +28,7 @@ For example:
 
 Here `iso`  can appear in a HITRAN form as, e.g. 261.
 
-HITRAN keyword can also also used for writing in the HITRAN output. In this case the broadening parameters are expected to be specified for air and self as part of the SPECIES section, including delta. To invoke HITRAN output use WRITE next to the HITRAN keyword, which starts a section, which should be ended either by END or an emty line. The ID_ISO should be also specified using ISO keyword.
+HITRAN keyword can also used for writing in the HITRAN output. In this case the broadening parameters are expected to be specified for air and self as part of the SPECIES section, including delta. To invoke HITRAN output use WRITE next to the HITRAN keyword, which starts a section, which should be ended either by END or an emty line. The ID_ISO should be also specified using ISO keyword.
 ::
 
 
@@ -58,6 +58,24 @@ HITRAN keyword can also also used for writing in the HITRAN output. In this case
     Transitions  NO_128_N15.trans.head
 
 
+The local quantum numbers in the HITARN output includes J follows by QNS specified the  ``QN`` structure as the column number in the State file using the keyword ``local`` (or ```rot`):
+::
+
+     QN
+      local 7
+     end
+
+
+The global quantum numbers are taken from States file (starting from column 7 by default, after uncertanty and lifetimes columns) and can be listed in the ``QN`` using the ``Global`` (``vib``) keyword:
+::
+     
+     QN
+      global 8 9 10
+     end
+
+
+Here 8,9,10 are the columns in .states. 
+
 
 The following example allows one to specify the error codes (6 values) for the HITRAN format outputs. It is still a part of the HITRAN WRITE section, the six keywords (`error-E`, `error-S`, `error-Air`, `error-self`, `error-delta`) start lines with the corresponding specifications. The Energy and Intensity (S) lines are used to give the ranges of he quantum numbers for different error codes. The other four can hold only one error code.
 
@@ -74,7 +92,7 @@ The following example allows one to specify the error codes (6 values) for the H
      end
 
 
-Here ``error-unc`` is to define the energies/frequency error codes using the ExoMol uncertanties from column 5 in States file using ierr = :math:`int(1-log10({\rm unc}))`, where unc = :math:`\sqrt{{\rm unc}_i^2+{\rm unc}_f^2}` using the corresponding uncertanties of the initial and final states, respectively. 
+Here ``error-unc`` is to define the energies/frequency error codes using the ExoMol uncertanties from column 5 in States file using ierr = :math:`int(1-log10({\rm unc}))`, where unc = :math:`\sqrt{{\rm unc}_i^2+{\rm unc}_f^2}` using the corresponding uncertanties of the initial and final states, respectively.
 
 ``error-E`` and ``error-S`` define HITRAN error codes (integer) of the frequencies and intensities based on the quantum numbers: ``qn`` defines the QN column (starting from the state ID coulmn =1), ``ierr`` is the errro value and ``vmax`` is used to define the range of the quanrum numbers this error code is applied to. here ierr = 4 for QN(4) = 0...10, ierror = 3 for QN(4) = 11...20 etc.
 
