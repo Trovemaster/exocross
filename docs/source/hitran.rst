@@ -178,8 +178,8 @@ A complete example for an SO line list:
     
     pressure  1.0
     species
-        air   gamma 0.0000 n 0.00 t0 296.0  ratio 0.00 delta 0.000
-        self  gamma 0.0000 n 0.00 t0 296.0  ratio 0.00 delta 0.000
+        air   gamma 0.8000 n 0.50 t0 296.0  delta 0.000
+        self  gamma 0.8000 n 0.50 t0 296.0  delta 0.000
     end
     
     output SO_298K_HITRAN
