@@ -159,9 +159,8 @@ A complete example for an SO line list:
     iso 50 1
     
     QN
-    Gamma  7
-    global   8 9 10 11
-    local    7
+      global   8 9 10 11
+      local    7
     end
     
     hitran write
