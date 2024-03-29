@@ -129,7 +129,7 @@ module spectrum
              stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false., spectra_do = .false., &
              vibpopulation_do = .false., super_energies_do = .false., super_Einstein_do = .false., &
              uncertainty_filter_do = .false.,stick_vald = .false., error_cross_sections_do = .false., &
-             phoenix_do = .false., predissociation_do = .false.
+             phoenix_do = .false., predissociation_do = .false., both_qn_filters_active = .false.
   logical :: do_nu_error_based_on_unc = .false.
   logical :: lineprofile_do = .false., use_width_cutoff = .false.
   logical :: microns = .false.
@@ -138,6 +138,7 @@ module spectrum
   logical :: accepted_work = .false.
   logical :: completed_work = .true.
   logical :: all_done = .false.
+  logical :: upper_filter_active = .false.,lower_filter_active = .false.
   !
   type(VoigtKampffCollection),save :: fast_voigt
   
@@ -730,10 +731,14 @@ module spectrum
                 call readi(lower(ifilter)%i) ; lower(ifilter)%i = lower(ifilter)%i - 4
                 call reada(lower(ifilter)%mask)
                 !
+                lower_filter_active = .true.
+                !
               case('UPPER')
                 !
                 call readi(upper(ifilter)%i) ; upper(ifilter)%i = upper(ifilter)%i - 4
                 call reada(upper(ifilter)%mask)
+                !
+                upper_filter_active = .true.
                 !
               case('UNC','UNCERTAINTY')
                 !
@@ -1205,6 +1210,12 @@ module spectrum
       !
     enddo
     !
+    ! If both upper and lower filters are active, the selection of the states is very limited and can be done in advance 
+    !
+    if (lower_filter_active.and.upper_filter_active) then  
+       both_qn_filters_active = .true.
+    endif
+    !
     if (proftype(1:3)/='BIN'.and.microns) then
       write(out,"('Microns or um is currently only working with BIN, not ',a)") proftype(1:3)
       stop "Illegal profile for Microns"
@@ -1409,7 +1420,8 @@ module spectrum
    real(rk)    :: gf,gi,mem_t,temp_gamma_n,cutoff_
    character(55) ch_q,ch_broad
    character(len=cl)   :: my_fmt100K,my_fmt0
-   real(real32) :: nan   
+   real(real32) :: nan
+   logical :: upper_state_selected,lower_state_selected
    !
    ln2=log(2.0_rk)
    ln22 = ln2*2.0_rk
@@ -1849,21 +1861,48 @@ module spectrum
          !
          if (filter) then
            !
-           do ifilter = 1,Nfilters
-             !
-             if ( ( upper(ifilter)%mask/=trim( quantum_numbers( upper(ifilter)%i,i ) ).and.&
-                 trim( upper(ifilter)%mask )/="" ).or. &
-                 ( lower(ifilter)%mask/=trim( quantum_numbers( lower(ifilter)%i,i ) ).and.&
-                 trim( lower(ifilter)%mask )/="" ) ) then 
+           if (both_qn_filters_active) then 
+              !
+              upper_state_selected = .true.
+              lower_state_selected = .true.
+              !
+              do_check_filters : do ifilter = 1,Nfilters
+                !
+                if (trim( lower(ifilter)%mask )/="") then 
+                   if ( lower(ifilter)%mask/=trim( quantum_numbers( lower(ifilter)%i,i ) ) ) then 
+                      lower_state_selected = .false.
+                      !exit do_check_filters
+                   endif
+                endif
+                !
+                if (trim( upper(ifilter)%mask )/="") then 
+                   if ( upper(ifilter)%mask/=trim( quantum_numbers( upper(ifilter)%i,i ) ) ) then 
+                      upper_state_selected = .false. 
+                      !exit do_check_filters
+                   endif
+                endif
+                !
+                !if ( trim( upper(ifilter)%mask )/="".and.trim( lower(ifilter)%mask )/="" ) ) then 
+                !    !
+                !    ! remove the state by skipping the rest of processing list and unrolling the state index: 
+                !    !
+                !    i = i - 1
+                !    cycle loop_energy_read
+                !    !
+                !endif
+                !
+              enddo do_check_filters
+              !
+              if (.not.lower_state_selected.and..not.upper_state_selected) then 
                  !
                  ! remove the state by skipping the rest of processing list and unrolling the state index: 
                  !
                  i = i - 1
                  cycle loop_energy_read
                  !
-             endif
-             !
-           enddo
+              endif
+              !
+           endif 
            !
            ! filter based on the uncertainty 
            if (uncertainty_filter_do) then
@@ -1881,7 +1920,7 @@ module spectrum
               !
            endif
            !
-         endif
+         endif 
          !
          ! from ID to a counting number 
          indices(itemp) = i
@@ -1905,6 +1944,11 @@ module spectrum
       enddo loop_energy_read
       !
       nlines = i
+      !
+      if (nlines==0) then 
+         write(out,"('Filters are too tight, no energies can pass through; Check filters!')")
+         stop 'Filters are too tight, no energies can pass through'
+      endif
       !
       ! printout vibrational reference energies 
       if (vibtemperature_do.and.verbose>=3) then
