@@ -3988,11 +3988,11 @@ module spectrum
      open(unit=tunit,file=trim(output)//".life",action='write',status='replace')
      !
      if ( mod(nint(2.0_rk*jrot(1)),2)==0 ) then 
-       write(my_fmt,'(a)')      '(1x,i11,1x,f12.6,1x,i6,1x,i7,1x,es12.4,3x)'
-       write(my_fmt100K,'(a)')  '(1x,i11,1x,f12.5,1x,i6,1x,i7,1x,es12.4,3x)'
+       write(my_fmt,'(a)')      '(1x,i11,1x,f12.6,1x,i6,1x,i7,1x)'
+       write(my_fmt100K,'(a)')  '(1x,i11,1x,f12.5,1x,i6,1x,i7,1x)'
      else
-       write(my_fmt,'(a)')      '(1x,i11,1x,f12.6,1x,i6,1x,f7.1,1x,es12.4,3x)'
-       write(my_fmt100K,'(a)')  '(1x,i11,1x,f12.5,1x,i6,1x,f7.1,1x,es12.4,3x)'
+       write(my_fmt,'(a)')      '(1x,i11,1x,f12.6,1x,i6,1x,f7.1,1x)'
+       write(my_fmt100K,'(a)')  '(1x,i11,1x,f12.5,1x,i6,1x,f7.1,1x)'
      endif
      !
      do ilevelf = 1,nlines
@@ -4004,16 +4004,21 @@ module spectrum
        if (energies(ilevelf)>99999.99999_rk) my_fmt0 = my_fmt100K
        !
        if ( mod(nint(2.0_rk*jrot(1)),2)==0 ) then 
-        write(tunit,my_fmt0,advance="no") level_IDs(ilevelf),energies(ilevelf),gtot(ilevelf),nint(jrot(ilevelf)),1.0_rk/Asum(ilevelf)
+        write(tunit,my_fmt0,advance="no") level_IDs(ilevelf),energies(ilevelf),gtot(ilevelf),nint(jrot(ilevelf))
        else
-        write(tunit,my_fmt0,advance="no") level_IDs(ilevelf),energies(ilevelf),gtot(ilevelf),jrot(ilevelf),1.0_rk/Asum(ilevelf)
+        write(tunit,my_fmt0,advance="no") level_IDs(ilevelf),energies(ilevelf),gtot(ilevelf),jrot(ilevelf)
        endif
        !
        do kitem = 1,maxitems
          !
-         !l = len(trim(quantum_numbers(kitem,ilevelf)))
-         !
-         !b_fmt = "(1x,a3)" ; if (l>3) b_fmt = "(1x,a8)"
+         ! If the the uncertainty column is not present, we assume that the lifetime column position should  be defined in input
+         if (QN%lifetime_col/=6.and.kitem==1) then
+           !
+           ! write the lifetimes now
+           !
+           write(tunit,"(es12.4,3x)",advance="no") 1.0_rk/Asum(ilevelf)
+           !
+         endif
          !
          if (nchars_quanta(kitem)<10) then
             write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
@@ -4022,6 +4027,16 @@ module spectrum
          endif
          !
          write(tunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ilevelf))
+         !
+         ! if the uncertanty column is present, we assume the default position of the lifetime column =6 and write lifetimes after unc
+         !
+         if (QN%lifetime_col==6.and.kitem==1) then
+           !
+           ! write the lifetimes now
+           !
+           write(tunit,"(es12.4,3x)",advance="no") 1.0_rk/Asum(ilevelf)
+           !
+         endif
          !
        enddo
        !
@@ -5125,26 +5140,26 @@ module spectrum
          !
          ! writing Jf
          if ( mod(nint(2*Jf),2)==0 ) then
-           write(sunit,'(i4)',advance="no") nint(Jf)
+           write(sunit,'(i3)',advance="no") nint(Jf)
          else
-           write(sunit,'(f5.1)',advance="no") Jf
+           write(sunit,'(f4.1)',advance="no") Jf
          endif
          ! Writing local (f)
          do kitem = 1,min(2,QN%NRotcol)
            icol = QN%Rotcol(kitem)
-           write(sunit,'(a4)',advance="no") trim(quantum_numbers(icol,ilevelf))
+           write(sunit,'(a3)',advance="no") trim(quantum_numbers(icol,ilevelf))
          enddo
          !
          ! writing Ji
          if ( mod(nint(2*Ji),2)==0 ) then
-           write(sunit,'(1x,i4)',advance="no") nint(Ji)
+           write(sunit,'(1x,i3)',advance="no") nint(Ji)
          else
-           write(sunit,'(f5.1)',advance="no") Ji
+           write(sunit,'(f4.1)',advance="no") Ji
          endif
          ! Writing local (f)
          do kitem = 1,min(2,QN%NRotcol)
            icol = QN%Rotcol(kitem)
-           write(sunit,'(a4)',advance="no") trim(quantum_numbers(icol,ileveli))
+           write(sunit,'(a3)',advance="no") trim(quantum_numbers(icol,ileveli))
          enddo
          !
          !if ( mod(nint(2*Jf),2)==0 ) then
