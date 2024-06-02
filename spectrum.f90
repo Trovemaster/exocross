@@ -129,7 +129,8 @@ module spectrum
              stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false., spectra_do = .false., &
              vibpopulation_do = .false., super_energies_do = .false., super_Einstein_do = .false., &
              uncertainty_filter_do = .false.,stick_vald = .false., error_cross_sections_do = .false., &
-             phoenix_do = .false., predissociation_do = .false., both_qn_filters_active = .false.
+             phoenix_do = .false., predissociation_do = .false., both_qn_filters_active = .false.,&
+             interpolated = .false.
   logical :: do_nu_error_based_on_unc = .false.
   logical :: lineprofile_do = .false., use_width_cutoff = .false.
   logical :: microns = .false.
@@ -548,6 +549,10 @@ module spectrum
              stop 'input - illigal last line in QN'
              !
           endif
+          !
+        case ("INTERPOLATED")
+          !
+          interpolated = .true.
           !
         case ("HISTOGRAM","SUPER-LINE","SUPER-LINES","SUPERLINES")
           !
@@ -2084,13 +2089,17 @@ module spectrum
         write(ioname, '(a)') 'Partition function'
         call IOstart(trim(ioname),tunit)
         !
-        open(unit=tunit,file=trim(output)//".pf",action='write',status='replace')
+        if (ipartf==0) then 
+           open(unit=tunit,file=trim(output)//".pf",action='write',status='replace')
+        elseif(ipartf==3) then
+           open(unit=tunit,file=trim(output)//".cp",action='write',status='replace')
+        endif
         !
         do itemp = 1,npoints
           !
           temp0 = real(itemp,rk)*dtemp
           !
-          write(tunit,"(f8.1,1x,f15.4)") temp0,pf(0,itemp)
+          write(tunit,"(f8.1,1x,f15.4)") temp0,pf(ipartf,itemp)
           !
         enddo
         !
@@ -3135,6 +3144,13 @@ module spectrum
              energyi = energies(ileveli)
              !
              tranfreq = energyf-energyi
+             !
+             if (interpolated) then 
+               !
+               tranfreq = energyf
+               energyf = tranfreq + energyi
+               !
+             endif
              !
              tranfreq = tranfreq + lineshift
              !
