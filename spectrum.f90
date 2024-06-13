@@ -53,12 +53,14 @@ module spectrum
     real(rk)       :: ratio = 1.0_rk  ! Ratio
     real(rk)       :: T0    = 296_rk  ! Reference T, K
     real(rk)       :: P0    = 1.0_rk  ! Reference P, bar
-    character(len=cl) :: name = "NA"         ! Broadener name
-    character(len=cl) :: filename=""  ! File name with QN-dependent broadening parameters
-    character(len=cl) :: model="const"  ! Broadening model
-    real(rk),pointer  :: gammaQN(:,:) ! Voigt parameter gamma as a function of QN
-    real(rk),pointer  :: nQN(:,:)     ! Voigt parameter n as a function of QN
-    real(rk)          :: delta = 0    ! Pressure shift induced by air, referred to p=1 atm
+    character(len=cl) :: name = "NA"     ! Broadener name
+    character(len=cl) :: filename=""     ! File name with QN-dependent broadening parameters
+    character(len=cl) :: model="const"   ! Broadening model
+    real(rk),pointer  :: gammaQN(:,:,:)  ! Voigt parameter gamma as a function of QN
+    real(rk),pointer  :: nQN(:,:,:)      ! Voigt parameter n as a function of QN
+    real(rk)          :: delta = 0       ! Pressure shift induced by air, referred to p=1 atm
+    real(rk)          :: mass = 1.0_rk   ! Reduced mass for the box model
+    real(rk)          :: Lbox = 10.0_rk  ! Box size for the box model
     logical           :: if_defined = .false. ! used to check if this broadenerer is taken fron SPECIES
     !
   end type speciesT
@@ -86,7 +88,7 @@ module spectrum
 
   type QNT ! Quantum numbers identified by columns
     !
-    integer(ik) :: Kcol=1                ! Column with K 
+    integer(ik) :: Kcol=-1               ! Column with K 
     integer(ik) :: statecol=7            ! State column
     integer(ik) :: vibcol(10)=8          ! Range of columns with vib quanta 
     integer(ik) :: Nvibcol = 0           ! Number of columns with vib quanta
@@ -116,7 +118,7 @@ module spectrum
   type(QNT),save   :: QN
   type(gridT),save :: grid(Ngrids_max)
   !
-  integer(ik)    :: Nspecies = 1, Nfilters = 0, Ngrids = 0
+  integer(ik)    :: Nspecies = 0, Nfilters = 0, Ngrids = 0
   type(speciesT),save :: species(nspecies_max)
   type(HitranErrorT),target,save :: HITRAN_E(HITRAN_max_ierr),HITRAN_S(HITRAN_max_ierr)
   type(HitranErrorT),target,save :: HITRAN_Air,HITRAN_Self,HITRAN_N,HITRAN_Delta
@@ -124,7 +126,7 @@ module spectrum
   type(Int_CutoffT),save :: Int_Cutoffs
   !
   integer(ik),allocatable,save  :: gamma_idx(:,:) !Used for indexing the gamma for the fast_voigt
-  real(rk),allocatable,save  :: gamma_comb(:,:) !Used for indexing the gamma for the fast_voigt
+  real(rk),allocatable,save  :: gamma_comb(:,:,:) !Used for indexing the gamma for the fast_voigt
   logical :: partfunc_do = .true., filter = .false., histogram = .false., hitran_do = .false.,  histogramJ = .false., &
              stick_hitran = .false.,stick_oxford = .false.,vibtemperature_do = .false., spectra_do = .false., &
              vibpopulation_do = .false., super_energies_do = .false., super_Einstein_do = .false., &
@@ -476,7 +478,7 @@ module spectrum
               !
               call readi(QN%Nsym)
               !
-            case ("K")
+            case ("K","V")
               !
               call readi(QN%Kcol)
               !
@@ -972,7 +974,7 @@ module spectrum
           !
           if (trim(w)=='PHOENIX') phoenix_do = .true.
           !
-          if (any( w(1:3)==(/'VOI','PSE','LOR','PHO','ELO'/))) lineprofile_do = .true.
+          if (any( w(1:3)==(/'VOI','PSE','LOR','PHO','ELO','GAU'/))) lineprofile_do = .true.
           !
           proftype = trim(w)
           !
@@ -1125,10 +1127,25 @@ module spectrum
                 call upcase(w)
                 !
                 species(i)%if_defined = .true.
+                species(i)%model = 'DIET'
                 !
               case ("MODEL")
                 !
-                call readu(species(i)%model)
+                call readu(w)
+                !
+                if (trim(w)/='BOX') call report ("Uknown model in sub-SPECIES (not BOX)"//trim(w),.true.)
+                !
+                species(i)%model = w
+                !
+              case ("MASS")
+                !
+                call readf(species(i)%mass)
+                !
+              case ("L-BOX","LBOX")
+                !
+                call readf(species(i)%Lbox)
+                ! convert Ang to cm
+                species(i)%Lbox = species(i)%Lbox*1e-8
                 !
               case default
                 !
@@ -1351,8 +1368,8 @@ module spectrum
       stop 'Input Error: for ERROR illegal profile used'
     endif
     !
-    !   half width for Doppler profiling
-    if (any( proftype(1:3)==(/'VOI','PSE','LOR','PHO','ELO'/)).and.Nspecies>0) then
+    !   half width for gamma-type profiling
+    if (any( proftype(1:3)==(/'VOI','PSE','LOR','PHO','ELO','GAU'/)).and.Nspecies>0) then
       !
       halfwidth = 0
       !
@@ -1372,12 +1389,18 @@ module spectrum
         stop 'Input Error: either  HWHM or gamma@SPECIES must be defined for this profile type'
       endif
       !
-      do i=1,Nspecies
+      if (if_species_defined) then 
         !
-        halfwidth =  halfwidth + species(i)%ratio*species(i)%gamma*(species(i)%T0/Temp)**species(i)%N*pressure/species(i)%P0
-        lineshift = lineshift + species(i)%ratio*species(i)%delta*pressure
+        do i=1,Nspecies
+          !
+          halfwidth =  halfwidth + species(i)%ratio*species(i)%gamma*(species(i)%T0/Temp)**species(i)%N*pressure/species(i)%P0
+          lineshift = lineshift + species(i)%ratio*species(i)%delta*pressure
+          !
+          if (trim(species(i)%model)=='BOX'.and.i>1) call report ("Illegal number of species for BOX, must be 1"//trim(w),.true.)
+          !
+        enddo
         !
-      enddo
+      endif
       !
     endif
     !
@@ -1395,13 +1418,14 @@ module spectrum
    integer(ik) :: info,ipoint,ipoint_,nlevels,i,itemp,enunit,tunit,sunit,wunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf
    integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems,iline,intunit,inu
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air,beta_ref
-   real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef,m0
+   real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef,m0,k0,Ki
    real(rk)    :: acoef_,int_cutoff,ndensity,abscoef_ref
-   integer(ik) :: Jmax,Jp,Jpp,Ncutoff,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin,gtot_
+   integer(ik) :: Jmax,Jp,Jpp,Ncutoff,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin,gtot_,KmaxAll,Kmax,kpp
    real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc_i,unc_f,time_
    character(len=cl) :: ioname,intname
    !
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
+   real(rk),allocatable :: Krot(:)
    integer(ik),allocatable :: gtot(:),indices(:),level_IDs(:)
    character(len=20),allocatable :: quantum_numbers(:,:),quantum_numbers_vib(:,:)
    !
@@ -1592,6 +1616,10 @@ module spectrum
       call ArrayStart('gtot',info,size(gtot),kind(gtot))
       call ArrayStart('indices',info,size(indices),kind(indices))
       !
+      allocate(Krot(nlines),stat=info)
+      call ArrayStart('Krot',info,size(Krot),kind(Krot))
+      Krot = 0
+      !
       allocate(level_IDs(nlines),stat=info)
       call ArrayStart('level_IDs',info,size(level_IDs),kind(level_IDs))
       !
@@ -1696,6 +1724,12 @@ module spectrum
         !
       endif
       !
+      ! identify rotational quantum number for each line 
+      !if (QN%Kcol>0) then 
+      !  allocate(Krot(nlines),stat=info)
+      !  call ArrayStart('Krot',info,size(Krot),kind(Krot))
+      !endif
+      !
       allocate(quantum_numbers(0:maxitems,nlines),nchars_quanta(maxitems),stat=info)
       call ArrayStart('quantum_numbers',info,size(quantum_numbers),kind(quantum_numbers))
       call ArrayStart('nchars_quanta',info,size(nchars_quanta),kind(nchars_quanta))
@@ -1763,6 +1797,7 @@ module spectrum
       j0 = 0
       i = 0
       iline = 0 
+      Kmax = 0
       !
       ! start reading the energies
       !
@@ -1944,6 +1979,15 @@ module spectrum
              gamma_radiative(i) = 1.0_rk/(2.0*pi*vellgt*time_)*0.5_rk
            endif
            !
+         endif
+         !
+         if (QN%Kcol>0) then 
+            read(quantum_numbers(QN%Kcol-4,i),*,err=116) k
+            !
+            kmax = max(kmax,k)
+            !
+            Krot(i) = k
+            !
          endif
          !
       enddo loop_energy_read
@@ -2222,260 +2266,355 @@ module spectrum
    !
    if (verbose>=4.and.Nspecies>0) print('(1x,a/)'),'Reading broadening parameters.'
    !
-   !Used for indexing the gamma for the fast_voigt
+   !Used for indexing the gamma for the fast_voigt and Voigt
    JmaxAll = 0
    if (allocated(jrot)) JmaxAll = nint(maxval(jrot)+0.5_rk)
+   KmaxAll = 0
    !
    do i =1,Nspecies
      !
-     if ( trim(species(i)%filename)/="" ) then
+     select case (species(i)%model)
        !
-       write(ioname, '(a)') 'broadening file'
+     case default
        !
-       call IOstart(trim(ioname),bunit)
-       open(unit=bunit,file=trim(species(i)%filename),action='read',status='old')
+       ! Standard gamma-option for broadening
        !
-       Jmax = JmaxAll
-       !
-       do
+       if ( trim(species(i)%filename)/="" ) then
          !
-         ! Scan and find Jmax
-         read(bunit,*,end=14) ch_broad(1:3),gamma_,n_,J_
+         write(ioname, '(a)') 'broadening file'
          !
-         if (all(trim(ch_broad(1:2))/=(/'a0','a1','A0','A1','m0','M0','m1','M1'/))) cycle 
+         call IOstart(trim(ioname),bunit)
+         open(unit=bunit,file=trim(species(i)%filename),action='read',status='old')
          !
-         Jmax = max(Jmax,nint(J_+0.5_rk))
-         JmaxAll = max(nint(J_+0.5_rk),JmaxAll)
+         Jmax = JmaxAll
          !
-         cycle
-         14  exit
+         do
+           !
+           ! Scan and find Jmax
+           read(bunit,*,end=14) ch_broad(1:3),gamma_,n_,J_
+           !
+           !if (all(trim(ch_broad(1:2))/=(/'a0','a1','A0','A1','m0','M0','m1','M1'/))) cycle 
+           !
+           select case(trim(ch_broad))
+             !
+           case ('V0','K0','v0','k0')
+             !
+             Kmax    = max(nint(J_-0.5_rk),Kmax)
+             KmaxAll = max(nint(J_-0.5_rk),KmaxAll)
+             !
+           case ('V1','K1','v1','k1')
+             !
+             Kmax    = max(nint(J_-0.5_rk),Kmax)
+             KmaxAll = max(nint(J_-0.5_rk),KmaxAll)
+             Jmax = max(Jmax,nint(J_+0.5_rk))
+             JmaxAll = max(nint(J_+0.5_rk),JmaxAll)
+             !
+           case default
+             !
+             Jmax = max(Jmax,nint(J_+0.5_rk))
+             JmaxAll = max(nint(J_+0.5_rk),JmaxAll)
+             ! 
+           end select
+           !
+           cycle
+           14  exit
+           !
+         enddo
          !
-       enddo
-       !
-       if (Jmax>0) then
+         if (Jmax>=0) then
+           !
+           allocate(species(i)%gammaQN(0:Jmax,-2:2,0:KmaxAll),stat=info)
+           call ArrayStart('gammaQN',info,size(species(i)%gammaQN),kind(species(i)%gammaQN))
+           species(i)%gammaQN(:,:,:) = species(i)%gamma
+           !
+           allocate(species(i)%nQN(0:Jmax,-2:2,0:KmaxAll),stat=info)
+           !         
+           call ArrayStart('nQN',info,size(species(i)%nQN),kind(species(i)%nQN))
+           species(i)%nQN(:,:,:) = species(i)%N
+           !
+          else
+           !
+           write(out,"('Empty .broad file or wrong format (Jmax = 0) in ',a)") trim(species(i)%filename)
+           stop 'Jmax = 0 in a broadening file, empty .broad or wrong format'
+           !
+         endif
          !
-         allocate(species(i)%gammaQN(0:Jmax,-2:2),stat=info)
-         call ArrayStart('gammaQN',info,size(species(i)%gammaQN),kind(species(i)%gammaQN))
-         species(i)%gammaQN(:,:) = species(i)%gamma
+         rewind(bunit)
          !
-         allocate(species(i)%nQN(0:Jmax,-2:2),stat=info)
-         !         
-         call ArrayStart('nQN',info,size(species(i)%nQN),kind(species(i)%nQN))
-         species(i)%nQN(:,:) = species(i)%N
+         ! read in the QN-dependent broadening parameters
          !
-        else
+         Jmax = 0
          !
-         write(out,"('Empty .broad file or wrong format (Jmax = 0) in ',a)") trim(species(i)%filename)
-         stop 'Jmax = 0 in a broadening file, empty .broad or wrong format'
-         !
-       endif
-       !
-       rewind(bunit)
-       !
-       ! read in the QN-dependent broadening parameters
-       !
-       Jmax = 0
-       !
-       do
-         !
-         ! read the line and check the model
-         !
-         call read_line(eof,bunit) ; if (eof) exit
-         !
-         call readu(ch_broad)
-         !
-         ! Ignore all models if not implemented 
-         if (all(trim(ch_broad(1:2))/=(/'A0','A1','J ','JJ','M0','m0','a0','a1','m1','M1'/))) cycle 
-         !  write(out,"('Error, illegal model in .broad: ',a3,' inly a0 and a1 are implemented')") ch_broad(1:3)
-         !  stop 'Error, illegal model in .broad: '
-         !endif
-         !
-         ! model specific read
-         !
-         select case ( trim(ch_broad(1:3)) )
+         do
            !
-         case ('a0','A0')
+           ! read the line and check the model
            !
-           if (nitems<4) call report ("not enough data in .broad for a0"//trim(w),.true.)
+           call read_line(eof,bunit) ; if (eof) exit
            !
-           call readf(gamma_)
-           call readf(n_)
-           call readf(Ji)
+           call readu(ch_broad)
            !
-           ! use integer value of J
+           ! Ignore all models if not implemented 
+           if (all(trim(ch_broad(1:2))/=(/'A0','A1','J ','JJ','M0','M1','K0','V0','K1','V1'/))) cycle 
+           !  write(out,"('Error, illegal model in .broad: ',a3,' inly a0 and a1 are implemented')") ch_broad(1:3)
+           !  stop 'Error, illegal model in .broad: '
+           !endif
            !
-           j = int(Ji)
-           Jmax = max(Jmax,J)
+           ! model specific read
            !
-           species(i)%gammaQN(J,:) = gamma_
-           species(i)%nQN(J,:) = n_
-           !
-         case ('a1','A1')
-           !
-           if (nitems<5) call report ("not enough data in .broad for a1"//trim(w),.true.)
-           !
-           call readf(gamma_)
-           call readf(n_)
-           call readf(Ji)
-           call readf(Jf)
-           !
-           ! use integer value of J
-           !
-           Jp  = int(Jf)
-           Jpp = int(Ji)
-           !
-           Jmax = max(Jmax,min(Jp,Jpp))
-           !
-           if (abs(Jp-Jpp)>1) then 
-             write(out,'("Jp-Jpp>1 in broadening file:",2i8)') Jp,Jpp
-             stop 'Jp-Jpp>1 in broadening file'
-           endif
-           !
-           species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
-           species(i)%nQN(Jpp,Jp-Jpp) = n_
-           !
-         case ('m0','M0')
-           !
-           if (nitems<4) call report ("not enough data in .broad for "//trim(w),.true.)
-           !
-           call readf(gamma_)
-           call readf(n_)
-           call readf(m0)
-           !
-           if (m0<=0) call report ("Illegal m<=0 for m0 in .broad for "//trim(w),.true.)
-           !
-           ! |m| = m0
-           !
-           ! P branch
-           !
-           Jpp = m0
-           Jp  = Jpp-1.0_rk
-           !
-           species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
-           species(i)%nQN(Jpp,Jp-Jpp) = n_
-           !
-           ! Q branch
-           !
-           Jpp = m0
-           Jp = Jpp
-           !
-           species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
-           species(i)%nQN(Jpp,Jp-Jpp) = n_
-           !
-           ! R branch
-           !
-           Jpp = m0-1.0_rk
-           Jp = Jpp+1.0_rk
-           !
-           species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
-           species(i)%nQN(Jpp,Jp-Jpp) = n_
-           !
-           Jmax = max(Jmax,min(Jp,Jpp))
-           !
-           if (abs(Jp-Jpp)>1) then 
-             write(out,'("Jp-Jpp>1 in broadening file:",2i8)') Jp,Jpp
-             stop 'Jp-Jpp>1 in broadening file'
-           endif
-           !
-           !
-         case ('m1','M1')
-           !
-           if (nitems<4) call report ("not enough data in .broad for a1"//trim(w),.true.)
-           !
-           call readf(gamma_)
-           call readf(n_)
-           call readf(m0)
-           !
-           if (m0<0) then
+           select case ( trim(ch_broad(1:3)) )
+             !
+           case ('a0','A0')
+             !
+             if (nitems<4) call report ("not enough data in .broad for a0"//trim(w),.true.)
+             !
+             call readf(gamma_)
+             call readf(n_)
+             call readf(Ji)
+             !
+             ! use integer value of J
+             !
+             j = int(Ji)
+             Jmax = max(Jmax,J)
+             !
+             species(i)%gammaQN(J,:,0) = gamma_
+             species(i)%nQN(J,:,0) = n_
+             !
+           case ('a1','A1')
+             !
+             if (nitems<5) call report ("not enough data in .broad for a1"//trim(w),.true.)
+             !
+             call readf(gamma_)
+             call readf(n_)
+             call readf(Ji)
+             call readf(Jf)
+             !
+             ! use integer value of J
+             !
+             Jp  = int(Jf)
+             Jpp = int(Ji)
+             !
+             Jmax = max(Jmax,min(Jp,Jpp))
+             !
+             if (abs(Jp-Jpp)>1) then 
+               write(out,'("Jp-Jpp>1 in broadening file:",2i8)') Jp,Jpp
+               stop 'Jp-Jpp>1 in broadening file'
+             endif
+             !
+             species(i)%gammaQN(Jpp,Jp-Jpp,0) = gamma_
+             species(i)%nQN(Jpp,Jp-Jpp,0) = n_
+             !
+           case ('m0','M0')
+             !
+             if (nitems<4) call report ("not enough data in .broad for "//trim(w),.true.)
+             !
+             call readf(gamma_)
+             call readf(n_)
+             call readf(m0)
+             !
+             if (m0<=0) call report ("Illegal m<=0 for m0 in .broad for "//trim(w),.true.)
+             !
+             ! |m| = m0
              !
              ! P branch
              !
-             Jpp = abs(m0)
+             Jpp = m0
              Jp  = Jpp-1.0_rk
              !
-             species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
-             species(i)%nQN(Jpp,Jp-Jpp) = n_
-             !
-           elseif(m0==0) then
+             species(i)%gammaQN(Jpp,Jp-Jpp,0) = gamma_
+             species(i)%nQN(Jpp,Jp-Jpp,0) = n_
              !
              ! Q branch
              !
              Jpp = m0
              Jp = Jpp
              !
-             species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
-             species(i)%nQN(Jpp,Jp-Jpp) = n_
-             !
-           else 
-             !
-             ! Q branch
-             !
-             Jpp = m0
-             Jp = Jpp
-             !
-             species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
-             species(i)%nQN(Jpp,Jp-Jpp) = n_
+             species(i)%gammaQN(Jpp,Jp-Jpp,0) = gamma_
+             species(i)%nQN(Jpp,Jp-Jpp,0) = n_
              !
              ! R branch
              !
              Jpp = m0-1.0_rk
              Jp = Jpp+1.0_rk
              !
-             species(i)%gammaQN(Jpp,Jp-Jpp) = gamma_
-             species(i)%nQN(Jpp,Jp-Jpp) = n_
+             species(i)%gammaQN(Jpp,Jp-Jpp,0) = gamma_
+             species(i)%nQN(Jpp,Jp-Jpp,0) = n_
              !
-           endif
+             Jmax = max(Jmax,min(Jp,Jpp))
+             !
+             if (abs(Jp-Jpp)>1) then 
+               write(out,'("Jp-Jpp>1 in broadening file:",2i8)') Jp,Jpp
+               stop 'Jp-Jpp>1 in broadening file'
+             endif
+             !
+           case ('m1','M1')
+             !
+             if (nitems<4) call report ("not enough data in .broad for a1"//trim(w),.true.)
+             !
+             call readf(gamma_)
+             call readf(n_)
+             call readf(m0)
+             !
+             if (m0<0) then
+               !
+               ! P branch
+               !
+               Jpp = abs(m0)
+               Jp  = Jpp-1.0_rk
+               !
+               species(i)%gammaQN(Jpp,Jp-Jpp,0) = gamma_
+               species(i)%nQN(Jpp,Jp-Jpp,0) = n_
+               !
+             elseif(m0==0) then
+               !
+               ! Q branch
+               !
+               Jpp = m0
+               Jp = Jpp
+               !
+               species(i)%gammaQN(Jpp,Jp-Jpp,0) = gamma_
+               species(i)%nQN(Jpp,Jp-Jpp,0) = n_
+               !
+             else 
+               !
+               ! Q branch
+               !
+               Jpp = m0
+               Jp = Jpp
+               !
+               species(i)%gammaQN(Jpp,Jp-Jpp,0) = gamma_
+               species(i)%nQN(Jpp,Jp-Jpp,0) = n_
+               !
+               ! R branch
+               !
+               Jpp = m0-1.0_rk
+               Jp = Jpp+1.0_rk
+               !
+               species(i)%gammaQN(Jpp,Jp-Jpp,0) = gamma_
+               species(i)%nQN(Jpp,Jp-Jpp,0) = n_
+               !
+             endif
+             !
+             Jmax = max(Jmax,min(Jp,Jpp))
+             !
+             if (abs(Jp-Jpp)>1) then 
+               write(out,'("Jp-Jpp>1 in broadening file:",2i8)') Jp,Jpp
+               stop 'Jp-Jpp>1 in broadening file'
+             endif
+             !
+           case ('K0','V0')
+             !
+             if (nitems<4) call report ("not enough data in .broad for "//trim(w),.true.)
+             !
+             call readf(gamma_)
+             call readf(n_)
+             call readf(k0)
+             !
+             kpp = int(k0)
+             !
+             if (kpp<0) call report ("Illegal k<0 or v<0 for k0 or v0 in .broad for "//trim(w),.true.)
+             !
+             if (kpp>Kmax) cycle
+             !
+             species(i)%gammaQN(:,:,kpp) = gamma_
+             species(i)%nQN(:,:,kpp) = n_
+             !
+           case ('K1','V1')
+             !
+             if (nitems<5) call report ("not enough data in .broad for "//trim(w),.true.)
+             !
+             call readf(gamma_)
+             call readf(n_)
+             call readf(Ji)
+             call readf(k0)
+             !
+             kpp = int(k0)
+             !
+             ! use integer value of J
+             !
+             j = int(Ji)
+             Jmax = max(Jmax,J)
+             !
+             if (kpp<0) call report ("Illegal k<0 or v<0 for k0 or v0 in .broad for "//trim(w),.true.)
+             !
+             if (kpp>Kmax) cycle
+             !
+             species(i)%gammaQN(J,:,kpp) = gamma_
+             species(i)%nQN(J,:,kpp) = n_             
+             !
+           case default
+             !
+             write(out,"('The broadening model',a,' is not implemented yet or illegal')") trim(ch_broad(1:3))
+             stop 'Illegal broadening model'
+             !
+           end select
            !
-           Jmax = max(Jmax,min(Jp,Jpp))
+         enddo
+         !
+         ! using the gamma(Jmax) value for all gamms for J>Jmax
+         !
+         do k0 = 0,KmaxAll
            !
-           if (abs(Jp-Jpp)>1) then 
-             write(out,'("Jp-Jpp>1 in broadening file:",2i8)') Jp,Jpp
-             stop 'Jp-Jpp>1 in broadening file'
-           endif
+           forall(k=-2:2) species(i)%gammaQN(Jmax+1:,k,k0) = species(i)%gammaQN(Jmax,k,k0)
+           forall(k=-2:2) species(i)%nQN(Jmax+1:,k,k0) = species(i)%nQN(Jmax,k,k0)
            !
-         case default
-           !
-           write(out,"('The broadening model',a,' is not implemented yet or illegal')") trim(ch_broad(1:3))
-           stop 'Illegal broadening model'
-           !
-         end select
+         enddo
+         !
+         close(bunit)
+         !
+       elseif (stick_hitran.or.stick_oxford.or.phoenix_do) then
+         !
+         Jmax = JmaxAll
+         !
+         allocate(species(i)%gammaQN(0:Jmax,-2:2,0:0),stat=info)
+         call ArrayStart('gammaQN',info,size(species(i)%gammaQN),kind(species(i)%gammaQN))
+         species(i)%gammaQN(:,:,:) = species(i)%gamma
+         !
+         allocate(species(i)%nQN(0:Jmax,-2:2,0:0),stat=info)
+         !         
+         call ArrayStart('nQN',info,size(species(i)%nQN),kind(species(i)%nQN))
+         species(i)%nQN(:,:,:) = species(i)%N
+         !
+       endif
+       !
+     case ('BOX')
+       !
+       ! parcicle in a box 
+       !
+       Jmax = JmaxAll
+       KmaxAll = Kmax
+       !
+       allocate(species(i)%gammaQN(0:Jmax,-2:2,0:KmaxAll),stat=info)
+       call ArrayStart('gammaQN',info,size(species(i)%gammaQN),kind(species(i)%gammaQN))
+       !
+       allocate(species(i)%nQN(0:Jmax,-2:2,0:KmaxAll),stat=info)
+       !         
+       call ArrayStart('nQN',info,size(species(i)%nQN),kind(species(i)%nQN))
+       species(i)%nQN(:,:,:) = 0
+       !
+       halfwidth = species(i)%gamma*planck/(8.0_rk*vellgt*species(i)%mass*uma*species(i)%Lbox**2)
+       !
+       do k0 = 0,KmaxAll
+         !
+         forall(k=-2:2) species(i)%gammaQN(:,k,k0) = halfwidth*(2.0_rk*k0+1.0_rk)
          !
        enddo
        !
-       ! using the gamma(Jmax) value for all gamms for J>Jmax
-       !
-       forall(k=-2:2) species(i)%gammaQN(Jmax+1:,k) = species(i)%gammaQN(Jmax,k)
-       forall(k=-2:2) species(i)%nQN(Jmax+1:,k) = species(i)%nQN(Jmax,k)
-       !
-       close(bunit)
-       !
-    elseif (stick_hitran.or.stick_oxford.or.phoenix_do) then
-       !
-       Jmax = JmaxAll
-       !
-       allocate(species(i)%gammaQN(0:Jmax,-2:2),stat=info)
-       call ArrayStart('gammaQN',info,size(species(i)%gammaQN),kind(species(i)%gammaQN))
-       species(i)%gammaQN(:,:) = species(i)%gamma
-       !
-       allocate(species(i)%nQN(0:Jmax,-2:2),stat=info)
-       !         
-       call ArrayStart('nQN',info,size(species(i)%nQN),kind(species(i)%nQN))
-       species(i)%nQN(:,:) = species(i)%N
-       !
-     endif
+     end select
      !
    enddo
    !
    allocate(gamma_idx(0:JmaxAll,-2:2),stat=info)
    call ArrayStart('gamma_idx',info,size(gamma_idx),kind(gamma_idx))
-   allocate(gamma_comb(0:JmaxAll,-2:2),stat=info)
+   allocate(gamma_comb(0:JmaxAll,-2:2,0:KmaxAll),stat=info)
    call ArrayStart('gamma_comb',info,size(gamma_comb),kind(gamma_comb))
    !
    gamma_idx = 1
    gamma_comb = -1
    do i=0,JmaxAll
      do j= max(0,i-2),min(JmaxAll,i+2)
-      gamma_comb(j,i-j) = get_Voigt_gamma_val(Nspecies,real(i,rk),real(j,rk))
+       do k=0,KmaxAll
+          gamma_comb(j,i-j,k) = get_Voigt_gamma_val(Nspecies,real(i,rk),real(j,rk),real(k,rk))
+       enddo
      enddo
    enddo
    !
@@ -2486,7 +2625,7 @@ module spectrum
      !Combine all the gammas
      do i=0,JmaxAll
       do j= max(0,i-2),min(JmaxAll,i+2) 
-       call fast_voigt%generate_indices(gamma_comb(j,i-j),gamma_idx(j,i-j),JmaxAll)
+       call fast_voigt%generate_indices(gamma_comb(j,i-j,0),gamma_idx(j,i-j),JmaxAll)
       enddo
      enddo  
      !   
@@ -3123,7 +3262,7 @@ module spectrum
            !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,ifilter,&
            !$omp& ivib,ener_vib,ener_rot,jf,ji,tranfreq,tranfreq0,cutoff,abscoef,ndensity,int_cutoff,abscoef_ref,&
            !$omp& temp_gamma_n,unc_f,unc_i)&
-           !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,Asum,gamma_ram)
+           !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,gamma_ram)
            loop_swap : do iswap = 1,nswap_
              !
              indexf = indexf_RAM(iswap)
@@ -3342,14 +3481,16 @@ module spectrum
              acoef_ram(iswap) = acoef
              !
              nu_ram(iswap) = tranfreq
+             gamma_ram(iswap) = halfwidth
              !
              if (lineprofile_do) then
                 !
                 jf = jrot(ilevelf)
                 ji = jrot(ileveli)
+                Ki = krot(ilevelf)
                 !
-                gamma_ram(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji)
-                temp_gamma_n = get_Voigt_gamma_n(Nspecies,Jf,Ji,gamma_idx_RAM(iswap))
+                gamma_ram(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji,Ki)
+                temp_gamma_n = get_Voigt_gamma_n(Nspecies,Jf,Ji,Ki,gamma_idx_RAM(iswap))
                 !
                 ! for predissociative case we redefine collisional gamma by a radiative gamma if the latter is larger
                 !
@@ -3519,6 +3660,7 @@ module spectrum
                 !
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
+                halfwidth = gamma_ram(iswap)
                 !
                 call do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,intens_omp(:,iomp))
                 !
@@ -4246,6 +4388,11 @@ module spectrum
         deallocate(abciss)
         deallocate(bnormq)
         call ArrayStop('weight-abciss')
+   endif
+   !
+   if (allocated(Krot)) then 
+     deallocate(Krot)
+     call ArrayStop('Krot')
    endif
    !
    if (verbose>=4) call MemoryReport
@@ -5087,9 +5234,9 @@ module spectrum
          Jp  = int(Jf)
          Jpp = int(Ji)
          !
-         gamma1 = species(1)%gammaQN(Jpp,Jp-Jpp)
-         gamma2 = species(2)%gammaQN(Jpp,Jp-Jpp)
-         n1 = species(1)%nQN(Jpp,Jp-Jpp)
+         gamma1 = species(1)%gammaQN(Jpp,Jp-Jpp,0)
+         gamma2 = species(2)%gammaQN(Jpp,Jp-Jpp,0)
+         n1 = species(1)%nQN(Jpp,Jp-Jpp,0)
          !
          write(sunit,h_fmt,advance="no") &
                      imolecule,iso,tranfreq,abscoef,acoef,&
@@ -5259,12 +5406,12 @@ module spectrum
          Jp  = int(Jf)
          Jpp = int(Ji)
          !
-         gamma1 = species(1)%gammaQN(Jpp,Jp-Jpp)
-         gamma2 = species(2)%gammaQN(Jpp,Jp-Jpp)
-         gamma3 = species(3)%gammaQN(Jpp,Jp-Jpp)
-         n1 = species(1)%nQN(Jpp,Jp-Jpp)
-         n2 = species(2)%nQN(Jpp,Jp-Jpp)
-         n3 = species(3)%nQN(Jpp,Jp-Jpp)
+         gamma1 = species(1)%gammaQN(Jpp,Jp-Jpp,0)
+         gamma2 = species(2)%gammaQN(Jpp,Jp-Jpp,0)
+         gamma3 = species(3)%gammaQN(Jpp,Jp-Jpp,0)
+         n1 = species(1)%nQN(Jpp,Jp-Jpp,0)
+         n2 = species(2)%nQN(Jpp,Jp-Jpp,0)
+         n3 = species(3)%nQN(Jpp,Jp-Jpp,0)
          !
          write(sunit,"(i3,f12.6,e10.3,3(f5.4,f4.2),f10.4)",advance="no") &
                      iso,tranfreq,abscoef,&
@@ -5583,29 +5730,35 @@ module spectrum
        !
   end subroutine voi_quad
 
-  function get_Voigt_gamma_n(Nspecies,Jf,Ji,idx) result(f)
+  function get_Voigt_gamma_n(Nspecies,Jf,Ji,Ki,idx) result(f)
      !
      implicit none
      !
      integer(ik),intent(in) :: Nspecies
-     real(rk),intent(in) :: Jf,Ji
+     real(rk),intent(in) :: Jf,Ji,Ki
      real(rk) :: halfwidth,gamma_,n_,f
-     integer(ik) :: ispecies,Jpp,Jp
+     integer(ik) :: ispecies,Jpp,Jp,Kpp,KmaxAll
      integer(ik),optional,intent(inout) :: idx
      Jpp = nint(Ji)
      Jp  = nint(Jf)
+     !
+     ! What is the maximal value of K in the broad file -> KmaxAll
+     KmaxAll = size(gamma_comb,dim=3)-1
+     !
+     ! we assume gamma and n for the maximal value of K in the broad file 
+     Kpp = min(nint(Ki),KmaxAll)
      !
      if (species(1)%if_defined) then
        !
        if(present(idx)) then
           !
           idx = gamma_idx(Jpp,Jp-Jpp)
-          f   = gamma_comb(Jpp,Jp-Jpp)
+          f   = gamma_comb(Jpp,Jp-Jpp,Kpp)
           return
           !
        endif
        !     
-       f = gamma_comb(Jpp,Jp-Jpp)
+       f = gamma_comb(Jpp,Jp-Jpp,Kpp)
        return
        !
      else
@@ -5627,28 +5780,30 @@ module spectrum
      !
   end function get_Voigt_gamma_n
  
-  function get_Voigt_gamma_val(Nspecies,Jf,Ji) result(f)
+  function get_Voigt_gamma_val(Nspecies,Jf,Ji,Ki) result(f)
      !
      implicit none
      !
      integer(ik),intent(in) :: Nspecies
-     real(rk),intent(in) :: Jf,Ji
+     real(rk),intent(in) :: Jf,Ji,Ki
      real(rk) :: halfwidth,gamma_,n_,f
-     integer(ik) :: ispecies,Jpp,Jp
+     integer(ik) :: ispecies,Jpp,Jp,Kpp
      !
      halfwidth = 0
-     Jpp = nint(Ji)
-     Jp  = nint(Jf)
+     !Jpp = nint(Ji)
+     !Jp  = nint(Jf)
+     !Kpp = nint(Ki)
      !
      do ispecies =1,Nspecies
        !
-       if ( trim(species(ispecies)%filename)/="" ) then
+       if ( trim(species(ispecies)%model)/="const" ) then
          !
          Jpp = nint(Ji)
          Jp  = nint(Jf)
+         Kpp = nint(Ki)
          !
-         gamma_ = species(ispecies)%gammaQN(Jpp,Jp-Jpp)
-         n_     = species(ispecies)%nQN(Jpp,Jp-Jpp)
+         gamma_ = species(ispecies)%gammaQN(Jpp,Jp-Jpp,Kpp)
+         n_     = species(ispecies)%nQN(Jpp,Jp-Jpp,Kpp)
          !
        else
          !
