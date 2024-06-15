@@ -3260,7 +3260,7 @@ module spectrum
            abscoef_ram = 0
            !
            !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,ifilter,&
-           !$omp& ivib,ener_vib,ener_rot,jf,ji,tranfreq,tranfreq0,cutoff,abscoef,ndensity,int_cutoff,abscoef_ref,&
+           !$omp& ivib,ener_vib,ener_rot,jf,ji,Ki,tranfreq,tranfreq0,cutoff,abscoef,ndensity,int_cutoff,abscoef_ref,&
            !$omp& temp_gamma_n,unc_f,unc_i)&
            !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,gamma_ram)
            loop_swap : do iswap = 1,nswap_
@@ -3481,13 +3481,14 @@ module spectrum
              acoef_ram(iswap) = acoef
              !
              nu_ram(iswap) = tranfreq
-             gamma_ram(iswap) = halfwidth
              !
              if (lineprofile_do) then
                 !
                 jf = jrot(ilevelf)
                 ji = jrot(ileveli)
                 Ki = krot(ilevelf)
+                !
+                !gamma_ram(iswap) = halfwidth
                 !
                 gamma_ram(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji,Ki)
                 temp_gamma_n = get_Voigt_gamma_n(Nspecies,Jf,Ji,Ki,gamma_idx_RAM(iswap))
@@ -5748,7 +5749,7 @@ module spectrum
      ! we assume gamma and n for the maximal value of K in the broad file 
      Kpp = min(nint(Ki),KmaxAll)
      !
-     if (species(1)%if_defined) then
+     if (species(1)%model/="const") then
        !
        if(present(idx)) then
           !
@@ -5763,18 +5764,7 @@ module spectrum
        !
      else
        !
-       halfwidth = 0
-       !
-       do ispecies =1,Nspecies
-           !
-           gamma_ = species(ispecies)%gamma
-           n_     = species(ispecies)%n
-           !
-           halfwidth =  halfwidth + species(ispecies)%ratio*gamma_*(species(ispecies)%T0/Temp)**N_*pressure/species(ispecies)%P0
-           !
-       enddo
-       !
-       f = halfwidth
+       f = gamma_comb(0,0,0)
        !
      endif
      !
@@ -5789,7 +5779,7 @@ module spectrum
      real(rk) :: halfwidth,gamma_,n_,f
      integer(ik) :: ispecies,Jpp,Jp,Kpp
      !
-     halfwidth = 0
+     halfwidth = species(1)%gamma
      !Jpp = nint(Ji)
      !Jp  = nint(Jf)
      !Kpp = nint(Ki)
