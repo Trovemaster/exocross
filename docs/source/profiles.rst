@@ -297,44 +297,6 @@ Example
      end
 
 
-A :math:`J`-dependent set of broadening parameters can be provided in an external file using the ExoMol Diet structure, e.g.
-::
-
-     mass 16.0
-     pressure 0.5
-     Temperature 1300.0
-
-     species
-       H2  gamma 0.0207 n 0.44 t0 298.0 file 1H2-16O__H2.broad  ratio 0.84
-       He  gamma 0.043  n 0.02 t0 298.0 file  1H2-16O__He.broad ratio 0.16
-     end
-
-
-where `file` is the filename with parameters. Two Diet models are available in ExoCross are
-``a0`` (J"-dependence),  ``a1`` (J", PQR-dependence), ``m0`` (|m|-dependence) and ``m1`` (m-dependence), where
-:math:`m=-J,J,J+1` for P, Q, R branches, respectively.
-
-The broadening file has the following structure
-::
-    
-    a1   0.0145 0.500       0       1
-    a1   0.0156 0.417       1       2
-    a1   0.0164 0.350       2       3
-    
-
-where the 1st column describes the Diet model, the following two columns are the Voigt's gamma and n, and the last two are J" and J' (i.e. in the opposite to the conventional order). The values ``gamma`` and ``n`` in the ``species`` section are the default values in case of missing :math:`J`s in the broadening file. For :math:`J>J_{\rm max}`, the values :math:`\gamma` and :math:`n` the values of :math:`J=J_{\rm max}` are assumed. 
-
-More examples of .broad:
-::
-     
-    m1   0.0156 0.417      -2
-    m1   0.0164 0.350      -1
-    m1   0.0145 0.500       0
-    m1   0.0156 0.417       1
-    m1   0.0164 0.350       2
-    
-
-
 
 
 Voigt-Quad
@@ -359,4 +321,56 @@ Example
        H2  gamma 0.05 n 0.4 t0 298.0 ratio 0.9
        He  gamma 0.04 n 1.0 t0 298.0 ratio 0.1
      end
+
+
+ExoMol diet and broadening recepies
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+ExoCross is equipped to work with the ExoMol diet, which provides line broadening parameters in .broad files. The ExoMol diet allows for the line broadening parameters :math:`\gamma` and :math:`n` to depend, at least in principle, on any quantum numbers used in .states files. In practice, only simplest quantum number cases are currently in use, mainly for the rotational quantum number :math:`J`. Different quantum number cases ('recipes') are labeled with two character strings including ``a0`` (:math:`\gamma` and :math:`n` depend on :math:`J''` only), ``a1`` (:math:`J''` and :math:`J'`), ``m0`` and ``m1`` (rotational index :math:`|m|` and :math:`m`, respectively), ``v0`` (:math:`v'`), ``v1`` (:math:`J''` and :math:`v'`), ``k1`` (:math:`J''` and :math:`k'`). Currently, the vibrational :math:`v` or rotational quantum :math:`k` numbers can only be specified for the upper states.
+
+
+A :math:`J''`-dependent set of broadening parameters can be thus provided in an external file using the ExoMol Diet structure, recipe ``a0``, e.g.
+::
+
+     mass 16.0
+     pressure 0.5
+     Temperature 1300.0
+
+     species
+       H2  gamma 0.0207 n 0.44 t0 298.0 file 1H2-16O__H2.broad  ratio 0.84
+       He  gamma 0.043  n 0.02 t0 298.0 file  1H2-16O__He.broad ratio 0.16
+     end
+
+
+where `file` is the filename with the parameters :math:`\gamma` and :math:`n`. An example of the ``a0`` recipe is as follows 
+::
+
+    a0   0.0145 0.500       0 
+    a0   0.0156 0.417       1 
+    a0   0.0164 0.350       2 
+
+
+where the 1st column describes the Diet model, the following two columns are the Voigt's :math:`\gamma` and :math:`n`, and the last one is  :math:`J''` . The values ``gamma`` and ``n`` in the ``species`` section are the default values in case of missing :math:`J`s in the broadening file. For :math:`J>J_{\rm max}`, the values :math:`\gamma` and :math:`n` the values of :math:`J=J_{\rm max}` are assumed.
+
+
+The  ``a1`` recipe allows providing both the upper and lower state :math:`J`s, expecting :math`|J'-J''|\le 2`. 
+An example of an ``a1`` recipe broadening file has is as follows:
+::
+
+    a1   0.0145 0.500       0       1
+    a1   0.0156 0.417       1       2
+    a1   0.0164 0.350       2       3
+
+
+Here the last two columns list :math:`J''` and :math`J'` (i.e. opposite to the conventional order). 
+
+Another  example  of .broad for ``m1``:
+::
+
+    m1   0.0156 0.417      -2
+    m1   0.0164 0.350      -1
+    m1   0.0145 0.500       0
+    m1   0.0156 0.417       1
+    m1   0.0164 0.350       2
+
 
