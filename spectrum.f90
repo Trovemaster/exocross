@@ -132,7 +132,7 @@ module spectrum
              vibpopulation_do = .false., super_energies_do = .false., super_Einstein_do = .false., &
              uncertainty_filter_do = .false.,stick_vald = .false., error_cross_sections_do = .false., &
              phoenix_do = .false., predissociation_do = .false., both_qn_filters_active = .false.,&
-             interpolated = .false.
+             interpolated = .false.,population_do = .false.,nonLTE_do = .false.
   logical :: do_nu_error_based_on_unc = .false.
   logical :: lineprofile_do = .false., use_width_cutoff = .false.
   logical :: microns = .false.
@@ -214,6 +214,9 @@ module spectrum
                  call readf(temp_vib)
                  !
                  vibtemperature_do  = .true.
+                 !
+                 nonLTE_do = .true.
+                 !
                  if (temp_vib<small_) call report ("Illegal Tvib"//trim(w),.true.)
                  !
              elseif(w(1:3)=='REF') then
@@ -453,8 +456,9 @@ module spectrum
         case ("QN","QUNTUM-NUMBERS","NON-LTE")
           !
           if (trim(w)=="NON-LTE") then 
-              !vibpopulation_do = .true.
-              vibtemperature_do  = .true.
+          !    !vibpopulation_do = .true.
+          !    vibtemperature_do  = .true.
+            nonLTE_do = .true.
           endif
           !
           call read_line(eof) ; if (eof) exit
@@ -504,12 +508,12 @@ module spectrum
               !
               if (QN%NRotcol==1)  QN%Rotcol(2)= QN%Rotcol(1)
               !
-            case ("DENSITY","DENS")
+            case ("DENSITY","DENS","POPULATION")
               !
               call readi(QN%dens_col)
               !
-              vibpopulation_do = .true.
-              vibtemperature_do  = .true.
+              population_do = .true.
+              nonLTE_do = .true.
               !
             case ("UNC","UNCERTAINTY")
               !
@@ -1353,14 +1357,24 @@ module spectrum
       !stop 'Input Error: VOI-FAST cannot be used together with Species'
     endif
     !
-    if (vibpopulation_do.and..not.if_QN_defined) then 
+    if (population_do.and..not.if_QN_defined) then 
       write(out,"('Input Error: For non-LTE (Tvib/=Trot) QN(=non-LTE) section must be defined')")
-      stop 'Input Error: For non-LTE (Tvib/=Trot) QN(non-LTE) must be defined'
+      stop 'Input Error: For non-LTE QN(non-LTE) must be defined'
     endif
     !
-    if (vibpopulation_do.and.QN%dens_col<4) then 
+    if (population_do.and.QN%dens_col<4) then 
       write(out,"('Input Error: For non-LTE denisty column must be >4')")
-      stop 'Input Error: For non-LTE (Tvib/=Trot) denisty is illegal'
+      stop 'Input Error: For non-LTE denisty is illegal'
+    endif
+    !
+    if (vibtemperature_do.and.population_do) then 
+        !
+        ! if vib-temperature is defined, switch to vibpopulation_do 
+        !
+        vibpopulation_do = .true.
+        population_do = .false.
+        nonLTE_do = .true.
+        !
     endif
     !
     if (error_cross_sections_do.and.proftype(1:5)/='ELORE') then
@@ -1416,7 +1430,7 @@ module spectrum
    !
    real(rk)    :: hitran_Tref = 296_rk
    integer(ik) :: info,ipoint,ipoint_,nlevels,i,itemp,enunit,tunit,sunit,wunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf
-   integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems,iline,intunit,inu
+   integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems,iline,intunit,inu,nrows
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air,beta_ref
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef,m0,k0,Ki
    real(rk)    :: acoef_,int_cutoff,ndensity,abscoef_ref
@@ -1433,7 +1447,7 @@ module spectrum
    integer(ik),allocatable :: indexi_RAM(:),indexf_RAM(:)
    integer(ik),allocatable :: ileveli_RAM(:),ilevelf_RAM(:),gamma_idx_RAM(:)
    integer(ik) :: nswap_,nswap,iswap,iswap_,iomp,ichunk
-   real(rk),allocatable :: energies_vib(:),dens_vib(:),gamma_radiative(:)
+   real(rk),allocatable :: energies_vib(:),dens_vib(:),gamma_radiative(:),population(:)
    integer(ik),allocatable :: ivib_state(:),ivib_state_pf(:)
    !
    integer(ik),allocatable :: nchars_quanta(:)  ! max number of characters used for each quantum number
@@ -1596,7 +1610,7 @@ module spectrum
          !10  exit
       end do
       !
-      nlines = iline
+      nrows = iline
       !
       if (verbose>=3) write(out,"('Max number of energy records = ',i9)") maxitems
       !
@@ -1608,19 +1622,19 @@ module spectrum
       !
       maxitems = maxitems-4
       !
-      if (verbose>=3) print*,"ID max:",nlevels,", min:",imin,"States selected:",nlines
+      if (verbose>=3) print*,"ID max:",nlevels,", min:",imin,"States selected:",nrows
       !
-      allocate(energies(nlines),Jrot(nlines),gtot(nlines),indices(imin:nlevels),stat=info)
+      allocate(energies(nrows),Jrot(nrows),gtot(nrows),indices(imin:nlevels),stat=info)
       call ArrayStart('energies',info,size(energies),kind(energies))
       call ArrayStart('Jrot',info,size(Jrot),kind(Jrot))
       call ArrayStart('gtot',info,size(gtot),kind(gtot))
       call ArrayStart('indices',info,size(indices),kind(indices))
       !
-      allocate(Krot(nlines),stat=info)
+      allocate(Krot(nrows),stat=info)
       call ArrayStart('Krot',info,size(Krot),kind(Krot))
       Krot = 0
       !
-      allocate(level_IDs(nlines),stat=info)
+      allocate(level_IDs(nrows),stat=info)
       call ArrayStart('level_IDs',info,size(level_IDs),kind(level_IDs))
       !
       if (predissociation_do) then
@@ -1634,23 +1648,24 @@ module spectrum
       if (vibtemperature_do) then
         !
         write(out,"('Number of vibrational states = ',i6)") Nvib_states
-        allocate(energies_vib(Nvib_states),ivib_state(nlines),stat=info)
+        allocate(energies_vib(Nvib_states),ivib_state(nrows),stat=info)
         call ArrayStart('energies_vib',info,size(energies_vib),kind(energies_vib))
         call ArrayStart('ivib_state',info,size(ivib_state),kind(ivib_state))
         !
         if (partfunc_do) then
-           allocate(ivib_state_pf(nlines),stat=info)
+           allocate(ivib_state_pf(nrows),stat=info)
            call ArrayStart('ivib_state_pf',info,size(ivib_state_pf),kind(ivib_state_pf))
         endif 
         !
-        if (vibpopulation_do) then 
+        if (vibpopulation_do) then
+          !
           allocate(dens_vib(Nvib_states),stat=info)
           call ArrayStart('dens_vib',info,size(dens_vib),kind(dens_vib))
           !
           if (QN%dens_col-4>maxitems) then 
-             write(out,"('Vib. density column error: the valu is larger than the number of columns in .states = ',2i4)") &
+             write(out,"('Vib. density column error: the position is larger than the number of columns in .states = ',2i4)") &
                   QN%dens_col,maxitems+4
-             stop 'Vib. density column error: the valu is larger than the number of columns in .states'
+             stop 'Vib. density column error: the value is larger than the number of columns in .states'
           endif
           !
         endif
@@ -1711,13 +1726,26 @@ module spectrum
         !
       endif
       !
+      if (population_do) then
+        !
+        allocate(population(nrows),stat=info)
+        call ArrayStart('population',info,size(population),kind(population))
+        !
+        if (QN%dens_col-4>maxitems) then 
+           write(out,"('Density column error: the position is larger than the number of columns in .states = ',2i4)") &
+                QN%dens_col,maxitems+4
+           stop 'Density column error: the value is larger than the number of columns in .states'
+        endif
+        !
+      endif
+      !
       if (trim(proftype)=='LIFETIME'.or.trim(proftype)=='T-LIFETIME') THEN
         !
         nan = IEEE_VALUE(nan, IEEE_QUIET_NAN)
         !
         ! allocate the matrix for the sum of the A-coeffs
         !
-        allocate(Asum(nlines),stat=info)
+        allocate(Asum(nrows),stat=info)
         call ArrayStart('Asum',info,size(Asum),kind(Asum))
         !
         Asum = nan ! -1.0_rk
@@ -1726,11 +1754,11 @@ module spectrum
       !
       ! identify rotational quantum number for each line 
       !if (QN%Kcol>0) then 
-      !  allocate(Krot(nlines),stat=info)
+      !  allocate(Krot(nrows),stat=info)
       !  call ArrayStart('Krot',info,size(Krot),kind(Krot))
       !endif
       !
-      allocate(quantum_numbers(0:maxitems,nlines),nchars_quanta(maxitems),stat=info)
+      allocate(quantum_numbers(0:maxitems,nrows),nchars_quanta(maxitems),stat=info)
       call ArrayStart('quantum_numbers',info,size(quantum_numbers),kind(quantum_numbers))
       call ArrayStart('nchars_quanta',info,size(nchars_quanta),kind(nchars_quanta))
       !
@@ -1988,6 +2016,12 @@ module spectrum
             !
             Krot(i) = k
             !
+         endif
+         !
+         if (population_do) then 
+           !
+           read(quantum_numbers(QN%dens_col-4,i),*) population(i)
+           !
          endif
          !
       enddo loop_energy_read
@@ -3363,17 +3397,25 @@ module spectrum
                !
                !abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
                !
-               if (.not.vibtemperature_do) then
+               if (.not.nonLTE_do) then
+                  !
                   abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
-               elseif(vibpopulation_do) then
+                  !
+               elseif (vibpopulation_do) then
                   ! apply vibrational population
                   !read(quantum_numbers(QN%dens_col-4,ileveli),*) ndensity
                   !
                   abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*ndensity*&
                           (1.0_rk-exp(-c2/temp*tranfreq))/(tranfreq**2*partfunc)
                   !
-                  ! split into a product of vib and rot parts 
-               else
+                  ! split into a product of vib and rot parts
+                  !
+               elseif (population_do) then 
+                  !
+                  abscoef=cmcoef*acoef*gtot(ilevelf)/(tranfreq**2)*population(ileveli)
+                  !
+               elseif (vibtemperature_do) then
+                  !
                   abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)*&
                           (1.0_rk-exp(-c2/temp_vib*tranfreq))/(tranfreq**2*partfunc)
                endif 
@@ -3382,7 +3424,7 @@ module spectrum
                !
                ! emission coefficient [Ergs/mol/Sr]
                !
-               if (.not.vibtemperature_do) then
+               if (.not.nonLTE_do) then
                   abscoef=emcoef*acoef*gtot(ilevelf)*exp(-beta*energyf)*tranfreq/(partfunc)
 
                elseif(vibpopulation_do) then
@@ -3392,7 +3434,11 @@ module spectrum
                   abscoef=emcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*ndensity*&
                           tranfreq/(partfunc)
                   !
-               else 
+               elseif (population_do) then 
+                  !
+                  abscoef=emcoef*acoef*gtot(ilevelf)*tranfreq*population(ilevelf)
+                  !
+               elseif (vibtemperature_do) then
                   ! split into a product of vib and rot parts 
                   abscoef=emcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*&
                           exp(-c2/temp_vib*ener_vib)*tranfreq/(partfunc)
@@ -3571,7 +3617,7 @@ module spectrum
                !
             else
                !
-               call do_stick(sunit,nswap,nlines,maxitems,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,&
+               call do_stick(sunit,nswap,nrows,maxitems,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,&
                             nchars_quanta,quantum_numbers)
                !
             endif
@@ -3809,7 +3855,7 @@ module spectrum
             !
         case ('VALD')
             !
-            call do_stick_vald(sunit,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram)
+            call do_stick_vald(sunit,nswap,nrows,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram)
             !
             call TimerStop('Calc')
             cycle loop_tran
@@ -3821,7 +3867,7 @@ module spectrum
               stop 'Phoenix-Error: illegal Nspecies '
             endif
             !
-            call do_gf_oscillator_strength_Phoenix(i,ichunk,iso,nswap,nlines,energies,Jrot,ilevelf_ram,ileveli_ram,&
+            call do_gf_oscillator_strength_Phoenix(i,ichunk,iso,nswap,nrows,energies,Jrot,ilevelf_ram,ileveli_ram,&
                                                    acoef_ram,abscoef_ram,jmax,species(1)%gammaQN,&
                                                    species(1)%nQN,species(2)%gammaQN,species(2)%nQN,output)
             !
@@ -4154,7 +4200,7 @@ module spectrum
        write(my_fmt100K,'(a)')  '(1x,i11,1x,f12.5,1x,i6,1x,f7.1,1x)'
      endif
      !
-     do ilevelf = 1,nlines
+     do ilevelf = 1,nrows
        !
        ! write to .life-file
        !
@@ -4362,6 +4408,11 @@ module spectrum
    if (allocated(dens_vib)) then 
         deallocate(dens_vib)
         call ArrayStop('dens_vib')
+   endif
+   !
+   if (allocated(population)) then 
+        deallocate(population)
+        call ArrayStop('population')
    endif
    !
    if (allocated(quantum_numbers_vib)) then 
@@ -5190,17 +5241,17 @@ module spectrum
 
 
   !
-  subroutine do_stick(sunit,nswap,nlines,maxitems,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,&
+  subroutine do_stick(sunit,nswap,nrows,maxitems,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,&
                       abscoef_ram,acoef_ram,nchars_quanta,quantum_numbers)
 
      !
      implicit none
      !
-     integer(ik),intent(in) :: sunit,nswap,maxitems,nlines,ilevelf_ram(nswap),ileveli_ram(nswap)
-     real(rk),intent(in) :: abscoef_ram(nswap),acoef_ram(nswap),jrot(nlines),energies(nlines)
+     integer(ik),intent(in) :: sunit,nswap,maxitems,nrows,ilevelf_ram(nswap),ileveli_ram(nswap)
+     real(rk),intent(in) :: abscoef_ram(nswap),acoef_ram(nswap),jrot(nrows),energies(nrows)
      real(rk)  :: Jf,Ji,abscoef,acoef,tranfreq,energyf,energyi
-     integer(ik),intent(in) :: nchars_quanta(maxitems),gtot(nlines)
-     character(len=20),intent(in) :: quantum_numbers(0:maxitems,nlines)
+     integer(ik),intent(in) :: nchars_quanta(maxitems),gtot(nrows)
+     character(len=20),intent(in) :: quantum_numbers(0:maxitems,nrows)
      integer(ik) :: nchars_,kitem,ierror_nu,iE,ierror_i,ierror,ierror_S,l,qni,qnf,ierror_f,&
                     ilevelf,ileveli,iswap,nchars_tot,ierror_nu_,icol
      character(9) :: b_fmt
@@ -5619,13 +5670,13 @@ module spectrum
   end subroutine do_stick
 
 
-  subroutine do_stick_vald(sunit,nswap,nlines,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,&
+  subroutine do_stick_vald(sunit,nswap,nrows,energies,Jrot,gtot,ilevelf_ram,ileveli_ram,&
                       abscoef_ram,acoef_ram)
      !
      implicit none
      !
-     integer(ik),intent(in) :: sunit,nswap,nlines,ilevelf_ram(nswap),ileveli_ram(nswap),gtot(nlines)
-     real(rk),intent(in) :: abscoef_ram(nswap),acoef_ram(nswap),jrot(nlines),energies(nlines)
+     integer(ik),intent(in) :: sunit,nswap,nrows,ilevelf_ram(nswap),ileveli_ram(nswap),gtot(nrows)
+     real(rk),intent(in) :: abscoef_ram(nswap),acoef_ram(nswap),jrot(nrows),energies(nrows)
      real(rk)  :: Jf,Ji,abscoef,acoef,tranfreq,energyf,energyi
      integer(ik) :: ilevelf,ileveli,iswap,gtot_f
      character(len=cl) :: h_fmt
