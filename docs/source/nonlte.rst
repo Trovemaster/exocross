@@ -1,11 +1,11 @@
 Non-LTE
 =======
 
-There currentoy two main methods to model non-LTE spectra with ExoCross: (i) 
-using the two-temperature Treanor distribution and (ii) custom vibrational 
-densities.  
+There currentoy two main methods to model non-LTE spectra with ExoCross: (i)
+using the two-temperature Treanor distribution and (ii) custom vibrational
+densities.
 
-Treanor distribution 
+Treanor distribution
 ^^^^^^^^^^^^^^^^^^^^
 
 The non-LTE spectra are modelled using the Treanor, non-Boltzmann distribution, which that the rotational and vibrational modes themselves are in LTE and the non-LTE population of a given state is taken as the product of the two Boltzmann distributions \citep{ExoCross,19PaLaxx}
@@ -23,7 +23,7 @@ where :math:`A_{\rm fi}` is the Einstein-A coefficient (:math:`s^{-1}`), :math:`
 
 :math:` Q(T) =\sum_{n}  g_n^{\rm tot} F_{J,v,k}(T_{\rm vib},T_{\rm rot}),`
 
-:math:`g_n^{\rm tot}` is the total degeneracy given by 
+:math:`g_n^{\rm tot}` is the total degeneracy given by
 
 :math:`g_n^{\rm tot} = g^{\rm ns}_n (2 J_n+1),`
 
@@ -43,9 +43,9 @@ An example of a non-LTE ExoCross input for a rotational tempeature of 296 K and 
 
 ::
 
-    Temperature  296.0 vib 2000 
+    Temperature  296.0 vib 2000
     Range 0.0  10000.0
-    
+
     Npoints 10001
 
     NON-LTE
@@ -56,35 +56,35 @@ An example of a non-LTE ExoCross input for a rotational tempeature of 296 K and 
     absorption
     gauss
     hwhm 0.5 (cm-1)
-    
+
     output OH_T296_2000K_non-LTE
 
     States      16O-1H__MoLLIST.states
     Transitions 16O-1H__MoLLIST.trans
-    
-    
-
-Here `NON-LTE` has the same stucture and meaning as a section `QN` used to specify the columns with the (vibrational) quantum numbers. 
-The keyword `Jref` specifies  the reference values of :math:`J` used to select the vibrational energies with the default value of 0. 
-The keyword `vib` defines the range of columns in the states file containing the vibrational quantum numbers, which are also used 
-fo building the reference set of vibrational energies. 
 
 
 
-Custom vibrational densities 
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Here `NON-LTE` has the same stucture and meaning as a section `QN` used to specify the columns with the (vibrational) quantum numbers.
+The keyword `Jref` specifies  the reference values of :math:`J` used to select the vibrational energies with the default value of 0.
+The keyword `vib` defines the range of columns in the states file containing the vibrational quantum numbers, which are also used
+fo building the reference set of vibrational energies.
 
-The vibrational densities :math:`N_{\rm vib}` can be also inputed directly into the calculations using the states file. In this case the non-LTE population density is 
-given by 
+
+
+Custom vibrational (vibronic) densities
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The vibrational densities :math:`N_{\rm vib}` can be also inputed directly into the calculations using the states file. In this case the non-LTE population density is
+given by
 
 :math:`F_{J,v,k}(T_{\rm vib},T_{\rm rot}) = N_{\rm v} e^{-c_2 \tilde{E}_{J,k}^{v,\rm rot}/T_{\rm rot}}.`
 
-The non-LTE partition function :math:`Q(T)` is defined as 
+The non-LTE partition function :math:`Q(T)` is defined as
 
 :math:`Q(T) =\sum_{n}  g_n^{\rm tot} F_{J,v,k}(T_{\rm vib},T_{\rm rot}).`
 
 
-Here is an example of a non-LTE ExoCross input for a rotational tempeature of 296 K and the normalised vibrational denisty 
+Here is an example of a non-LTE ExoCross input for a rotational tempeature of 296 K and the normalised vibrational denisty
 listed in column 8:
 
 
@@ -92,26 +92,60 @@ listed in column 8:
 
     Temperature  296.0
     Range 0.0  10000.0
-    
+
     Npoints 10001
 
     NON-LTE
       JREF 1.5
-      denstity 8
+      density 8
       vib 6 7
     end
 
     absorption
     gauss
     hwhm 0.5 (cm-1)
-    
+
+    output OH_T296_2000K_non-LTE
+
+    States      16O-1H__MoLLIST.states
+    Transitions 16O-1H__MoLLIST.trans
+
+
+Custom rovibrational (rovibronic) densities
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+It is also possible to fully specify the state rovibrational (rovibronic) population :math:`F_{J,v,k}` by listing them in the .states file and linking to them in the ExoCross input using the QN section as in the following example:
+::
+
+    Range 0.0  10000.0
+
+    Npoints 10001
+
+    non-LTE
+      population 8
+    end
+
+    absorption
+    gauss
+    hwhm 0.5 (cm-1)
+
     output OH_T296_2000K_non-LTE
 
     States      16O-1H__MoLLIST.states
     Transitions 16O-1H__MoLLIST.trans
     
 
+Here, the ``population`` column in the .states file is number 8(with alias ``density``). 
 
-     
+The temperature does not need and cannot be specified for the full non-LTE. The partition function does not exist either, with the absorption intensities given simply by 
+
+:math:`I_{f,i} = \frac{1}{8\pi c}\frac{A_{fi} g_{f}}{\tilde{\nu}} F_{J'',v'',k''}.`
+
+and for emission 
+
+:math:I_{f,i} = \frac{hc }{4\pi} A_{fi} g_{f} \tilde{\nu}  F_{J',v',k'}.``
+
+Here :math:`c` is the speed of light (cm/s) and :math:`h` is the Planck constant in cgs. :math:`f,i` indicate the upper and lower states, respectively.  
+
 
 
