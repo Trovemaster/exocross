@@ -159,7 +159,7 @@ Error cross sections for the Lorentzian profile (Elorentz)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
-For the Lorenztian line profile centred at :math:`\tilde{\nu}_{ij}` with HWHM :math:`\gamma` given by
+For the Lorentzian line profile centred at :math:`\tilde{\nu}_{ij}` with HWHM :math:`\gamma` given by
 
 .. math::
 
@@ -173,9 +173,16 @@ the corresponding derivative wrt :math:`\tilde{\nu}_{ij}` is given by
     \frac{\partial f(\tilde\nu)_{\rm Lo}}{\partial \tilde\nu_{ij}} = \frac{\gamma}{\pi} \frac{2(\tilde{\nu}_{ij}-\tilde{\nu})}{\left[(\tilde{\nu}-\tilde{\nu}_{ij})^2+\gamma^2\right]^2}
 
 
+The cross section error (math:`{\rm cm}^2`/molecule) is then defined by
+
+.. math::
+
+    \Delta f = \left[ \sum_{ij} I_{ij}  \frac{\partial f(\tilde\nu)_{\rm Lo}}{\partial \tilde\nu_{ij}}^2 \left( \Delta E_{i}  + \Delta E_{j}   \right)   \right]^{1/2},
+
+where :math:`I_{ij}` is the line intensity (cm/molecule), :math:`\Delta E_i` and :math:`\Delta  E_j` are the uncertainties of the upper and lower states, respectively.  
 
 Pre-dissociative line profiles
-------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In case of pre-dissociative effects, the lines van be broadened beyond the collisional or Doppler broadening. For these cases, ExoCross can use the lifetimes :math:`\tau`  from the States file (usually column 6 after the uncertainty column) to estimate the pre-dissociative line broadening (HWHM) via
 
@@ -342,18 +349,18 @@ A :math:`J''`-dependent set of broadening parameters can be thus provided in an 
      end
 
 
-where `file` is the filename with the parameters :math:`\gamma` and :math:`n`. An example of the ``a0`` recipe is as follows 
+where `file` is the filename with the parameters :math:`\gamma` and :math:`n`. An example of the ``a0`` recipe is as follows
 ::
 
-    a0   0.0145 0.500       0 
-    a0   0.0156 0.417       1 
-    a0   0.0164 0.350       2 
+    a0   0.0145 0.500       0
+    a0   0.0156 0.417       1
+    a0   0.0164 0.350       2
 
 
 where the 1st column describes the Diet model, the following two columns are the Voigt's :math:`\gamma` and :math:`n`, and the last one is  :math:`J''` . The values ``gamma`` and ``n`` in the ``species`` section are the default values in case of missing :math:`J`s in the broadening file. For :math:`J>J_{\rm max}`, the values :math:`\gamma` and :math:`n` the values of :math:`J=J_{\rm max}` are assumed.
 
 
-The  ``a1`` recipe allows providing both the upper and lower state :math:`J`s, expecting :math`|J'-J''|\le 2`. 
+The  ``a1`` recipe allows providing both the upper and lower state :math:`J`s, expecting :math`|J'-J''|\le 2`.
 An example of an ``a1`` recipe broadening file has is as follows:
 ::
 
@@ -362,7 +369,7 @@ An example of an ``a1`` recipe broadening file has is as follows:
     a1   0.0164 0.350       2       3
 
 
-Here the last two columns list :math:`J''` and :math`J'` (i.e. opposite to the conventional order). 
+Here the last two columns list :math:`J''` and :math`J'` (i.e. opposite to the conventional order).
 
 Another  example  of .broad for ``m1``:
 ::
