@@ -170,16 +170,9 @@ the corresponding derivative wrt :math:`\tilde{\nu}_{ij}` is given by
 
 .. math::
 
-    \frac{\partial f(\tilde\nu)_{\rm Lo}}{\partial \tilde\nu_{ij}} = \frac{\gamma}{\pi} \frac{2(\tilde{\nu}_{ij}-\tilde{\nu})}{\left[(\tilde{\nu}-\tilde{\nu}_{ij})^2+\gamma^2\right]^2}
+    \frac{\partial f(\tilde\nu)_{\rm Lo}}{\partial \tilde\nu_{ij}} = \frac{\gamma}{\pi} \frac{2(\tilde{\nu}_{ij}-\tilde{\nu})}{\left[(\tilde{\nu}-\tilde{\nu}_{ij})^2+\gamma^2\right]^2}.
 
 
-The cross section error (math:`{\rm cm}^2`/molecule) is then defined by
-
-.. math::
-
-    \Delta f = \left[ \sum_{ij} I_{ij}  \frac{\partial f(\tilde\nu)_{\rm Lo}}{\partial \tilde\nu_{ij}}^2 \left( \Delta E_{i}  + \Delta E_{j}   \right)   \right]^{1/2},
-
-where :math:`I_{ij}` is the line intensity (cm/molecule), :math:`\Delta E_i` and :math:`\Delta  E_j` are the uncertainties of the upper and lower states, respectively.  
 
 Pre-dissociative line profiles
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
