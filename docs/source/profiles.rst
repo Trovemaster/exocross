@@ -155,6 +155,53 @@ It is important that the energy uncertainties are provided in the column 5 of th
    end
 
 
+
+Cross sections with energy uncertainties as line broadening (Voigt-unc)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 
+
+If we assume that the energy uncertainties distributed according with the normal distribution with :math:`\sigma` as the uncertainty of the corresponding line position :math:`\tilde\nu_{ij}`:
+
+.. math::
+
+    \sigma_{ij}^{\rm unc} = \sqrt{\Delta \tilde{E}_{i}^2+ \Delta \tilde{E}_{j}^2},
+    
+we can obtain the cross sections with the energy uncertainties included by convolving a Gaussian with :math:`\alpha_{ij}^{\rm G} = \sqrt{2\ln(2)} \sigma_{ij}`  with the Lorentzian (Voigt) of $\gamma_{\rm V}$. The resulted line profile us Voigt. The Doppler broadening can be added to the uncertainty broadening as follows 
+.. math::
+
+    \alpha_{ij}^{\rm G} =  \sqrt{2\ln(2) (\sigma_{ij}^{\rm unc})^2 + (\alpha_{ij}^{\rm Doppl})^2}. 
+
+This feature is implemented as the ``Voigt-unc`` type and can be used as in the following example:
+::
+
+     temperature 1000 Range  0 20000
+     
+     Npoints 2000000
+     
+     mass 64
+     
+     absorption
+     Voigt-unc
+     
+     pressure  1
+     
+     species
+      H2  gamma 0.0468  n 0.500 t0 296.0  ratio 0.85
+      He  gamma 0.0468  n 0.5  t0 296.0  ratio 0.15
+     end
+       
+     
+     Output TiO_Voigt-unc_T1000K_P1atm
+     
+     States 48Ti-16O__Toto.states
+     
+     Transitions 48Ti-16O__Toto.trans
+ 
+
+
+ 
+
+
+
 Error cross sections for the Lorentzian profile (Elorentz)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -182,9 +229,9 @@ In case of pre-dissociative effects, the lines van be broadened beyond the colli
 
 .. math::
 
-    \gamma_{\rm prediss}  = \frac{1}{2\pi C \tau} \frac{1}{2}
+    \gamma_{\rm prediss}  = \frac{1}{2\pi c \tau} \frac{1}{2}
 
-where :math`C` is the speed of light in cm/s, :math:`\tau` is the lifetime in s and the factor :math:`1/2` is to convert to the HWHM :math:`\gamma`. ExoCross will apply the largest of the two line broadening values, :math:`\gamma_{\rm prediss}` and :math:`\gamma_{\rm collis}`.  This option is activated via a free floating keyword ``PREDISSOCIATION``. By default, the lifetimes column is assumed to be column 6. Otherwise it is important to specify the number of the lifetime column as part of the ``QN`` section using the keyword ``lifetime``
+where :math:`c` is the speed of light in cm/s, :math:`\tau` is the lifetime in s and the factor :math:`1/2` is to convert to the HWHM :math:`\gamma`. ExoCross will apply the largest of the two line broadening values, :math:`\gamma_{\rm prediss}` and :math:`\gamma_{\rm collis}`.  This option is activated via a free floating keyword ``PREDISSOCIATION``. By default, the lifetimes column is assumed to be column 6. Otherwise it is important to specify the number of the lifetime column as part of the ``QN`` section using the keyword ``lifetime``
 ::
 
      predissociation

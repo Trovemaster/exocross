@@ -2706,7 +2706,7 @@ module spectrum
    !
    select case (trim(proftype(1:5)))
        !
-   case ('GAUSS','DOPPL','LOREN','LORE0','GAUS0','DOPP0','VOIGT','PSEUD','PSE-R','PSE-L','VOI-Q','VOI-F','VOI-9')
+   case ('GAUSS','DOPPL','LOREN','LORE0','GAUS0','DOPP0','VOIGT','PSEUD','PSE-R','PSE-L','VOI-Q','VOI-F','VOI-9','VOI-U')
        !
        if (verbose>=2) then
           !
@@ -3327,7 +3327,7 @@ module spectrum
            !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,ifilter,&
            !$omp& ivib,ener_vib,ener_rot,jf,ji,Ki,tranfreq,tranfreq0,cutoff,abscoef,ndensity,int_cutoff,abscoef_ref,&
            !$omp& temp_gamma_n,unc_f,unc_i)&
-           !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,gamma_ram,sigma_ram)
+           !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,gamma_ram,sigma2_ram)
            loop_swap : do iswap = 1,nswap_
              !
              indexf = indexf_RAM(iswap)
