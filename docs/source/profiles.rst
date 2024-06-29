@@ -156,6 +156,26 @@ It is important that the energy uncertainties are provided in the column 5 of th
 
 
 
+
+Error cross sections for the Lorentzian profile (Elorentz)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+For the Lorentzian line profile centred at :math:`\tilde{\nu}_{ij}` with HWHM :math:`\gamma` given by
+
+.. math::
+
+  f(\tilde\nu,\tilde\nu_{ij},\gamma)_{\rm Lo} = \frac{\gamma}{\pi} \frac{1}{(\tilde{\nu}-\tilde{\nu}_{ij})^2+\gamma^2}
+
+
+the corresponding derivative wrt :math:`\tilde{\nu}_{ij}` is given by
+
+.. math::
+
+    \frac{\partial f(\tilde\nu)_{\rm Lo}}{\partial \tilde\nu_{ij}} = \frac{\gamma}{\pi} \frac{2(\tilde{\nu}_{ij}-\tilde{\nu})}{\left[(\tilde{\nu}-\tilde{\nu}_{ij})^2+\gamma^2\right]^2}.
+
+
+
 Cross sections with energy uncertainties as line broadening (Voigt-unc)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 
 
@@ -166,6 +186,7 @@ If we assume that the energy uncertainties distributed according with the normal
     \sigma_{ij}^{\rm unc} = \sqrt{\Delta \tilde{E}_{i}^2+ \Delta \tilde{E}_{j}^2},
     
 we can obtain the cross sections with the energy uncertainties included by convolving a Gaussian with :math:`\alpha_{ij}^{\rm G} = \sqrt{2\ln(2)} \sigma_{ij}`  with the Lorentzian (Voigt) of $\gamma_{\rm V}$. The resulted line profile us Voigt. The Doppler broadening can be added to the uncertainty broadening as follows 
+
 .. math::
 
     \alpha_{ij}^{\rm G} =  \sqrt{2\ln(2) (\sigma_{ij}^{\rm unc})^2 + (\alpha_{ij}^{\rm Doppl})^2}. 
@@ -186,7 +207,7 @@ This feature is implemented as the ``Voigt-unc`` type and can be used as in the 
      
      species
       H2  gamma 0.0468  n 0.500 t0 296.0  ratio 0.85
-      He  gamma 0.0468  n 0.5  t0 296.0  ratio 0.15
+      He  gamma 0.0468  n 0.5   t0 296.0  ratio 0.15
      end
        
      
@@ -198,27 +219,8 @@ This feature is implemented as the ``Voigt-unc`` type and can be used as in the 
  
 
 
+
  
-
-
-
-Error cross sections for the Lorentzian profile (Elorentz)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-
-For the Lorentzian line profile centred at :math:`\tilde{\nu}_{ij}` with HWHM :math:`\gamma` given by
-
-.. math::
-
-  f(\tilde\nu,\tilde\nu_{ij},\gamma)_{\rm Lo} = \frac{\gamma}{\pi} \frac{1}{(\tilde{\nu}-\tilde{\nu}_{ij})^2+\gamma^2}
-
-
-the corresponding derivative wrt :math:`\tilde{\nu}_{ij}` is given by
-
-.. math::
-
-    \frac{\partial f(\tilde\nu)_{\rm Lo}}{\partial \tilde\nu_{ij}} = \frac{\gamma}{\pi} \frac{2(\tilde{\nu}_{ij}-\tilde{\nu})}{\left[(\tilde{\nu}-\tilde{\nu}_{ij})^2+\gamma^2\right]^2}.
-
 
 
 Pre-dissociative line profiles
