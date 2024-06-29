@@ -19,7 +19,7 @@ module spectrum
   integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,icutoff = 10,iso=1,imolecule =-1
   real(rk)      :: temp=298.0,partfunc=-1.0,partfunc_ref=-1.0,freql=-small_,freqr= 200000.0,thresh=1.0d-70
   real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, cutoff = 25.0, pressure = 1.0_rk,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
-  real(rk)      :: lineshift=0
+  real(rk)      :: lineshift=0,hwhm
   real(rk)      :: enermax = 1e7, abscoef_thresh = 1.0d-50, abundance = 1.0d0, gf_factor = 1.0d0
   real(rk)      :: S_crit = 1e-29      ! cm/molecule, HITRAN cut-off paramater
   real(rk)      :: nu_crit = 2000.0d0  ! cm-1, HITRAN cut-off paramater
@@ -132,7 +132,8 @@ module spectrum
              vibpopulation_do = .false., super_energies_do = .false., super_Einstein_do = .false., &
              uncertainty_filter_do = .false.,stick_vald = .false., error_cross_sections_do = .false., &
              phoenix_do = .false., predissociation_do = .false., both_qn_filters_active = .false.,&
-             interpolated = .false.,population_do = .false.,nonLTE_do = .false.
+             interpolated = .false.,population_do = .false.,nonLTE_do = .false.,&
+             error_broadening_do = .false.,use_uncertainty = .false.
   logical :: do_nu_error_based_on_unc = .false.
   logical :: lineprofile_do = .false., use_width_cutoff = .false.
   logical :: microns = .false.
@@ -962,7 +963,7 @@ module spectrum
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
             'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX',&
             'LIFETIME','LIFETIMES','VOI-FAST','VOI-FNORM','VOI-916','T-LIFETIME','TRANS','VALD','ELORENTZ',&
-            'ELORENTZIAN','LORENTZ0','LORENTZIAN0')
+            'ELORENTZIAN','LORENTZ0','LORENTZIAN0','VOI-UNC','VOIGT-UNC')
           !
           if (pressure<small_.and.(w(1:3)=='VOI'.or.w(1:3)=='PSE')) then
              !
@@ -976,11 +977,15 @@ module spectrum
           !
           if (trim(w)=='LORENTZ0'.or.trim(w)=='LORENTZIAN0') w = 'LORE0'
           !
+          if (trim(w)=='VOIGT-UNC') w = 'VOI-U'
+          !
           if (trim(w)=='PHOENIX') phoenix_do = .true.
           !
           if (any( w(1:3)==(/'VOI','PSE','LOR','PHO','ELO','GAU'/))) lineprofile_do = .true.
           !
           proftype = trim(w)
+          !
+          if (proftype(1:5)=='VOI-U')  error_broadening_do = .true.
           !
           if (trim(w(1:5))=="LOREN") icutoff = 500
           if (trim(w(1:))=="VOI") icutoff = 500
@@ -1044,12 +1049,17 @@ module spectrum
           !
           call readf(halfwidth)
           species(1)%gamma = halfwidth
+          hwhm = halfwidth
           !
           if_halfwidth_defined = .true.
           !
        case ("ERROR")
           !
           error_cross_sections_do = .true.
+          !
+       case ("ERROR-BROAD","ERROR-BROADENING")
+          !
+          error_broadening_do = .true.
           !
        case ("Icutoff")
           !
@@ -1242,6 +1252,10 @@ module spectrum
        both_qn_filters_active = .true.
     endif
     !
+    ! we can combine the generic uncertainty case into "use_uncertainty" 
+    !
+    use_uncertainty = (uncertainty_filter_do.or.error_cross_sections_do.or.error_broadening_do)
+    !
     if (proftype(1:3)/='BIN'.and.microns) then
       write(out,"('Microns or um is currently only working with BIN, not ',a)") proftype(1:3)
       stop "Illegal profile for Microns"
@@ -1347,9 +1361,9 @@ module spectrum
        stop 'Error: illegal use of grid and a profile type'
     endif
     !
-    if (if_species_defined.and.if_halfwidth_defined) then
+    if (if_species_defined.and.if_halfwidth_defined.and.trim(proftype(1:5))/='VOI-U') then
       write(out,"('Input Error: HWHM cannot be used together with SPECIES')")
-      stop 'Input Error: HWHM cannot be used together with Species'
+      !stop 'Input Error: HWHM cannot be used together with Species'
     endif
     !
     if (if_species_defined.and.trim(proftype)=="VOI-FAST") then
@@ -1380,6 +1394,11 @@ module spectrum
     if (error_cross_sections_do.and.proftype(1:5)/='ELORE') then
       write(out,"('Input Error: For ERROR calculations use profile ELORE, not ',a)") proftype(1:5)
       stop 'Input Error: for ERROR illegal profile used'
+    endif
+    !
+    if (error_broadening_do.and.proftype(1:5)/='VOI-U') then
+      write(out,"('Input Error: For ERROR-BROADENING calculations use profile VOIGT-UNC, not ',a)") proftype
+      stop 'Input Error: for ERROR-BROADENING illegal profile used'
     endif
     !
     !   half width for gamma-type profiling
@@ -1435,7 +1454,7 @@ module spectrum
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef,m0,k0,Ki
    real(rk)    :: acoef_,int_cutoff,ndensity,abscoef_ref
    integer(ik) :: Jmax,Jp,Jpp,Ncutoff,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin,gtot_,KmaxAll,Kmax,kpp
-   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc_i,unc_f,time_
+   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc_i,unc_f,time_,hwhm_gauss
    character(len=cl) :: ioname,intname
    !
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
@@ -1443,7 +1462,7 @@ module spectrum
    integer(ik),allocatable :: gtot(:),indices(:),level_IDs(:)
    character(len=20),allocatable :: quantum_numbers(:,:),quantum_numbers_vib(:,:)
    !
-   real(rk),allocatable :: acoef_RAM(:),abscoef_ram(:),nu_ram(:),intens_omp(:,:),gamma_ram(:)
+   real(rk),allocatable :: acoef_RAM(:),abscoef_ram(:),nu_ram(:),intens_omp(:,:),gamma_ram(:),sigma2_ram(:)
    integer(ik),allocatable :: indexi_RAM(:),indexf_RAM(:)
    integer(ik),allocatable :: ileveli_RAM(:),ilevelf_RAM(:),gamma_idx_RAM(:)
    integer(ik) :: nswap_,nswap,iswap,iswap_,iomp,ichunk
@@ -1877,7 +1896,7 @@ module spectrum
            ! check unc column field is present 
            !
            ! filter or errors based on the uncertainty
-           if (uncertainty_filter_do.or.error_cross_sections_do) then
+           if (use_uncertainty) then
               !
               ! reconstruct the uncertainty from 
               read(quantum_numbers(QN%unc_col-4,i),*,err=116) unc_i
@@ -2910,9 +2929,21 @@ module spectrum
    call ArrayStart('swap:ilevelf_RAM',info,size(ilevelf_RAM),kind(ilevelf_RAM))
    !
    if (lineprofile_do) then
+     !
      allocate(gamma_ram(N_to_RAM),stat=info)
      allocate(gamma_idx_RAM(N_to_RAM),stat=info)
      call ArrayStart('swap:gamma_ram',info,size(gamma_ram),kind(gamma_ram))
+     !
+     ! additional gaussian broadening needed for the uncertainty-based gamma
+     if (error_broadening_do) then 
+        allocate(sigma2_ram(N_to_RAM),stat=info)
+        call ArrayStart('swap:sigma2_ram',info,size(sigma2_ram),kind(sigma2_ram))
+     else
+        ! a dummy allocation 
+        allocate(sigma2_ram(1),stat=info)
+        call ArrayStart('swap:sigma2_ram',info,size(sigma2_ram),kind(sigma2_ram))
+     endif
+     !
    endif
    !
    if (verbose>=4) call MemoryReport
@@ -3296,7 +3327,7 @@ module spectrum
            !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,ifilter,&
            !$omp& ivib,ener_vib,ener_rot,jf,ji,Ki,tranfreq,tranfreq0,cutoff,abscoef,ndensity,int_cutoff,abscoef_ref,&
            !$omp& temp_gamma_n,unc_f,unc_i)&
-           !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,gamma_ram)
+           !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,gamma_ram,sigma_ram)
            loop_swap : do iswap = 1,nswap_
              !
              indexf = indexf_RAM(iswap)
@@ -3547,6 +3578,16 @@ module spectrum
                   !
                 endif
                 !
+                if (error_broadening_do) then 
+                  !
+                  read(quantum_numbers(QN%unc_col-4,ilevelf),*) unc_f
+                  read(quantum_numbers(QN%unc_col-4,ileveli),*) unc_i
+                  !
+                  ! this is now sigma-squared-squared but will be converted to sigma after combining with Doppler gamma
+                  sigma2_ram(iswap) = unc_f**2+unc_i**2
+                  !
+                endif
+                !
                 if (error_cross_sections_do) then 
                   !
                   read(quantum_numbers(QN%unc_col-4,ilevelf),*) unc_f
@@ -3627,7 +3668,26 @@ module spectrum
             !
         case ('VOIGT')
             !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp) schedule(dynamic)
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth,hwhm_gauss) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                halfwidth = gamma_ram(iswap)
+                hwhm_gauss=dpwcoef*tranfreq
+                !
+                call do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth,hwhm_gauss,cutoff,freql,intens_omp(:,iomp))
+                !
+              enddo
+              !
+            enddo
+            !$omp end parallel do            
+            !
+        case ('VOI-U')
+            !
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth,hwhm_gauss) shared(intens_omp) schedule(dynamic)
             do iomp = 1,N_omp_procs
               !
               do iswap = iomp,nswap,N_omp_procs
@@ -3636,7 +3696,11 @@ module spectrum
                 tranfreq = nu_ram(iswap)
                 halfwidth = gamma_ram(iswap)
                 !
-                call do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth,dpwcoef,cutoff,freql,intens_omp(:,iomp))
+                ! combine Doppler and uncertanties into a single gaussian broadening where we use the ralation between hwhm (sigma) and stand. deviaiton (gamma)
+                !
+                hwhm_gauss = sqrt( sigma2_ram(iswap)*2.0_rk*log(2.0_rk)+(dpwcoef*tranfreq)**2 )
+                !
+                call do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth,hwhm_gauss,cutoff,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3918,13 +3982,6 @@ module spectrum
             enddo
             !$omp end parallel do
             !
-            !
-        !case ('PSE-R') ! pseudo_Voigt_Rocco_Cruzado_ActaPhysPol_2012.pdf
-            !
-            !
-        !case ('PSE-L') ! pseudo_Voigt_Liu_Lin_JOptSocAmB_2001.pdf
-            !
-            !
         case ('VOI-Q') ! VOIGT-QUADRATURES
             !
             !
@@ -3946,7 +4003,7 @@ module spectrum
             !
         case ('VOI-9') ! VOIGT-Alg-916
             !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp) schedule(dynamic)
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth,hwhm_gauss) shared(intens_omp) schedule(dynamic)
             do iomp = 1,N_omp_procs
               !
               do iswap = iomp,nswap,N_omp_procs
@@ -3954,8 +4011,9 @@ module spectrum
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
                 halfwidth = gamma_ram(iswap)
+                hwhm_gauss=dpwcoef*tranfreq
                 !
-                call do_Voigt_916(tranfreq,abscoef,dfreq,freq,halfwidth,dpwcoef,cutoff,freql,intens_omp(:,iomp))
+                call do_Voigt_916(tranfreq,abscoef,dfreq,freq,halfwidth,hwhm_gauss,cutoff,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -3964,7 +4022,7 @@ module spectrum
             !
         case ('VOI-F')
             !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp,fast_voigt) schedule(dynamic)
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth,hwhm_gauss) shared(intens_omp,fast_voigt) schedule(dynamic)
             do iomp = 1,N_omp_procs
               !
               do iswap = iomp,nswap,N_omp_procs
@@ -3972,9 +4030,10 @@ module spectrum
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
                 halfwidth = gamma_ram(iswap)
+                hwhm_gauss=dpwcoef*tranfreq
                 !
                 call do_Voigt_Fast(tranfreq,abscoef,use_resolving_power, &
-                     freq,gamma_idx_RAM(iswap),dpwcoef,cutoff,freql,intens_omp(:,iomp))
+                     freq,gamma_idx_RAM(iswap),hwhm_gauss,cutoff,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -4350,102 +4409,7 @@ module spectrum
    !
    ! cleaning up memory allocations:
    !
-   if (allocated(freq)) then 
-      deallocate(freq)
-      call ArrayStop('frequency')
-   endif 
-   !
-   if (allocated(intens)) then 
-      deallocate(intens)
-      call ArrayStop('intens')
-   endif 
-   !
-   if (allocated(energies)) then 
-     deallocate(energies)
-     call ArrayStop('energies')
-   endif
-   !
-   if (allocated(indices)) then 
-      call ArrayStop('indices')
-      deallocate(indices)
-   endif
-   !
-   if (allocated(level_IDs)) then 
-      call ArrayStop('level_IDs')
-      deallocate(level_IDs)
-   endif
-   !
-   if (allocated(Jrot)) then 
-      call ArrayStop('Jrot')
-      deallocate(Jrot)
-   endif
-   !
-   if (allocated(gtot)) then 
-      deallocate(gtot)
-      call ArrayStop('gtot')
-   endif 
-   !
-   if (allocated(pf)) then 
-        deallocate(pf)
-        call ArrayStop('pf')
-   endif
-   !
-   if (allocated(energies_vib)) then 
-        deallocate(energies_vib)
-        call ArrayStop('energies_vib')
-   endif
-   !
-   if (allocated(gamma_radiative)) then 
-        deallocate(gamma_radiative)
-        call ArrayStop('gamma_radiative')
-   endif
-   !
-   if (allocated(ivib_state)) then 
-        deallocate(ivib_state)
-        call ArrayStop('ivib_state')
-   endif
-   !
-   if (allocated(dens_vib)) then 
-        deallocate(dens_vib)
-        call ArrayStop('dens_vib')
-   endif
-   !
-   if (allocated(population)) then 
-        deallocate(population)
-        call ArrayStop('population')
-   endif
-   !
-   if (allocated(quantum_numbers_vib)) then 
-        deallocate(quantum_numbers_vib)
-        call ArrayStop('quantum_numbers_vib')
-   endif
-   !
-   if (allocated(Asum)) then 
-        deallocate(Asum)
-        call ArrayStop('Asum')
-   endif
-   !
-   if (allocated(quantum_numbers)) then 
-        deallocate(quantum_numbers)
-        call ArrayStop('quantum_numbers')
-   endif
-   !
-   if (allocated(nchars_quanta)) then 
-        deallocate(nchars_quanta)
-        call ArrayStop('nchars_quanta')
-   endif
-
-   if (allocated(weight)) then 
-        deallocate(weight)
-        deallocate(abciss)
-        deallocate(bnormq)
-        call ArrayStop('weight-abciss')
-   endif
-   !
-   if (allocated(Krot)) then 
-     deallocate(Krot)
-     call ArrayStop('Krot')
-   endif
+   call clean_up_memory_allocations
    !
    if (verbose>=4) call MemoryReport
    !
@@ -4455,6 +4419,173 @@ module spectrum
    !
    write(out,"('Error read of unc: missing or wrongly specified UNC in QN')") 
    stop 'Error read of unc: missing or wrongly specified UNC in QN'
+   !
+   contains
+   !
+   subroutine clean_up_memory_allocations
+      ! 
+      ! all arrays that have been allocated are now deallocated
+      !
+      if (allocated(freq)) then 
+         deallocate(freq)
+         call ArrayStop('frequency')
+      endif 
+      !
+      if (allocated(intens)) then 
+         deallocate(intens)
+         call ArrayStop('intens')
+      endif 
+      !
+      if (allocated(energies)) then 
+        deallocate(energies)
+        call ArrayStop('energies')
+      endif
+      !
+      if (allocated(indices)) then 
+         call ArrayStop('indices')
+         deallocate(indices)
+      endif
+      !
+      if (allocated(level_IDs)) then 
+         call ArrayStop('level_IDs')
+         deallocate(level_IDs)
+      endif
+      !
+      if (allocated(Jrot)) then 
+         call ArrayStop('Jrot')
+         deallocate(Jrot)
+      endif
+      !
+      if (allocated(gtot)) then 
+         deallocate(gtot)
+         call ArrayStop('gtot')
+      endif 
+      !
+      if (allocated(pf)) then 
+           deallocate(pf)
+           call ArrayStop('pf')
+      endif
+      !
+      if (allocated(energies_vib)) then 
+           deallocate(energies_vib)
+           call ArrayStop('energies_vib')
+      endif
+      !
+      if (allocated(gamma_radiative)) then 
+           deallocate(gamma_radiative)
+           call ArrayStop('gamma_radiative')
+      endif
+      !
+      if (allocated(ivib_state)) then 
+           deallocate(ivib_state)
+           call ArrayStop('ivib_state')
+      endif
+      !
+      if (allocated(dens_vib)) then 
+           deallocate(dens_vib)
+           call ArrayStop('dens_vib')
+      endif
+      !
+      if (allocated(population)) then 
+           deallocate(population)
+           call ArrayStop('population')
+      endif
+      !
+      if (allocated(quantum_numbers_vib)) then 
+           deallocate(quantum_numbers_vib)
+           call ArrayStop('quantum_numbers_vib')
+      endif
+      !
+      if (allocated(Asum)) then 
+           deallocate(Asum)
+           call ArrayStop('Asum')
+      endif
+      !
+      if (allocated(quantum_numbers)) then 
+           deallocate(quantum_numbers)
+           call ArrayStop('quantum_numbers')
+      endif
+      !
+      if (allocated(nchars_quanta)) then 
+           deallocate(nchars_quanta)
+           call ArrayStop('nchars_quanta')
+      endif
+  
+      if (allocated(weight)) then 
+           deallocate(weight)
+           deallocate(abciss)
+           deallocate(bnormq)
+           call ArrayStop('weight-abciss')
+      endif
+      !
+      if (allocated(Krot)) then 
+        deallocate(Krot)
+        call ArrayStop('Krot')
+      endif
+      !
+      if (allocated(acoef_RAM)) then 
+         deallocate(acoef_RAM)
+         call ArrayStop('swap:acoef_RAM')
+      endif 
+      !
+      if (allocated(acoef_RAM)) then 
+         deallocate(acoef_RAM)
+         call ArrayStop('swap:acoef_RAM')
+      endif 
+      !
+      if (allocated(acoef_RAM)) then 
+         deallocate(acoef_RAM)
+         call ArrayStop('swap:acoef_RAM')
+      endif 
+      !
+      if (allocated(acoef_RAM)) then 
+         deallocate(acoef_RAM)
+         call ArrayStop('swap:acoef_RAM')
+      endif 
+      !
+      if (allocated(indexf_RAM)) then 
+         deallocate(indexf_RAM)
+         call ArrayStop('swap:indexf_RAM')
+      endif 
+      !
+      if (allocated(indexi_RAM)) then 
+         deallocate(indexi_RAM)
+         call ArrayStop('swap:indexi_RAM')
+      endif 
+      !
+      if (allocated(abscoef_ram)) then 
+         deallocate(abscoef_ram)
+         call ArrayStop('swap:abscoef_ram')
+      endif 
+      !
+      if (allocated(nu_ram)) then 
+         deallocate(nu_ram)
+         call ArrayStop('swap:nu_ram')
+      endif 
+      !
+      if (allocated(ileveli_RAM)) then 
+         deallocate(ileveli_RAM)
+         call ArrayStop('swap:ileveli_RAM')
+      endif 
+      !
+      if (allocated(ilevelf_RAM)) then 
+         deallocate(ilevelf_RAM)
+         call ArrayStop('swap:ilevelf_RAM')
+      endif 
+      !
+      if (allocated(gamma_ram)) then 
+         deallocate(gamma_ram)
+         deallocate(gamma_idx_RAM)
+         call ArrayStop('swap:gamma_ram')
+      endif 
+      !
+      if (allocated(sigma2_ram)) then 
+         deallocate(sigma2_ram)
+         call ArrayStop('swap:sigma2_ram')
+      endif 
+      !   
+   end subroutine clean_up_memory_allocations
+   
    !
   end subroutine intensity
   !
@@ -5101,18 +5232,18 @@ module spectrum
      !
   end subroutine  do_Voi_Q
   !
-  subroutine  do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth_Lorentz,dpwcoef,cutoff,freql,intens)
+  subroutine  do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth_Lorentz,halfwidth_doppler,cutoff,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,halfwidth_Lorentz,cutoff,freql,dpwcoef
+     real(rk),intent(in) :: tranfreq,abscoef,halfwidth_Lorentz,cutoff,freql,halfwidth_doppler
      real(rk),intent(in) :: freq(:)
      real(rk),intent(out) :: intens(:)
-     real(rk) :: tranfreq_i,halfwidth_doppler,cutoff_
+     real(rk) :: tranfreq_i,cutoff_
      integer(ik) :: ib,ie,ipoint
      logical, intent(in) :: use_resolving_power
       !
-      halfwidth_doppler=dpwcoef*tranfreq
+      !halfwidth_doppler=dpwcoef*tranfreq
       !
       cutoff_ = cutoff
       if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth_Lorentz
@@ -5151,19 +5282,20 @@ module spectrum
   end subroutine  do_Voigt
   !
 
-  subroutine  do_Voigt_Fast(tranfreq,abscoef,use_resolving_power,freq,index_Lorentz,dpwcoef,cutoff,freql,intens)
+  subroutine  do_Voigt_Fast(tranfreq,abscoef,use_resolving_power,freq,index_Lorentz,halfwidth_doppler,cutoff,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,cutoff,freql,dpwcoef
+     real(rk),intent(in) :: tranfreq,abscoef,cutoff,freql,halfwidth_doppler
      real(rk),intent(in) :: freq(:)
      integer,intent(in)  :: index_Lorentz
      real(rk),intent(out) :: intens(:)
-     real(rk) :: halfwidth_doppler,d_freq,d_ln_freq
+     real(rk) :: d_freq,d_ln_freq
      integer(ik) :: ib,ie
      logical :: use_resolving_power
       !
-      halfwidth_doppler=dpwcoef*tranfreq
+      !halfwidth_doppler=dpwcoef*tranfreq
+      !
       if (halfwidth_doppler<100.0_rk*small_) return
       !
       if (use_resolving_power) then
@@ -5184,19 +5316,18 @@ module spectrum
   end subroutine  do_Voigt_Fast
   !
   !
-  subroutine  do_Voigt_916(tranfreq,abscoef,dfreq,freq,halfwidth_Lorentz,dpwcoef,cutoff,freql,intens)
+  subroutine  do_Voigt_916(tranfreq,abscoef,dfreq,freq,halfwidth_Lorentz,halfwidth_doppler,cutoff,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth_Lorentz,cutoff,freql,dpwcoef
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth_Lorentz,cutoff,freql,halfwidth_doppler
      real(rk),intent(in) :: freq(:)
      real(rk),intent(out) :: intens(:)
-     real(rk) :: tranfreq_i,halfwidth_doppler
+     real(rk) :: tranfreq_i
      integer(ik) :: ib,ie,ipoint
       !
       stop 'do_Voigt_916 is not working yet'
       !
-      halfwidth_doppler=dpwcoef*tranfreq
       if (halfwidth_doppler<100.0_rk*small_) return
       ib =  max(nint( ( tranfreq-cutoff-freql)/dfreq )+1,1)
       ie =  min(nint( ( tranfreq+cutoff-freql)/dfreq )+1,npoints)
