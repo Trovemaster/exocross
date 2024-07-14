@@ -177,50 +177,50 @@ the corresponding derivative wrt :math:`\tilde{\nu}_{ij}` is given by
 
 
 Cross sections with energy uncertainties as line broadening (Voigt-unc)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If we assume that the energy uncertainties distributed according with the normal distribution with :math:`\sigma` as the uncertainty of the corresponding line position :math:`\tilde\nu_{ij}`:
 
 .. math::
 
     \sigma_{ij}^{\rm unc} = \sqrt{\Delta \tilde{E}_{i}^2+ \Delta \tilde{E}_{j}^2},
-    
-we can obtain the cross sections with the energy uncertainties included by convolving a Gaussian with :math:`\alpha_{ij}^{\rm G} = \sqrt{2\ln(2)} \sigma_{ij}`  with the Lorentzian (Voigt) of $\gamma_{\rm V}$. The resulted line profile us Voigt. The Doppler broadening can be added to the uncertainty broadening as follows 
+
+we can obtain the cross sections with the energy uncertainties included by convolving a Gaussian with :math:`\alpha_{ij}^{\rm G} = \sqrt{2\ln(2)} \sigma_{ij}`  with the Lorentzian (Voigt) of $\gamma_{\rm V}$. The resulted line profile us Voigt. The Doppler broadening can be added to the uncertainty broadening as follows
 
 .. math::
 
-    \alpha_{ij}^{\rm G} =  \sqrt{2\ln(2) (\sigma_{ij}^{\rm unc})^2 + (\alpha_{ij}^{\rm Doppl})^2}. 
+    \alpha_{ij}^{\rm G} =  \sqrt{2\ln(2) (\sigma_{ij}^{\rm unc})^2 + (\alpha_{ij}^{\rm Doppl})^2}.
 
 This feature is implemented as the ``Voigt-unc`` type and can be used as in the following example:
 ::
 
      temperature 1000 Range  0 20000
-     
+
      Npoints 2000000
-     
+
      mass 64
-     
+
      absorption
      Voigt-unc
-     
+
      pressure  1
-     
+
      species
       H2  gamma 0.0468  n 0.500 t0 296.0  ratio 0.85
       He  gamma 0.0468  n 0.5   t0 296.0  ratio 0.15
      end
-       
-     
+
+
      Output TiO_Voigt-unc_T1000K_P1atm
-     
+
      States 48Ti-16O__Toto.states
-     
+
      Transitions 48Ti-16O__Toto.trans
- 
 
 
 
- 
+
+
 
 
 Pre-dissociative line profiles
@@ -372,8 +372,8 @@ Example
      end
 
 
-ExoMol diet and broadening recepies
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ExoMol diet and broadening recipes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ExoCross is equipped to work with the ExoMol diet, which provides line broadening parameters in .broad files. The ExoMol diet allows for the line broadening parameters :math:`\gamma` and :math:`n` to depend, at least in principle, on any quantum numbers used in .states files. In practice, only simplest quantum number cases are currently in use, mainly for the rotational quantum number :math:`J`. Different quantum number cases ('recipes') are labeled with two character strings including ``a0`` (:math:`\gamma` and :math:`n` depend on :math:`J''` only), ``a1`` (:math:`J''` and :math:`J'`), ``m0`` and ``m1`` (rotational index :math:`|m|` and :math:`m`, respectively), ``v0`` (:math:`v'`), ``v1`` (:math:`J''` and :math:`v'`), ``k1`` (:math:`J''` and :math:`k'`). Currently, the vibrational :math:`v` or rotational quantum :math:`k` numbers can only be specified for the upper states.
 
@@ -399,10 +399,10 @@ where `file` is the filename with the parameters :math:`\gamma` and :math:`n`. A
     a0   0.0164 0.350       2
 
 
-where the 1st column describes the Diet model, the following two columns are the Voigt's :math:`\gamma` and :math:`n`, and the last one is  :math:`J''` . The values ``gamma`` and ``n`` in the ``species`` section are the default values in case of missing :math:`J`s in the broadening file. For :math:`J>J_{\rm max}`, the values :math:`\gamma` and :math:`n` the values of :math:`J=J_{\rm max}` are assumed.
+where the 1st column describes the Diet model, the following two columns are the Voigt's :math:`\gamma` and :math:`n`, and the last one is  :math:`J''` . The values ``gamma`` and ``n`` in the ``species`` section are the default values in case of missing :math:`J` in the broadening file. For :math:`J>J_{\rm max}`, the values :math:`\gamma` and :math:`n` the values of :math:`J=J_{\rm max}` are assumed.
 
 
-The  ``a1`` recipe allows providing both the upper and lower state :math:`J`s, expecting :math`|J'-J''|\le 2`.
+The  ``a1`` recipe allows providing both the upper and lower state :math:`J`, expecting :math`|J'-J''|\le 2`.
 An example of an ``a1`` recipe broadening file has is as follows:
 ::
 
@@ -422,6 +422,48 @@ Another  example  of .broad for ``m1``:
     m1   0.0156 0.417       1
     m1   0.0164 0.350       2
 
+
+
+'Particle in the box'
+---------------------
+
+This 'recipe' is for continuum states spectra calculations, i.e. for transitions between bound and unbound (usually upper) states. The corresponding line lists are represented by discretized transitions with their intensities to be re-distributed across the simulation wavenumber regions. This is typically done with a Gaussian line profile with a larger width (50-200 cm-1) to cover gaps between these discrete lines. In the case of a very large spectroscopic range, the distance between these discrete continuum lines rapidly increases. For example, for the case of the particle-in-a-box solution, the energy separation increases with the excitation number linearly: 
+
+.. math::
+
+
+    \Delta \tilde{E}_n^{\rm box} = \tilde{E}_{n+1}^{\rm box} - \tilde{E}_n^{\rm box} = \frac{h (2n+1)}{8 \mu L^2 c}.
+
+where :math:`\mu` is the reduced mass, :math:`L` is the box size) and :math:`n\ge 1` is the state counting number. 
+Due to the linear dependence on :math:`n`,  there is no a single optimal value of :math:`\alpha_{\rm G}` (Gaussian HWHM)  for the entire region. In the ``BOX`` recipe, we define  :math:`alpha_{\rm G}` to be :math:`\Delta \tilde{E}_n^{\rm box}`. Here is an example of the ExoCross input:
+:: 
+
+   Temperature  5000
+   Range    45000 85000 
+   
+   npoints  40000
+   
+   QN
+     K 8
+   end
+   
+   absorption
+   gaussian
+   
+   offset 5000
+   
+   species
+        box  gamma 1.0 mass 0.937  Lbox 20  model box
+   end
+   
+   output NH_box_5000K_L20
+   
+   States NH.states
+   
+   Transitions NH.trans
+   
+
+Here  ``model box`` defines the recipe type ``box``, ``Lbox`` is the size of the box and ``mass`` specifying the reduced mass. 
 
 
 
