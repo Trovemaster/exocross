@@ -2381,7 +2381,7 @@ module spectrum
            species(i)%gammaQN(:,:,:) = species(i)%gamma
            !
            allocate(species(i)%nQN(0:Jmax,-2:2,0:KmaxAll),stat=info)
-           !         
+           !
            call ArrayStart('nQN',info,size(species(i)%nQN),kind(species(i)%nQN))
            species(i)%nQN(:,:,:) = species(i)%N
            !

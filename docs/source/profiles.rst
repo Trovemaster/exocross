@@ -424,47 +424,5 @@ Another  example  of .broad for ``m1``:
 
 
 
-'Particle in the box'
----------------------
-
-This 'recipe' is for continuum states spectra calculations, i.e. for transitions between bound and unbound (usually upper) states. The corresponding line lists are represented by discretized transitions with their intensities to be re-distributed across the simulation wavenumber regions. This is typically done with a Gaussian line profile with a larger width (50-200 cm-1) to cover gaps between these discrete lines. In the case of a very large spectroscopic range, the distance between these discrete continuum lines rapidly increases. For example, for the case of the particle-in-a-box solution, the energy separation increases with the excitation number linearly: 
-
-.. math::
-
-
-    \Delta \tilde{E}_n^{\rm box} = \tilde{E}_{n+1}^{\rm box} - \tilde{E}_n^{\rm box} = \frac{h (2n+1)}{8 \mu L^2 c}.
-
-where :math:`\mu` is the reduced mass, :math:`L` is the box size) and :math:`n\ge 1` is the state counting number. 
-Due to the linear dependence on :math:`n`,  there is no a single optimal value of :math:`\alpha_{\rm G}` (Gaussian HWHM)  for the entire region. In the ``BOX`` recipe, we define  :math:`alpha_{\rm G}` to be :math:`\Delta \tilde{E}_n^{\rm box}`. Here is an example of the ExoCross input:
-:: 
-
-   Temperature  5000
-   Range    45000 85000 
-   
-   npoints  40000
-   
-   QN
-     K 8
-   end
-   
-   absorption
-   gaussian
-   
-   offset 5000
-   
-   species
-        box  gamma 1.0 mass 0.937  Lbox 20  model box
-   end
-   
-   output NH_box_5000K_L20
-   
-   States NH.states
-   
-   Transitions NH.trans
-   
-
-Here  ``model box`` defines the recipe type ``box``, ``Lbox`` is the size of the box and ``mass`` specifying the reduced mass. 
-
-
 
 

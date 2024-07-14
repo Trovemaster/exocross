@@ -18,6 +18,7 @@ Welcome to ExoCross's documentation!
    hitran
    spectra
    nonlte
+   continuum
    keywords
    license
 

@@ -188,7 +188,7 @@ A line width cut-off can be defined using ``cutoff`` or ``line-cutoff``
     line-cutoff 25 (cm-1)
 
 
-where the offset value is in wavenumbers (cm-1). The default value is 25 cm-1. Alternatively, 
+where the cutoff value is in wavenumbers (cm\ :sup:`-1`\ ). The default value is 25 cm\ :sup:`-1`\ . Alternatively, 
 one can define the cut-off in terms of the HWHM as follows: 
 
 ::
@@ -216,7 +216,7 @@ The maximal number of sub-grids is 100. Currently this option only works with
 simple sampling-type profiles, such as `Voigt`, `Doppler Sampling`,  `Gaussian Sampling` or `Bin`. 
 The latter is commonly used to generate super-lines.  
 `cutoff` or `line-cutoff` is an optional keyword to allow region-dependent cutoffs for line profiles. If undefined, the value of the 
-global keyword `cutoff`  the corresponding default value (25 cm-1) is used.
+global keyword `cutoff`  the corresponding default value (25 cm\ :sup:`-1`\ ) is used.
 
 
 
