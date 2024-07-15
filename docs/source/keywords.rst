@@ -34,7 +34,7 @@ In this case it is also important to provide the addresses of the vibrational co
 
 
 * QN: The designation of the quantum numbers  (QN) to columns can be done using the QN section. In this section `vib` is used for the range of the vibrational QNs; `K` is for the column with the rotational "K"; `Sym` is for symmetry; `Nsym` is number of the symmetries; `Nmodes` stands for the number of vibrational modes. The column numbering starts after the J column (4th). The vibrational addressing is required for when vibrational temperature is used.
-`density` can be used to give the non-LTE vibrational populations. ``Lifetime`` is to define the column with lifetimes, needed for the pre-dissociation line broadening calculations. 
+`density` can be used to give the non-LTE vibrational populations. ``Lifetime`` is to define the column with lifetimes, needed for the pre-dissociation line broadening calculations.
 
 ::
 
@@ -60,7 +60,7 @@ In this case it is also important to provide the addresses of the vibrational co
     PF  1000.0
 
 
-+ A reference partition funcion (used e.g. with `SPECTRA`) can be specifed using the `REF` keyword as part of the `PFe` line, e.g:
++ A reference partition function (used e.g. with `SPECTRA`) can be specified using the `REF` keyword as part of the `PFe` line, e.g:
 
 ::
 
@@ -210,7 +210,7 @@ In combination with the keyword `histogram-J` the transition filename can be fol
     enermax  20000.0
 
 
-* Gaussian, Gauss, Gauss0, Doppler, Doppl, Doppl0, Box, Bin, Rect,  Sticks, Stick, Voigt, pseudo, pse-Rocco, pse-Liu, Voig-Quad, trans: The type of the line profile.
+* Gaussian, Gauss, Gauss0, Doppler, Doppl, Doppl0, Box, Bin, Rect,  Sticks, Stick, Voigt, pseudo, pse-Rocco, pse-Liu, Voig-Quad, Lorentz, elorentz:  types of the line profile.
 
 
 ::
@@ -310,17 +310,20 @@ Currently this makes sense only in combination with Gaussian and Doppler.
 
 `delta` is the pressure shift.
 
-`T0` is the reference T (K), usually 298 for Voigt used in `Species`
+`T0` is the reference T (K), usually 298 for Voigt used in `Species`.
 
-`P0` is the reference pressure in bar, usually 1 for Voigt used in `Species`
+`P0` is the reference pressure in bar, usually 1 for Voigt used in ``Species``.
 
 `ratio` is the mixing ratio of the species (unitless) for example the solar mixing ratio of H2 and He is 0.9 and 0.1 (`species`).
 
 `file` is the name of the file with broadening parameters
 
-`model` is the broadening model, e.g. `J` (alias `a0`) or `JJ` (alias `a1`).
+`model` is the broadening model, e.g.  ``a0``, ``a1``, ``box`` etc. 
 
-`nquad` is the number of quadrature points used for `Voigt-Quad`
+``nquad`` is the number of quadrature points used for `Voigt-Quad`.
+
+``box`` is a ``model`` of the line broadening where the HWHM depends on the state number as in a particle in a box,  linearly. 
+
 
 The name of the species should be the first thing on the line.
 
@@ -422,12 +425,12 @@ Example
       error-Self  ierr 4
       error-N      ierr 4
       error-delta  ierr 4
-      error-unc 
+      error-unc
      end
 
-Here ``error-unc`` is to define the energies/frequency error using the ExoMol uncertanties from column 5 in States file. 
+Here ``error-unc`` is to define the energies/frequency error using the ExoMol uncertanties from column 5 in States file.
 
-``error-E`` and ``error-S`` define uncertanties of the frequencies and intensities based on the quantum numbers. 
+``error-E`` and ``error-S`` define uncertanties of the frequencies and intensities based on the quantum numbers.
 
 ``error-Air``, ``error-self``, ``error-N``, ``error-delta`` define  ucertanties of the corresponding line shape parameters.
 
@@ -503,7 +506,12 @@ Here `cutoff` can be substituted by `LINE-CUTOFF`.
 
 
 
-* ``Voigt-unc``
+* Voigt-unc: Line profile used for to calculate cross sections broadening by the uncertainty of the line positions.
+
+* elorents: Line profile to propagate the uncertainties of the line positions to the cross-sections used in combination with ``error`` 
+
+* error: type of the cross sections describing the uncertainty of the cross sections as propagation of the uncertainty of the line positions. 
+
 
 
 
