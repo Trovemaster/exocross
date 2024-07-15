@@ -1,6 +1,8 @@
 ExoCross keywords
 =================
 
+.. _keywords:
+
 .. note:: The position of the keywords is not important. The input is not key-sensitive.
 
 * GNS: Nuclear statistical weight `gns 2.0`
