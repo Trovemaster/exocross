@@ -32,7 +32,7 @@ Units
 =====
    
 
-The standard intensity  untis of line intensities are cm/molecule (absorption) and erg s /molecule/str (emission). The intensity units of cross sections are
+The standard intensity  untis of line intensities are cm/molecule (absorption) and erg / s /molecule/str (emission). The intensity units of cross sections are
 intenity units times cm. The emission units can be changed to watt/molecule/str or to photons/s by adding the corresponding units tot the `emission` keyword, e.g.
 
     

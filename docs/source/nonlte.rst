@@ -143,7 +143,7 @@ The temperature does not need and cannot be specified for the full non-LTE. The 
 
 and for emission 
 
-:math:I_{f,i} = \frac{hc }{4\pi} A_{fi} g_{f} \tilde{\nu}  F_{J',v',k'}.``
+:math:`I_{f,i} = \frac{hc }{4\pi} A_{fi} g_{f} \tilde{\nu}  F_{J',v',k'}.`
 
 Here :math:`c` is the speed of light (cm/s) and :math:`h` is the Planck constant in cgs. :math:`f,i` indicate the upper and lower states, respectively.  
 

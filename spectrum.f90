@@ -3443,7 +3443,9 @@ module spectrum
                   !
                elseif (population_do) then 
                   !
-                  abscoef=cmcoef*acoef*gtot(ilevelf)/(tranfreq**2)*population(ileveli)
+                  abscoef=cmcoef*acoef*gtot(ilevelf)/( gtot(ileveli)*tranfreq**2 )*population(ileveli)
+                  !
+                  ! add /g(i)
                   !
                elseif (vibtemperature_do) then
                   !
@@ -4284,11 +4286,7 @@ module spectrum
            !
          endif
          !
-         if (nchars_quanta(kitem)<10) then
-            write(b_fmt,"('(1x,a',i1,')')") nchars_quanta(kitem)
-         else
-            write(b_fmt,"('(1x,a',i2,')')") nchars_quanta(kitem)
-         endif
+         write(b_fmt,"('(1x,a',i2,')')") max(12,nchars_quanta(kitem))
          !
          write(tunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ilevelf))
          !
