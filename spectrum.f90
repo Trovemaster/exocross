@@ -5809,7 +5809,7 @@ module spectrum
      real(rk)  :: Jf,Ji,abscoef,acoef,tranfreq,energyf,energyi
      integer(ik) :: ilevelf,ileveli,iswap,gtot_f
      character(len=cl) :: h_fmt
-     real(rk)    ::lambda,E_low_eV,loggf
+     real(rk)    ::lambda,E_low_eV,loggf,n,s,lambda_vac
      !
      integer(ik),parameter :: toeV = 8065.54429_ark 
      !
@@ -5828,8 +5828,16 @@ module spectrum
        jf = jrot(ilevelf)
        ji = jrot(ileveli)
        !
-       ! wavelength in Ang
-       lambda = 100000000.0_rk/tranfreq
+       ! wavelength in Ang vac
+       lambda_vac = 100000000.0_rk/tranfreq
+       !
+       s = 10000.0_rk/lambda_vac
+       !
+       ! refraction from VALD
+       n = 1.0_rk + 0.0000834254_rk + 0.02406147_rk / (130.0_rk - s**2) + 0.00015998_rk / (38.9_rk - s**2)
+       !
+       ! lambda in air 
+       lambda = lambda_vac/n
        !
        if (log10(lambda)>12) cycle 
        !
