@@ -139,11 +139,11 @@ Here, the ``population`` column in the .states file is number 8(with alias ``den
 
 The temperature does not need and cannot be specified for the full non-LTE. The partition function does not exist either, with the absorption intensities given simply by 
 
-:math:`I_{f,i} = \frac{1}{8\pi c}\frac{A_{fi} g_{f}}{\tilde{\nu}} F_{J'',v'',k''}.`
+:math:`I_{f,i} = \frac{1}{8\pi c}\frac{A_{fi} g_{f}}{g_{i} \tilde{\nu}} F_{J'',v'',k''}.`
 
 and for emission 
 
-:math:`I_{f,i} = \frac{hc }{4\pi} A_{fi} g_{f} \tilde{\nu}  F_{J',v',k'}.`
+:math:`I_{f,i} = \frac{hc }{4\pi} A_{fi} \tilde{\nu}  F_{J',v',k'}.`
 
 Here :math:`c` is the speed of light (cm/s) and :math:`h` is the Planck constant in cgs. :math:`f,i` indicate the upper and lower states, respectively.  
 

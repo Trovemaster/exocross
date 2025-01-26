@@ -3469,7 +3469,7 @@ module spectrum
                   !
                elseif (population_do) then 
                   !
-                  abscoef=emcoef*acoef*gtot(ilevelf)*tranfreq*population(ilevelf)
+                  abscoef=emcoef*acoef*tranfreq*population(ilevelf)
                   !
                elseif (vibtemperature_do) then
                   ! split into a product of vib and rot parts 
@@ -5791,7 +5791,9 @@ module spectrum
        !
     enddo
     !
-    101 return
+    return
+    !
+    101 continue
     !
     write(out,"('Error read of unc: missing or wrongly specified UNC in QN')") 
     stop 'Error read of unc: missing or wrongly specified UNC in QN'

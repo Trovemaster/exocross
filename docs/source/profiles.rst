@@ -185,7 +185,7 @@ If we assume that the energy uncertainties distributed according with the normal
 
     \sigma_{ij}^{\rm unc} = \sqrt{\Delta \tilde{E}_{i}^2+ \Delta \tilde{E}_{j}^2},
 
-we can obtain the cross sections with the energy uncertainties included by convolving a Gaussian with :math:`\alpha_{ij}^{\rm G} = \sqrt{2\ln(2)} \sigma_{ij}`  with the Lorentzian (Voigt) of $\gamma_{\rm V}$. The resulted line profile us Voigt. The Doppler broadening can be added to the uncertainty broadening as follows
+we can obtain the cross sections with the energy uncertainties included by convolving a Gaussian with :math:`\alpha_{ij}^{\rm G} = \sqrt{2\ln(2)} \sigma_{ij}`  with the Lorentzian (Voigt) of :math:`\gamma_{\rm V}`. The resulted line profile us Voigt. The Doppler broadening can be added to the uncertainty broadening as follows
 
 .. math::
 

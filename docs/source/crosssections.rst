@@ -224,7 +224,7 @@ gf line list
 ^^^^^^^^^^^^
 
 A stick spectrum is produced with the gf-factors in place of the Einstein coefficients. Here is the example for the VALD format, where 
-the columns are the wavelength in Angstrom, the lower state energy in eV, log10(gf), 0.0, the statistical weight 2J'+1 (upper state J') and zero. 
+the columns are the air wavelength in Angstrom, the lower state energy in eV, log10(gf), 0.0, the statistical weight 2J'+1 (upper state J') and zero. 
 
 ::
 
