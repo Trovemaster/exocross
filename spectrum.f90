@@ -3591,7 +3591,7 @@ module spectrum
                 endif
                 !
                 if (error_cross_sections_do) then 
-                  !
+                  !x
                   read(quantum_numbers(QN%unc_col-4,ilevelf),*) unc_f
                   read(quantum_numbers(QN%unc_col-4,ileveli),*) unc_i
                   !
@@ -3718,6 +3718,7 @@ module spectrum
                 !
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
+                halfwidth = gamma_ram(iswap)
                 !
                 call do_gauss_sampling(tranfreq,abscoef,dfreq,freq,halfwidth,freql,intens_omp(:,iomp))
                 !
