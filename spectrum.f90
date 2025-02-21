@@ -981,7 +981,7 @@ module spectrum
           !
           if (trim(w)=='PHOENIX') phoenix_do = .true.
           !
-          if (any( w(1:3)==(/'VOI','PSE','LOR','PHO','ELO','GAU'/))) lineprofile_do = .true.
+          if (any( w(1:3)==(/'VOI','PSE','LOR','PHO','ELO','GAU','REC'/))) lineprofile_do = .true.
           !
           proftype = trim(w)
           !
@@ -4068,7 +4068,25 @@ module spectrum
             enddo
             !$omp end parallel do
             !
-        case ('RECT','BOX')
+        case ('RECT')
+            !
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                halfwidth = gamma_ram(iswap)
+                !
+                call do_rect(tranfreq,abscoef,halfwidth,dfreq,freq,cutoff,freql,intens_omp(:,iomp))
+                !
+              enddo
+              !
+            enddo
+            !$omp end parallel do
+            !
+        case ('BOX')
             !
             !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint) shared(intens_omp) schedule(dynamic)
             do iomp = 1,N_omp_procs
@@ -4078,7 +4096,9 @@ module spectrum
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
                 !
-                call do_rect(tranfreq,abscoef,dfreq,freq,cutoff,freql,intens_omp(:,iomp))
+                call get_grid_ipoint(tranfreq,freq,ipoint)
+                !
+                intens_omp(ipoint,iomp) = intens_omp(ipoint,iomp)+abscoef/dfreq
                 !
               enddo
               !
@@ -5344,25 +5364,25 @@ module spectrum
   end subroutine  do_Voigt_916
   !
 
-  subroutine  do_rect(tranfreq,abscoef,dfreq,freq,cutoff,freql,intens)
+  subroutine  do_rect(tranfreq,abscoef,halfwidth,dfreq,freq,cutoff,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,cutoff,freql
+     real(rk),intent(in) :: tranfreq,abscoef,halfwidth,cutoff,freql,dfreq
      real(rk),intent(in) :: freq(:)
      real(rk),intent(out) :: intens(:)
      real(rk) :: tranfreq_i
      integer(ik) :: ib,ie,ipoint
       !
-      ib =  max(nint( ( tranfreq-cutoff-freql)/dfreq )+1,1)
-      ie =  min(nint( ( tranfreq+cutoff-freql)/dfreq )+1,npoints)
+      ib =  max(nint( ( tranfreq-min(halfwidth,cutoff)-freql)/dfreq )+1,1)
+      ie =  min(nint( ( tranfreq+min(halfwidth,cutoff)-freql)/dfreq )+1,npoints)
       !
       !$omp parallel do private(ipoint,tranfreq_i) shared(intens) schedule(dynamic)
       do ipoint=ib,ie
          !
          tranfreq_i = freq(ipoint)
          !
-         intens(ipoint)=intens(ipoint)+abscoef/dfreq
+         intens(ipoint)=intens(ipoint)+abscoef/(halfwidth*2.0_rk)
          !
       enddo
       !$omp end parallel do
