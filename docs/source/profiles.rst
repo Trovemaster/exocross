@@ -119,6 +119,59 @@ or
 For the binned profile method, the cross sections at a given wavenumber point represents an aveerage over the wavenumber bin.
 
 
+
+Box
+^^^
+Is to compute cross sections using a rectangular line profile (normalised to 1) with the width the same as the wavenumber grid spacing (size of the wavenumber bin). That is, HWHM is assumed to be :math:`1/2` of the grid spacing :math:`\Delta \nu`. 
+
+
+Example:
+::
+
+    (ScH box spectrum)
+    Temperature 1500.0
+    Range 0.  16000.0
+
+    Npoints 16001
+
+    abundance 0.97
+
+    absorption
+    box
+    threshold 1e-29
+
+    output ScH_1500K_box
+    States       ScH.states
+    Transitions  ScH.trans
+
+Here the width (2 :math:`\times` HWHM) of the line is 1 cm\ :sub:`-1`. 
+
+Rect
+^^^^
+Is to compute cross sections using a rectangular line profile (normalised to 1) with HWHM defined in the input, for example:
+::
+
+    (ScH box spectrum)
+    Temperature 1500.0
+    Range 0.  16000.0
+
+    Npoints 16001
+
+    abundance 0.97
+
+    absorption
+    rect
+    HWHM 0.5 
+
+    output ScH_1500K_box
+    States       ScH.states
+    Transitions  ScH.trans
+
+
+
+Here the HWHM of the line is 0.5 cm\ :sub:`-1`.
+
+
 Error cross sections
 --------------------
 
