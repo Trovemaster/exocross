@@ -122,7 +122,7 @@ For the binned profile method, the cross sections at a given wavenumber point re
 
 Box
 ^^^
-Is to compute cross sections using a rectangular line profile (normalised to 1) with the width the same as the wavenumber grid spacing (size of the wavenumber bin). That is, HWHM is assumed to be :math:`1/2` of the grid spacing :math:`\Delta \nu`. 
+Is to compute cross sections using a rectangular line profile (normalised to 1) with the width the same as the wavenumber grid spacing (size of the wavenumber bin). That is, HWHM is assumed to be :math:`1/2` of the grid spacing :math:`\Delta \nu`.
 
 
 Example:
@@ -144,11 +144,17 @@ Example:
     States       ScH.states
     Transitions  ScH.trans
 
-Here the width (2 :math:`\times` HWHM) of the line is 1 cm\ :sub:`-1`. 
+Here the width (2 :math:`\times` HWHM) of the line is 1 cm\ :sub:`-1`.
 
 Rect
 ^^^^
-Is to compute cross sections using a rectangular line profile (normalised to 1) with HWHM defined in the input, for example:
+Is to compute cross sections using a rectangular line profile of length :math:`L = 2{\rm HWHM}`  (normalised to 1) with the HWHM defined in the input as given by 
+
+.. math::
+
+      I(\nu) = \sum_i \frac{I_i(\nu)}{L}
+
+For example:
 ::
 
     (ScH box spectrum)
@@ -161,15 +167,21 @@ Is to compute cross sections using a rectangular line profile (normalised to 1) 
 
     absorption
     rect
-    HWHM 0.5 
+    HWHM 0.5
 
     output ScH_1500K_box
     States       ScH.states
     Transitions  ScH.trans
 
 
+Here the HWHM of the line is 0.5 cm\ :sub:`-1`. In order not to lose the density for small number of points, the frequency range rectangle is taken as   
+.. math:: 
+      
+      L = (\nu_{{\rm last}}-\nu_{{\rm first}})
+      
 
-Here the HWHM of the line is 0.5 cm\ :sub:`-1`.
+where :math:`\nu_{\rm last}` and :math:`\nu_{\rm first}` are the last and fist grid points within the box, i.e. :math:`L \le \nu_{\rm last}- \nu_{\rm first}`. 
+
 
 
 Error cross sections

@@ -5257,7 +5257,7 @@ module spectrum
      !
      real(rk),intent(in) :: tranfreq,abscoef,halfwidth_Lorentz,cutoff,freql,halfwidth_doppler
      real(rk),intent(in) :: freq(:)
-     real(rk),intent(out) :: intens(:)
+     real(rk),intent(inout) :: intens(:)
      real(rk) :: tranfreq_i,cutoff_
      integer(ik) :: ib,ie,ipoint
      logical, intent(in) :: use_resolving_power
@@ -5308,7 +5308,7 @@ module spectrum
      real(rk),intent(in) :: tranfreq,abscoef,cutoff,freql,halfwidth_doppler
      real(rk),intent(in) :: freq(:)
      integer,intent(in)  :: index_Lorentz
-     real(rk),intent(out) :: intens(:)
+     real(rk),intent(inout) :: intens(:)
      real(rk) :: d_freq,d_ln_freq
      integer(ik) :: ib,ie
      logical :: use_resolving_power
@@ -5341,7 +5341,7 @@ module spectrum
      !
      real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth_Lorentz,cutoff,freql,halfwidth_doppler
      real(rk),intent(in) :: freq(:)
-     real(rk),intent(out) :: intens(:)
+     real(rk),intent(inout) :: intens(:)
      real(rk) :: tranfreq_i
      integer(ik) :: ib,ie,ipoint
       !
@@ -5370,19 +5370,21 @@ module spectrum
      !
      real(rk),intent(in) :: tranfreq,abscoef,halfwidth,cutoff,freql,dfreq
      real(rk),intent(in) :: freq(:)
-     real(rk),intent(out) :: intens(:)
-     real(rk) :: tranfreq_i
-     integer(ik) :: ib,ie,ipoint
+     real(rk),intent(inout) :: intens(:)
+     real(rk) :: tranfreq_i,a,b,delta,abscoef_,scale
+     integer(ik) :: ib,ia,ipoint
       !
-      ib =  max(nint( ( tranfreq-min(halfwidth,cutoff)-freql)/dfreq )+1,1)
-      ie =  min(nint( ( tranfreq+min(halfwidth,cutoff)-freql)/dfreq )+1,npoints)
+      ia =  max(nint( ( tranfreq-halfwidth-freql)/dfreq )+1,1)
+      ib =  min(nint( ( tranfreq+halfwidth-freql)/dfreq )+1,npoints)
       !
-      !$omp parallel do private(ipoint,tranfreq_i) shared(intens) schedule(dynamic)
-      do ipoint=ib,ie
+      delta = (freq(ib)-freq(ia))
+      !
+      abscoef_ = abscoef/delta
+      !
+      !$omp parallel do private(ipoint) shared(intens) schedule(dynamic)
+      do ipoint=ia,ib-1
          !
-         tranfreq_i = freq(ipoint)
-         !
-         intens(ipoint)=intens(ipoint)+abscoef/(halfwidth*2.0_rk)
+         intens(ipoint)=intens(ipoint)+abscoef_
          !
       enddo
       !$omp end parallel do
