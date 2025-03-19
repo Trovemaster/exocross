@@ -1023,16 +1023,16 @@ module spectrum
                 !
               case("BINNING")
                 !
-                if (trim(proftype)=="LOREN")    proftype = 'LORE0'
+                if (proftype(1:5)=="LOREN")    proftype = 'LORE0'
                 !
               case("SAMPLING")
                 !
-                if (trim(proftype)=="DOPPLER")  proftype = 'DOPP0'
-                if (trim(proftype)=="GAUSSIAN") proftype = 'GAUS0'
+                if (proftype(1:3)=="DOP")  proftype = 'DOPP0'
+                if (proftype(1:3)=="GAU") proftype = 'GAUS0'
                 !
               case ("NORM","NORMALIZED","AVERAGED")
                 !
-                if (trim(proftype)=="VOIGT") proftype = 'VOI-QUAD'
+                if (proftype(1:3)=="VOI") proftype = 'VOI-QUAD'
                 !
               case default
                 !
@@ -4843,27 +4843,19 @@ module spectrum
      cutoff_ = cutoff
      if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth
      !
+     dnu_half = dfreq*0.5_rk
+     !
+     cutoff_ = max(cutoff_,halfwidth*0.5,dnu_half)
+     !
      ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+cutoff-freql)/dfreq )+1,npoints)
-     !
-     !abscoef=abscoef*sqrt(ln2/pi)/halfwidth
-     !
-     !lor = halfwidth/dfreq
-     !b = 0.25_rk*pi*lor*( 4.0_rk+lor**2**2 )/( 2.0_rk+lor**2 )
-     !
-     !b = 1.0_rk
-     !
-     !lor = 0.5_rk/pi*halfwidth*abscoef*b
-     !lor2 = 0.25_rk*halfwidth**2
+     ie =  min(nint( ( tranfreq+cutoff_-freql)/dfreq )+1,npoints)
      !
      dfreq_=freq(ib)-tranfreq
      !
-     xm = atan( (freq(ib)-tranfreq)/halfwidth )
-     xp = atan( (freq(ie)-tranfreq)/halfwidth )
+     xm = atan( (freq(ib)-tranfreq-dnu_half)/halfwidth )
+     xp = atan( (freq(ie)-tranfreq+dnu_half)/halfwidth )
      !
      b = 1.0_rk/(xp-xm)
-     !
-     dnu_half = dfreq*0.5_rk
      !
      !$omp parallel do private(ipoint,dfreq_,xp,xm,de) shared(intens) schedule(dynamic)
      do ipoint=ib,ie
@@ -4876,10 +4868,6 @@ module spectrum
         de = (xp)-(xm)
         !
         intens(ipoint)=intens(ipoint)+abscoef*de/dfreq*b
-        !
-        !dfreq_2=(freq(ipoint)-tranfreq)**2+lor2
-        !
-        !intens(ipoint)=intens(ipoint)+lor/dfreq_2
         !
      enddo
      !$omp end parallel do
@@ -4903,7 +4891,7 @@ module spectrum
      if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth
      !
      ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+cutoff-freql)/dfreq )+1,npoints)
+     ie =  min(nint( ( tranfreq+cutoff_-freql)/dfreq )+1,npoints)
      !
      !f := gamma/(Pi*((nu-x)^2+gamma^2))*A
      !
@@ -4941,7 +4929,7 @@ module spectrum
      if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth
      !
      ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+cutoff-freql)/dfreq )+1,npoints)
+     ie =  min(nint( ( tranfreq+cutoff_-freql)/dfreq )+1,npoints)
      !
      !f := gamma/(Pi*((nu-x)^2+gamma^2))
      !
