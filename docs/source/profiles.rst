@@ -111,12 +111,27 @@ or
      temperature 2000.0
      absorption
      lorentzian binning
-     hwhm .321
+     hwhm .5
      cutoff 25 (cm-1)
 
 
 
-For the binned profile method, the cross sections at a given wavenumber point represents an aveerage over the wavenumber bin.
+For the binned profile method, the cross sections at a given wavenumber point represents an average over the wavenumber bin. The main feature of the binned Lorentzian is to preserve the total intensity. It is therefore normalised to 1 after the cutoff applied. 
+
+.. math::
+              \sigma_{\rm binned Lor}(\tilde\nu) = \sum_{i} \frac{\sigma_{i}}{\bar\sigma}, 
+        
+ where
+.. math::
+              \sigma_i = \int_{\tilde\nu_i-h}^{\tilde\nu_i+h} \sigma_{\rm Lor}(\tilde\nu) d\titlde\nu,
+                
+.. math::
+              \sigma_{\rm Lor}(\tilde\nu) = \frac{\gamma}{\pi}\frac{1}{(\tilde\nu-\tilde\nu_{if})^+\gamma^2},
+                
+.. math::
+              \bar\sigma = \int_{\tilde\nu_{if}-\delta\tilde\nu}^{\tilde\nu_{if}+\delta\tilde\nu} \sigma_{\rm Lor}(\tilde\nu) d\titlde\nu,
+
+:math:`\sigma_{\rm Lor}(\tilde\nu)` is the Lorentzian line profile, :math:`\tilde\nu_{if}` is the line centre,  :math:`\bar\sigma` is the average of the line profile over the integration interval, :math:`\delta\tilde\nu` is the line ``cutoff`` distance, :math:`\Delta \nu` is the grid spacing, :math:`\tilde\nu_i` is a wavenumber grid point.
 
 
 
@@ -148,7 +163,7 @@ Here the width (2 :math:`\times` HWHM) of the line is 1 cm\ :sub:`-1`.
 
 Rect
 ^^^^
-Is to compute cross sections using a rectangular line profile of length :math:`L = 2{\rm HWHM}`  (normalised to 1) with the HWHM defined in the input as given by 
+Is to compute cross sections using a rectangular line profile of length :math:`L = 2{\rm HWHM}`  (normalised to 1) with the HWHM defined in the input as given by
 
 .. math::
 
@@ -174,13 +189,13 @@ For example:
     Transitions  ScH.trans
 
 
-Here the HWHM of the line is 0.5 cm\ :sub:`-1`. In order not to lose the density for small number of points, the frequency range rectangle is taken as   
-.. math:: 
-      
-      L = (\nu_{{\rm last}}-\nu_{{\rm first}})
-      
+Here the HWHM of the line is 0.5 cm\ :sub:`-1`. In order not to lose the density for small number of points, the frequency range rectangle is taken as
+.. math::
 
-where :math:`\nu_{\rm last}` and :math:`\nu_{\rm first}` are the last and fist grid points within the box, i.e. :math:`L \le \nu_{\rm last}- \nu_{\rm first}`. 
+      L = (\nu_{{\rm last}}-\nu_{{\rm first}})
+
+
+where :math:`\nu_{\rm last}` and :math:`\nu_{\rm first}` are the last and fist grid points within the box, i.e. :math:`L \le \nu_{\rm last}- \nu_{\rm first}`.
 
 
 
