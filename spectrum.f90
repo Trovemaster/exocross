@@ -1024,6 +1024,7 @@ module spectrum
               case("BINNING")
                 !
                 if (proftype(1:5)=="LOREN")    proftype = 'LORE0'
+                if (proftype(1:5)=="VOIGT")    proftype = 'VOI-QUAD'
                 !
               case("SAMPLING")
                 !
@@ -4845,7 +4846,7 @@ module spectrum
      !
      dnu_half = dfreq*0.5_rk
      !
-     cutoff_ = max(cutoff_,halfwidth*0.5,dnu_half)
+     cutoff_ = max(cutoff_,dnu_half)
      !
      ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
      ie =  min(nint( ( tranfreq+cutoff_-freql)/dfreq )+1,npoints)
@@ -5163,7 +5164,7 @@ module spectrum
      real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,cutoff,freql,dpwcoef
      real(rk),intent(in) :: freq(npoints),abciss(nquad),weight(nquad)
      real(rk),intent(inout) :: intens(npoints)
-     real(rk) :: alpha,ln2,halfwidth0,gamma,xp
+     real(rk) :: alpha,ln2,halfwidth0,gamma,xp,dnu_half
      real(rk) :: ln22,y,dx2,x0,sigma,xi,x1,x2,l1,l2,bnormq(1:nquad),Lorentz(nquad),dxp,voigt_,cutoff_
      integer(ik) :: ib,ie,ipoint,iquad
      !
@@ -5173,12 +5174,26 @@ module spectrum
      cutoff_ = cutoff
      if ( use_width_cutoff ) cutoff_ = cutoff*max(halfwidth0,halfwidth)
      !
+     dnu_half = dfreq*0.5_rk
+     !
+     cutoff_ = max(cutoff_,dnu_half)
+     !
+     ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+cutoff_-freql)/dfreq )+1,npoints)
+     !
+     !dfreq_=freq(ib)-tranfreq
+     !
+     !xm = atan( (freq(ib)-tranfreq-dnu_half)/halfwidth )
+     !xp = atan( (freq(ie)-tranfreq+dnu_half)/halfwidth )
+     !
+     !b = 1.0_rk/(xp-xm)
+     !
      ln2=log(2.0_rk)
      ln22 = ln2*2.0_rk
      x0 = sqrt(ln2)/halfwidth0*dfreq*0.5_rk
      !
-     ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+cutoff_-freql)/dfreq )+1,npoints)
+     !ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
+     !ie =  min(nint( ( tranfreq+cutoff_-freql)/dfreq )+1,npoints)
      !
      if (ie<=ib) return
      !
@@ -5191,19 +5206,24 @@ module spectrum
      !
      y = gamma/sigma
      !
+     !dfreq_=freq(ipoint)-tranfreq
+     !
      dx2 = dfreq*0.5_rk/sigma
      !
      do iquad=1,nquad
         !
         xi = abciss(iquad)
         !
-        x1 = (freq(ib)-tranfreq)/sigma-xi
-        x2 = (freq(ie)-tranfreq)/sigma-xi
+        x1 = (freq(ib)-tranfreq-dnu_half)/sigma-xi
+        x2 = (freq(ie)-tranfreq+dnu_half)/sigma-xi
+        !
+        !xm = atan( (freq(ib)-tranfreq-dnu_half)/halfwidth )
+        !xp = atan( (freq(ie)-tranfreq+dnu_half)/halfwidth )
         !
         L1 = atan( x1/y )
         L2 = atan( x2/y )
         !
-        bnormq(iquad) = 1.0_rk/(L2-L1)*pi
+        bnormq(iquad) = 1.0_rk/(L2-L1)
         !
      enddo
      !
@@ -5226,7 +5246,7 @@ module spectrum
            L1 = atan( x1/y )
            L2 = atan( x2/y )
            !
-           Lorentz(iquad) = (L2-L1)/pi
+           Lorentz(iquad) = (L2-L1)
            !
         enddo
         !
