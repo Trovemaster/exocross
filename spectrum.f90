@@ -3110,7 +3110,9 @@ module spectrum
              !
              ! estimate the line shape parameter
              !
-             if (lineprofile_do) then
+             gamma_ram(iswap_) = halfwidth
+             !
+             if (proftype(1:3)=='VOI'.or.proftype(1:3)=='LOR') then
              !if (lineprofile_do.and..not.species(1)%if_defined) then
                !
                ! The current version of ExoCross does no know how to locate J-values in HITRAN-input.
