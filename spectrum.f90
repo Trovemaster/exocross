@@ -418,7 +418,7 @@ module spectrum
             !
             select case(w)
             !
-            case('TEMPMAX','MAXTEMP','MAX-TEMPERATURE',"TMAX")
+            case('TEMPMAX','MAXTEMP','MAX-TEMPERATURE',"TMAX","TEMPERATURE-MAX")
               !
               call readf(maxtemp)
               !
@@ -3594,7 +3594,7 @@ module spectrum
                 endif
                 !
                 if (error_cross_sections_do) then 
-                  !x
+                  !
                   read(quantum_numbers(QN%unc_col-4,ilevelf),*) unc_f
                   read(quantum_numbers(QN%unc_col-4,ileveli),*) unc_i
                   !
@@ -3622,6 +3622,13 @@ module spectrum
                 if (lineprofile_do) then
                   gamma_ram(iswap_)=gamma_ram(iswap)
                   gamma_idx_RAM(iswap_)=gamma_idx_RAM(iswap)
+                  !
+                  if (error_broadening_do) then 
+                    !
+                    sigma2_ram(iswap_) = sigma2_ram(iswap)
+                    !
+                  endif
+                  !
                 endif
                 !
                 iswap_ = iswap_ + 1
