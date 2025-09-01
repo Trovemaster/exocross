@@ -4317,7 +4317,7 @@ module spectrum
            !
          endif
          !
-         write(b_fmt,"('(1x,a',i2,')')") max(12,nchars_quanta(kitem))
+         write(b_fmt,"('(1x,a',i2,')')") min(12,nchars_quanta(kitem))
          !
          write(tunit,b_fmt,advance="no") trim(quantum_numbers(kitem,ilevelf))
          !
