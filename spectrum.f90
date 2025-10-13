@@ -6009,10 +6009,7 @@ module spectrum
      real(rk) :: halfwidth,gamma_,n_,f
      integer(ik) :: ispecies,Jpp,Jp,Kpp
      !
-     halfwidth = species(1)%gamma
-     !Jpp = nint(Ji)
-     !Jp  = nint(Jf)
-     !Kpp = nint(Ki)
+     halfwidth = 0
      !
      do ispecies =1,Nspecies
        !
