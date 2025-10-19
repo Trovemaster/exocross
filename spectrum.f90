@@ -3369,7 +3369,7 @@ module spectrum
              endif
              !
              if (energyf-energyi<-30e1) then
-               write(out,"('Error Ei>Ef+10: i,f,indi,indf,Aif,Ef,Ei = ',4i12,2x,3es16.8)") & 
+               write(out,"('Error Ei>Ef+30: i,f,indi,indf,Aif,Ef,Ei = ',4i12,2x,3es16.8)") & 
                     ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
                stop 'wrong order of indices'
                cycle loop_swap
