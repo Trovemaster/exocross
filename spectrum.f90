@@ -30,7 +30,7 @@ module spectrum
   !
   character(len=cl) :: specttype="ABSORPTION",proftype="DOPPL"
   character(len=wl) :: enrfilename="NONE",intfilename(nfiles_max),output="output"
-  character(len=cl) :: pffilename="NONE"
+  character(len=wl) :: pffilename="NONE"
   integer(ik)   :: intJvalue(nfiles_max)
   character(4) a_fmt
   character(9) b_fmt
