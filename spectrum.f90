@@ -4140,7 +4140,7 @@ module spectrum
             enddo
             !$omp end parallel do
             !
-        case ('BIN-MICRON');
+        case ('BIN-M');
             !
             !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint) shared(intens_omp) schedule(dynamic)
             do iomp = 1,N_omp_procs
