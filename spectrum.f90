@@ -1759,7 +1759,7 @@ module spectrum
         !
       endif
       !
-      if (trim(proftype)=='LIFETIME'.or.trim(proftype)=='T-LIFETIME') THEN
+      if (trim(proftype)=='LIFETIME'.or.trim(proftype)=='T-LIFETIME'.or.trim(proftype)=='COOLING') THEN
         !
         nan = IEEE_VALUE(nan, IEEE_QUIET_NAN)
         !
@@ -1769,6 +1769,8 @@ module spectrum
         call ArrayStart('Asum',info,size(Asum),kind(Asum))
         !
         Asum = nan ! -1.0_rk
+        !
+        if (trim(proftype)=='COOLING') Asum = 0
         !
       endif
       !
@@ -2182,7 +2184,7 @@ module spectrum
       !
       ! print out the computed part. function objects and finish
       !
-      if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL') then
+      if (proftype(1:4)=='PART') then
         !
         write(ioname, '(a)') 'Partition function'
         call IOstart(trim(ioname),tunit)
@@ -3489,7 +3491,7 @@ module spectrum
                abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
                acoef=gfcoef*acoef*gtot(ilevelf)/(vellgt*tranfreq)**2
                !
-             case ('LIFETIME','T-LIFETIME')
+             case ('LIFETIME','T-LIFETIME','COOLING')
                !
                ilevelf_ram(iswap) = ilevelf
                ileveli_ram(iswap) = ileveli
@@ -3881,7 +3883,7 @@ module spectrum
               !
               if (isnan(Asum(ilevelf))) Asum(ilevelf) = 0
               !
-              Asum(ilevelf) = Asum(ilevelf) + acoef+acoef/(exp(c2/temp*tranfreq)-1.0_rk)
+              Asum(ilevelf) = Asum(ilevelf) + acoef/(exp(c2/temp*tranfreq)-1.0_rk)
               !
               if (Asum(ileveli)<0) Asum(ileveli) = 0
               !
@@ -3953,29 +3955,18 @@ module spectrum
             !
         case ('COOLI')
             !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
-            do iomp = 1,N_omp_procs
+            do iswap = 1,nswap
               !
-              do iswap = iomp,nswap,N_omp_procs
-                !
-                ilevelf = ilevelf_ram(iswap)
-                energyf = energies(ilevelf)
-                abscoef = abscoef_ram(iswap)
-                !
-                do itemp = 1,npoints
-                  !
-                  temp0 = real(itemp,rk)*dtemp
-                  !
-                  beta0 = c2/temp0
-                  !
-                  intens_omp(itemp,iomp) = intens_omp(itemp,iomp) + abscoef*exp(-(beta0-beta)*energyf)*partfunc/(pf(0,itemp))
-                  !
-                enddo
-                !
-              enddo
+              ilevelf = ilevelf_ram(iswap)
+              energyf = energies(ilevelf)
+              !
+              if (energyf>enermax) cycle
+              !
+              acoef = acoef_ram(iswap)
+              !
+              Asum(ilevelf) = Asum(ilevelf)+acoef*nu_ram(iswap)*real(gtot(ilevelf),rk)
               !
             enddo
-            !$omp end parallel do
             !
         case ('PSEUD')
             !
@@ -4348,9 +4339,33 @@ module spectrum
      !
      open(unit=tunit,file=trim(output)//".cooling",action='write',status='replace')
      !
+     intens = 0
+     !
      do itemp = 1,npoints
        !
-       if (energy>enermax) cycle
+       temp0 = real(itemp,rk)*dtemp
+       !
+       !$omp parallel do private(ilevelf,energy,beta0) shared(intens) schedule(dynamic)
+       do ilevelf = 1,nlevels
+         !
+         energy = energies(ilevelf)
+         !
+         if (energy>enermax) cycle
+         !
+         beta0 = c2/temp0
+         !
+         intens(itemp)=intens(itemp)+ Asum(ilevelf)/(pf(0,itemp))*exp( -beta0*energy )
+         !
+         !intens(itemp)=intens(itemp)+ Asum(ilevelf)*partfunc/(pf(0,itemp))*exp( -(beta0-beta)*energy )
+         !
+       enddo
+       !$omp end parallel do
+       !
+     enddo
+     !
+     intens = intens*emcoef
+     !
+     do itemp = 1,npoints
        !
        temp0 = real(itemp,rk)*dtemp
        !
