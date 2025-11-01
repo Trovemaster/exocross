@@ -3495,10 +3495,10 @@ module spectrum
                !
                ilevelf_ram(iswap) = ilevelf
                ileveli_ram(iswap) = ileveli
-               abscoef_ram(iswap) = 0
+               !abscoef_ram(iswap) = 0
                acoef_ram(iswap) = acoef
                !
-               nu_ram(iswap) = 0
+               !nu_ram(iswap) = 0
                !
                cycle loop_swap
                !
@@ -3958,9 +3958,9 @@ module spectrum
             do iswap = 1,nswap
               !
               ilevelf = ilevelf_ram(iswap)
-              energyf = energies(ilevelf)
+              !energyf = energies(ilevelf)
               !
-              if (energyf>enermax) cycle
+              !if (energyf>enermax) cycle
               !
               acoef = acoef_ram(iswap)
               !
@@ -4341,11 +4341,11 @@ module spectrum
      !
      intens = 0
      !
+     !$omp parallel do private(itemp,temp0,ilevelf,energy,beta0) shared(intens) schedule(dynamic)
      do itemp = 1,npoints
        !
        temp0 = real(itemp,rk)*dtemp
        !
-       !$omp parallel do private(ilevelf,energy,beta0) shared(intens) schedule(dynamic)
        do ilevelf = 1,nlevels
          !
          energy = energies(ilevelf)
@@ -4354,16 +4354,16 @@ module spectrum
          !
          beta0 = c2/temp0
          !
-         intens(itemp)=intens(itemp)+ Asum(ilevelf)/(pf(0,itemp))*exp( -beta0*energy )
+         intens(itemp)=intens(itemp)+ Asum(ilevelf)/(pf(0,itemp))*exp( -beta0*energy )*emcoef
          !
          !intens(itemp)=intens(itemp)+ Asum(ilevelf)*partfunc/(pf(0,itemp))*exp( -(beta0-beta)*energy )
          !
        enddo
-       !$omp end parallel do
        !
      enddo
+     !$omp end parallel do
      !
-     intens = intens*emcoef
+     !intens = intens*emcoef
      !
      do itemp = 1,npoints
        !
