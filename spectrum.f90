@@ -1455,12 +1455,12 @@ module spectrum
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef,m0,k0,Ki
    real(rk)    :: acoef_,int_cutoff,ndensity,abscoef_ref
    integer(ik) :: Jmax,Jp,Jpp,Ncutoff,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin,gtot_,KmaxAll,Kmax,kpp
-   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc_i,unc_f,time_,hwhm_gauss
+   real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc_i,unc_f,time_,hwhm_gauss,gtot_rk
    character(len=cl) :: ioname,intname
    !
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
-   real(rk),allocatable :: Krot(:)
-   integer(ik),allocatable :: gtot(:),indices(:),level_IDs(:)
+   real(rk),allocatable :: Krot(:),gtot(:)
+   integer(ik),allocatable :: indices(:),level_IDs(:)
    character(len=20),allocatable :: quantum_numbers(:,:),quantum_numbers_vib(:,:)
    !
    real(rk),allocatable :: acoef_RAM(:),abscoef_ram(:),nu_ram(:),intens_omp(:,:),gamma_ram(:),sigma2_ram(:)
@@ -1830,6 +1830,8 @@ module spectrum
             stop 'Error: COOLING can work only with EMISSION'
           endif
           !
+          specttype = "COOLING"
+          !
           if (histogram) then
             write(out,"('Error: COOLING does not work for HISTOGRAM')")
             stop 'Error: COOLING does not work with HISTOGRAM'
@@ -2086,21 +2088,27 @@ module spectrum
           !
           ! start reading the energies
           !
-          rewind(enunit)
+          !rewind(enunit)
           !
           i = 0 
           !
-          do
-            !
-            call read_line(eof,enunit) ; if (eof) exit
+          do i = 1,nlevels
              !
-             i = i + 1
+             !call read_line(eof,enunit) ; if (eof) exit
              !
-             call readi(itemp)
-             call readf(energy)
+             !i = i + 1
              !
-             call readi(gtot_)
-             call readf(ji)
+             !call readi(itemp)
+             !call readf(energy)
+             !
+             energy = energies(i)
+             !
+             gtot_rk = gtot(i)
+             !
+             ji = jrot(i) 
+             !
+             !call readi(gtot_)
+             !call readf(ji)
              !
              j = nint(2.0_rk*ji)-1
              !
@@ -2108,7 +2116,7 @@ module spectrum
                 !
                 if (proftype(1:4)=='PART') then
                   !if (verbose>=1.and.npoints<1000) print('("!",f8.1,3(1x,'//npoints_fmt//'es20.8))'),jrot(i),pf(ipartf,1:npoints)
-                else
+                  !else
                   if (verbose>=4) print('("|",f8.1,1x,es16.8)'),jrot(i),partfunc
                 endif
                 !
@@ -2116,7 +2124,7 @@ module spectrum
              !
              if (.not.vibtemperature_do) then
                 !
-                partfunc=partfunc+gtot_*exp(-beta*energy)
+                partfunc=partfunc+gtot_rk*exp(-beta*energy)
                 !
              else
                 !
@@ -2138,11 +2146,11 @@ module spectrum
                    !
                    ndensity = dens_vib(ivib)
                    !
-                   partfunc=partfunc+gtot_*exp(-c2/temp*ener_rot)*ndensity
+                   partfunc=partfunc+gtot_rk*exp(-c2/temp*ener_rot)*ndensity
                    !
                 else 
                    ! split PF into a product of vib and rot parts 
-                   partfunc=partfunc+real(gtot_)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)
+                   partfunc=partfunc+gtot_rk*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)
                    !
                 endif
                 ! 
@@ -2150,7 +2158,7 @@ module spectrum
              !
              j0 = j
              !
-             if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL') then
+             if (proftype(1:4)=='PART') then
                !
                do itemp = 1,npoints
                  !
@@ -2160,11 +2168,25 @@ module spectrum
                  !
                  beta0 = c2/temp0
                  !
-                 !beta0 = planck*vellgt/(boltz*temp0)
+                 pf(0,itemp) = pf(0,itemp) + gtot_rk*exp(-beta0*energy)
+                 pf(1,itemp) = pf(1,itemp) + gtot_rk*exp(-beta0*energy)*(beta0*energy)
+                 pf(2,itemp) = pf(2,itemp) + gtot_rk*exp(-beta0*energy)*(beta0*energy)**2
                  !
-                 pf(0,itemp) = pf(0,itemp) + real(gtot_)*exp(-beta0*energy)
-                 pf(1,itemp) = pf(1,itemp) + real(gtot_)*exp(-beta0*energy)*(beta0*energy)
-                 pf(2,itemp) = pf(2,itemp) + real(gtot_)*exp(-beta0*energy)*(beta0*energy)**2
+               enddo
+               !
+             endif
+             !
+             if (proftype(1:4)=='COOL') then
+               !
+               do itemp = 1,npoints
+                 !
+                 if (energy>enermax) cycle
+                 !
+                 temp0 = real(itemp,rk)*dtemp
+                 !
+                 beta0 = c2/temp0
+                 !
+                 pf(0,itemp) = pf(0,itemp) + gtot_rk*exp(-beta0*energy)
                  !
                enddo
                !
@@ -2172,7 +2194,7 @@ module spectrum
              !
           end do
           !
-          if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL') then
+          if (proftype(1:4)=='PART') then
              !
              pf(3,:) = ( pf(2,:)/pf(0,:)-(pf(1,:)/pf(0,:))**2 )*R_ + 2.5_rk*R_
              !
@@ -3312,7 +3334,7 @@ module spectrum
            !
            select case (trim(specttype))
              !
-           case ('ABSORPTION','EMISSION','GF','LIFETIME','T-LIFETIME')
+           case ('ABSORPTION','EMISSION','GF','LIFETIME','T-LIFETIME','COOLING')
              !
              ! all good
              !
@@ -3495,10 +3517,10 @@ module spectrum
                !
                ilevelf_ram(iswap) = ilevelf
                ileveli_ram(iswap) = ileveli
-               !abscoef_ram(iswap) = 0
+               abscoef_ram(iswap) = 0
                acoef_ram(iswap) = acoef
                !
-               !nu_ram(iswap) = 0
+               nu_ram(iswap) = tranfreq
                !
                cycle loop_swap
                !
@@ -3964,7 +3986,7 @@ module spectrum
               !
               acoef = acoef_ram(iswap)
               !
-              Asum(ilevelf) = Asum(ilevelf)+acoef*nu_ram(iswap)*real(gtot(ilevelf),rk)
+              Asum(ilevelf) = Asum(ilevelf)+acoef*nu_ram(iswap)*gtot(ilevelf)
               !
             enddo
             !
@@ -4292,9 +4314,9 @@ module spectrum
        if (energies(ilevelf)>99999.99999_rk) my_fmt0 = my_fmt100K
        !
        if ( mod(nint(2.0_rk*jrot(1)),2)==0 ) then 
-        write(tunit,my_fmt0,advance="no") level_IDs(ilevelf),energies(ilevelf),gtot(ilevelf),nint(jrot(ilevelf))
+        write(tunit,my_fmt0,advance="no") level_IDs(ilevelf),energies(ilevelf),nint(gtot(ilevelf)),nint(jrot(ilevelf))
        else
-        write(tunit,my_fmt0,advance="no") level_IDs(ilevelf),energies(ilevelf),gtot(ilevelf),jrot(ilevelf)
+        write(tunit,my_fmt0,advance="no") level_IDs(ilevelf),energies(ilevelf),nint(gtot(ilevelf)),jrot(ilevelf)
        endif
        !
        do kitem = 1,maxitems
@@ -5432,9 +5454,9 @@ module spectrum
      implicit none
      !
      integer(ik),intent(in) :: sunit,nswap,maxitems,nrows,ilevelf_ram(nswap),ileveli_ram(nswap)
-     real(rk),intent(in) :: abscoef_ram(nswap),acoef_ram(nswap),jrot(nrows),energies(nrows)
+     real(rk),intent(in) :: abscoef_ram(nswap),acoef_ram(nswap),jrot(nrows),energies(nrows),gtot(nrows)
      real(rk)  :: Jf,Ji,abscoef,acoef,tranfreq,energyf,energyi
-     integer(ik),intent(in) :: nchars_quanta(maxitems),gtot(nrows)
+     integer(ik),intent(in) :: nchars_quanta(maxitems)
      character(len=20),intent(in) :: quantum_numbers(0:maxitems,nrows)
      integer(ik) :: nchars_,kitem,ierror_nu,iE,ierror_i,ierror,ierror_S,l,qni,qnf,ierror_f,&
                     ilevelf,ileveli,iswap,nchars_tot,ierror_nu_,icol
@@ -5635,7 +5657,7 @@ module spectrum
          write(sunit,'(i1)',advance="no") HITRAN_n%ierr
          write(sunit,'(i1)',advance="no") HITRAN_Delta%ierr
          !
-         write(sunit,"(' 0 0 0 0 0 0 ',f7.1,f7.1)",advance="yes") real(gtot(ilevelf)),real(gtot(ileveli))
+         write(sunit,"(' 0 0 0 0 0 0 ',f7.1,f7.1)",advance="yes") gtot(ilevelf),gtot(ileveli)
          !
        elseif (stick_oxford) then
          !
@@ -5861,12 +5883,12 @@ module spectrum
      !
      implicit none
      !
-     integer(ik),intent(in) :: sunit,nswap,nrows,ilevelf_ram(nswap),ileveli_ram(nswap),gtot(nrows)
-     real(rk),intent(in) :: abscoef_ram(nswap),acoef_ram(nswap),jrot(nrows),energies(nrows)
+     integer(ik),intent(in) :: sunit,nswap,nrows,ilevelf_ram(nswap),ileveli_ram(nswap)
+     real(rk),intent(in) :: abscoef_ram(nswap),acoef_ram(nswap),jrot(nrows),energies(nrows),gtot(nrows)
      real(rk)  :: Jf,Ji,abscoef,acoef,tranfreq,energyf,energyi
-     integer(ik) :: ilevelf,ileveli,iswap,gtot_f
+     integer(ik) :: ilevelf,ileveli,iswap
      character(len=cl) :: h_fmt
-     real(rk)    ::lambda,E_low_eV,loggf,n,s,lambda_vac
+     real(rk)    ::lambda,E_low_eV,loggf,n,s,lambda_vac,gtot_f
      !
      integer(ik),parameter :: toeV = 8065.54429_ark 
      !
@@ -5906,7 +5928,7 @@ module spectrum
        !
        gtot_f = gf_factor*gtot(ilevelf)
        !
-       write(sunit,'(1x,f17.3,2x,f6.3,2x,f7.3,2x,f7.3,2x,i4,2x,f7.3)') lambda,E_low_eV,loggf,0.0_rk,gtot_f,0.0_rk
+       write(sunit,'(1x,f17.3,2x,f6.3,2x,f7.3,2x,f7.3,2x,i4,2x,f7.3)') lambda,E_low_eV,loggf,0.0_rk,nint(gtot_f),0.0_rk
        !
     enddo
 
