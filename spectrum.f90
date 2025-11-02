@@ -1470,6 +1470,7 @@ module spectrum
    integer(ik) :: Jmax,Jp,Jpp,Ncutoff,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin,gtot_,KmaxAll,Kmax,kpp
    real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc_i,unc_f,time_,hwhm_gauss,gtot_rk
    character(len=cl) :: ioname,intname
+   character(len=wl) :: filename
    !
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
    real(rk),allocatable :: Krot(:),gtot(:)
@@ -1487,17 +1488,21 @@ module spectrum
    !
    character(len=9) :: npoints_fmt  !text variable containing formats for reads/writes
    character(len=9) :: b_fmt
-   integer(hik):: Nintens(-60:60)
+   integer(hik):: Nintens(-60:60),filesize,ipos,ipos_
    !   
    logical :: eof
    character(len=cl) :: w,print_fmt
    !
-   integer(ik) :: imol,iostat_,isotope
+   integer(ik) :: imol,iostat_,isotope,iunit,istat,ilen
    real(rk)    :: gf,gi,mem_t,temp_gamma_n,cutoff_
    character(55) ch_q,ch_broad
    character(len=cl)   :: my_fmt100K,my_fmt0
    real(real32) :: nan
    logical :: upper_state_selected,lower_state_selected
+   character(len=:),allocatable :: str
+   character(len=1) :: c
+   character(len=wl) :: line
+   !
    !
    ln2=log(2.0_rk)
    ln22 = ln2*2.0_rk
@@ -2999,9 +3004,47 @@ module spectrum
      !
      if (verbose>=3) print('("  Processing ",a,"...")'), trim(intfilename(i))
      !
+     filename = trim(intfilename(i))
+     !
      if ( do_read_whole_file ) then 
+       !
        ! a feature to read the whle file as a string 
-       call read_file(intfilename(i),N_to_RAM,indexf_RAM,indexi_RAM,acoef_RAM,nlines)
+       !call read_file(intfilename(i),N_to_RAM,indexf_RAM,indexi_RAM,acoef_RAM,nlines)
+       !
+       open(newunit=iunit,file=filename,status='OLD',form='UNFORMATTED',access='STREAM',iostat=istat)
+       if (istat/=0) then
+           print*,"Error opening .trans file (istat is not 0, ",istat,")  ",filename
+           stop 'Error opening .trans file'
+       endif
+       !
+       !how many characters are in the file:
+       inquire(file=filename,size=filesize)
+       !
+       if (filesize>0) then
+           !
+           ! allocate tge string             
+           allocate( character(len=filesize) :: str,stat=info )
+           call ArrayStart('full-read',info,1_ik,1_ik,filesize)
+           !
+           !read the file all at once:
+           read(iunit,pos=1,iostat=istat) str
+           !
+           if (istat==0) then
+               !make sure it was all read by trying to read more:
+               read(iunit,pos=filesize+1,iostat=istat) c
+               if (.not. IS_IOSTAT_END(istat)) &
+                   write(out,*) 'full-read: file was not completely read.'
+           else
+               write(*,*) 'full-read: Error reading file.'
+               stop 'full-read: Error reading file.'
+           end if
+           !
+           close(iunit, iostat=istat)
+           !
+       else
+           write(*,*) 'full-read: Error getting file size.'
+           stop 'full-read: Error getting file size.'
+       end if
        !
      else
        ! a normal line by line read
@@ -3027,6 +3070,8 @@ module spectrum
      end select
      !
      ichunk = 0
+     !
+     ipos =  1
      !
      loop_tran: do
         !
@@ -3325,12 +3370,58 @@ module spectrum
               exit loop_tran
            endif
            !
-        else ! ExoMol format of the trans-file
-           !
-           if (do_read_whole_file) then
+        else ! ExoMol format of the line-by-line trans-file
+          !
+          if (do_read_whole_file) then ! ExoMol format of the whole-read trans-file
              !
-             nswap_ = nlines
-             eof = .true.
+             if (ichunk==1) then 
+                !
+                ! open it again to read and count charcaters in the 1st line 
+                !
+                open(newunit=iunit,file=filename,status='OLD',form='FORMATTED',iostat=istat)
+                !
+                if (istat/=0) then
+                  write(*,*) 'read_file: Error opening file.'
+                  stop 'read_file: Error opening file.'
+                endif
+                !
+                read(iunit,"(Q,A)") ilen,line
+                !
+                nchunk = ilen+1
+                !
+                Nlines = filesize/nchunk
+                !
+                close(iunit)
+                !
+             endif
+             !
+             iswap = 0
+             !
+             do while(iswap<N_to_RAM.and.ipos+nchunk-1<=filesize)
+                !
+                iswap = iswap + 1
+                ipos_ = ipos+nchunk-2
+                !
+                read(str(ipos:ipos_),*) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
+                ipos  = ipos  + nchunk
+                !
+             enddo
+             !
+             if (ipos_+1>=filesize) then
+               !
+               nswap_ = iswap-1
+               eof = .true.
+               !
+             endif
+             !
+             if (nswap_<1) then
+                !
+                if (verbose>=5) write(out,"('... Finish swap')")
+                !
+                exit loop_tran
+                !
+                stop 'Error nswap_=0'
+             endif
              !
            else
              !
@@ -6438,40 +6529,39 @@ module spectrum
     use accuracy
 
     implicit none
-    
+    !
     character(len=*),intent(in) :: filename
     integer(ik),intent(in) :: N
     integer(ik),intent(out) :: indexf(N),indexi(N),Nlines
     real(rk),intent(out) :: acoef(N)
-
-    !integer(ik),intent(out) :: nfilesize
-    
+    !
     !local variables:
     character(len=:),allocatable :: str
-    integer(ik) :: iunit,istat,info,len,filesize,i,ipos,ipos_
+    integer(ik) :: iunit,istat,info,len,i,ipos,ipos_
     character(len=1) :: c
     character(len=wl) :: line
     integer(ik) :: nchunk = 38
-  
+    integer(hik) :: filesize
+    !
     open(newunit=iunit,file=filename,status='OLD',&
             form='UNFORMATTED',access='STREAM',iostat=istat)
     if (istat/=0) then
         print*,"Error opening .trans file (istat is not 0, ",istat,")  ",filename
         stop 'Error opening .trans file'
     endif
-
+    !
     !how many characters are in the file:
-    inquire(file=filename, size=filesize)
+    inquire(file=filename,err=101,size=filesize)
     !
     if (filesize>0) then
         !
         ! allocate tge string             
-        allocate( character(len=filesize) :: str )
-        call ArrayStart('read_file',info,filesize,1_ik)
+        allocate( character(len=filesize) :: str,stat=info )
+        call ArrayStart('read_file',info,1_ik,1_ik,filesize)
         !
         !read the file all at once:
         read(iunit,pos=1,iostat=istat) str
-    
+        !
         if (istat==0) then
             !make sure it was all read by trying to read more:
             read(iunit,pos=filesize+1,iostat=istat) c
@@ -6481,9 +6571,9 @@ module spectrum
             write(*,*) 'read_file: Error reading file.'
             stop 'read_file: Error reading file.'
         end if
-    
+        !
         close(iunit, iostat=istat)
-    
+        !
     else
         write(*,*) 'read_file: Error getting file size.'
         stop 'read_file: Error getting file size.'
@@ -6507,9 +6597,9 @@ module spectrum
     Nlines = filesize/nchunk
     !
     if (Nlines>N) then
-      write(out,"('Error read_file: The number of lines ,i12, in ',a,' is larger than NCache',i12)") &
+      write(out,"('Error read_file: The number of lines ',i12,' in ',a,' is larger than NCache',i12)") &
                    Nlines,filename,N
-      stop 'Error read_file: The number of lines in .trans  is larger than NCache'
+      !stop 'Error read_file: The number of lines in .trans  is larger than NCache'
     endif
     !
     ipos =  1
@@ -6523,100 +6613,14 @@ module spectrum
     !
     call ArrayStop('read_file')
     !
+    close(iunit)
+    !
+    101 continue
+    !
+    write(out,"(a,a)") 'read_file: error getting file size of ',trim(filename)
+    stop 'read_file: error getting file size.'
+    !
     end subroutine read_file
-
-
-
-    subroutine read_file2(filename)
-
-    implicit none
-    
-    character(len=*),intent(in)  :: filename
-    !character(len=:),allocatable,intent(out) :: str
-        
-    !parameters:
-
-    character(len=:),allocatable :: str
-    
-    integer,parameter  :: n_chunk = 256      !chunk size for reading file [arbitrary]
-    character(len=*),parameter :: nfmt = '(A256)'    !corresponding format statement
-    character(len=1) :: newline 
-    
-    integer :: iunit, istat, isize
-    character(len=n_chunk) :: chunk
-    integer :: filesize,ipos
-    character(len=:),allocatable :: tmp
-    
-    !how many characters are in the file:
-    inquire(file=filename, size=filesize)  !is this portable?
-    
-    newline = new_line(' ')
-    
-    !initialize:
-    ipos = 1    !where to put the next chunk
-    
-    !preallocate the str array to speed up the process for large files:
-    !str = ''
-    allocate( character(len=filesize) :: str )
-    
-    !open the file:
-    open(newunit=iunit, file=trim(filename), status='OLD', iostat=istat)
-    
-    if (istat==0) then
-            
-        !read all the characters from the file:
-        do
-            
-            read(iunit,fmt=nfmt,advance='NO',size=isize,iostat=istat) chunk
-            
-            if (istat==0) then
-            
-                !str = str//chunk
-                str(ipos:ipos+isize-1) = chunk
-                ipos = ipos+isize
-            
-            elseif (IS_IOSTAT_EOR(istat)) then
-                            
-                if (isize>0) then
-                    !str = str//chunk(1:isize)//newline
-                    str(ipos:ipos+isize) = chunk(1:isize)//newline
-                    ipos = ipos+isize+1
-                else
-                    !str = str//newline                
-                    str(ipos:ipos) = newline
-                    ipos = ipos + 1
-                end if
-                
-            elseif (IS_IOSTAT_END(istat)) then        
-            
-                if (isize>0) then
-                    !str = str//chunk(1:isize)
-                    str(ipos:ipos+isize) = chunk(1:isize)//newline
-                    ipos = ipos+isize+1
-                end if
-                
-                exit
-            
-            else
-                stop 'Error'
-            end if
-        
-        end do
-                
-        !resize the string
-        if (ipos<filesize+1) str = str(1:ipos-1)
-		
-        close(iunit, iostat=istat)
-       
-    else
-        write(*,*) 'Error opening file: '//trim(filename)
-    end if
-
-
-    print*,str
-
-    
-    end subroutine read_file2
-
+    !
     !
   end module spectrum

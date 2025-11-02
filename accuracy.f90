@@ -10,7 +10,7 @@ module accuracy
   integer, parameter :: ik          = selected_int_kind(8)       ! "Normal" integers. This must map on
                                                                  ! C "int" type, or the DX interface won't
                                                                  ! work correctly.
-  integer, parameter :: hik         = selected_int_kind(8)       ! "Pointer" integers - sufficient to store
+  integer, parameter :: hik         = selected_int_kind(16)      ! "Pointer" integers - sufficient to store
                                                                  ! memory address
   integer, parameter :: drk         = selected_real_kind(12,25)  ! "Double" reals and complex (complexi? :-)
   integer, parameter :: rk          = selected_real_kind(12,25)  ! "Normal" reals and complex (complexi? :-)
