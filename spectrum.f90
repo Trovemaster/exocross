@@ -143,8 +143,6 @@ module spectrum
   logical :: completed_work = .true.
   logical :: all_done = .false.
   logical :: upper_filter_active = .false.,lower_filter_active = .false.
-  logical :: do_read_whole_file = .false.
-  integer(ik) :: nchunk = 38 ! number of usefull caharacters records in the .trans file 
   !
   type(VoigtKampffCollection),save :: fast_voigt
   
@@ -187,10 +185,6 @@ module spectrum
           exit
         case("")
           print "(1x)"    !  Echo blank lines
-          !
-        case ("READ_WHOLE_FILE","READ-WHOLE-FILE")
-          !
-          do_read_whole_file = .true.
           !
         case ("GNS")
           !
@@ -1444,13 +1438,6 @@ module spectrum
       !
     endif
     !
-    if (do_read_whole_file.and.(histogram.or.hitran_do.or.spectra_do.or.super_Einstein_do)) then 
-      !
-      write(out,"('Input Error: READ-WHOLE_FILE currently does not work with HISTROGRAM,HITRAN,SPECTRA,Super-Einstein')") 
-      stop 'Input Error: READ-WHOLE_FILE currently does not work with HISTROGRAM,HITRAN,SPECTRA,Super-Einstein'
-      !
-    endif
-    !
   end subroutine ReadInput
   !
   subroutine intensity
@@ -1488,20 +1475,17 @@ module spectrum
    !
    character(len=9) :: npoints_fmt  !text variable containing formats for reads/writes
    character(len=9) :: b_fmt
-   integer(hik):: Nintens(-60:60),filesize,ipos,ipos_,N_to_RAM_,ipos0
+   integer(hik):: Nintens(-60:60)
    !   
    logical :: eof
    character(len=cl) :: w,print_fmt
    !
-   integer(ik) :: imol,iostat_,isotope,iunit,istat,ilen
+   integer(ik) :: imol,iostat_,isotope
    real(rk)    :: gf,gi,mem_t,temp_gamma_n,cutoff_
    character(55) ch_q,ch_broad
    character(len=cl)   :: my_fmt100K,my_fmt0
    real(real32) :: nan
    logical :: upper_state_selected,lower_state_selected
-   character(len=:),allocatable :: str
-   character(len=1) :: c
-   character(len=wl) :: line
    !
    !
    ln2=log(2.0_rk)
@@ -3005,74 +2989,12 @@ module spectrum
      if (verbose>=3) print('("  Processing ",a,"...")'), trim(intfilename(i))
      !
      filename = trim(intfilename(i))
+     ! a normal line by line read
+     open(unit=tunit,file=trim(intfilename(i)),action='read',status='old',iostat=iostat_)
      !
-     if ( do_read_whole_file ) then
-       !
-       call TimerStart('do_read_whole_file') 
-       !
-       ! a feature to read the whle file as a string 
-       !call read_file(intfilename(i),N_to_RAM,indexf_RAM,indexi_RAM,acoef_RAM,nlines)
-       !
-       open(newunit=iunit,file=filename,status='OLD',form='UNFORMATTED',access='STREAM',iostat=istat)
-       if (istat/=0) then
-           print*,"Error opening .trans file (istat is not 0, ",istat,")  ",filename
-           stop 'Error opening .trans file'
-       endif
-       !
-       !how many characters are in the file:
-       inquire(file=filename,size=filesize)
-       !
-       if (filesize>0) then
-           !
-           if (allocated(str)) then 
-              deallocate(str)
-              call ArrayStop('full-read')
-           endif
-           !
-           ! allocate the string             
-           allocate( character(len=filesize) :: str,stat=info )
-           call ArrayStart('full-read',info,1_ik,1_ik,filesize)
-           !
-           !read the file all at once:
-           read(iunit,pos=1,iostat=istat) str
-           !
-           if (istat==0) then
-               !make sure it was all read by trying to read more:
-               read(iunit,pos=filesize+1,iostat=istat) c
-               if (.not. IS_IOSTAT_END(istat)) &
-                   write(out,*) 'full-read: file was not completely read.'
-           else
-               write(*,*) 'full-read: Error reading file.'
-               stop 'full-read: Error reading file.'
-           end if
-           !
-           close(iunit, iostat=istat)
-           !
-       else
-           write(*,*) 'full-read: Error getting file size.'
-           stop 'full-read: Error getting file size.'
-       end if
-       !
-       ! read ASCII file as you already do
-       ! parse line by line with formatted READ
-       ! then write a binary file:
-       !open(newunit=ounit, file='data.bin', form='UNFORMATTED', access='STREAM')
-       !do i = 1, N_to_RAM_
-       !   write(ounit) indexf_RAM(i), indexi_RAM(i), acoef_RAM(i)
-       !end do
-       !close(ounit)       
-       !
-       call TimerStop('do_read_whole_file') 
-       !
-     else
-       ! a normal line by line read
-       open(unit=tunit,file=trim(intfilename(i)),action='read',status='old',iostat=iostat_)
-       !
-       if (iostat_/=0) then 
-         print*,"Error opening .trans file (istat is not 0, ",iostat_,")  ",trim(intfilename(i))
-         stop 'Error opening .trans file'
-       endif
-       !
+     if (iostat_/=0) then 
+       print*,"Error opening .trans file (istat is not 0, ",iostat_,")  ",trim(intfilename(i))
+       stop 'Error opening .trans file'
      endif
      !
      select case (proftype(1:5)) 
@@ -3088,9 +3010,6 @@ module spectrum
      end select
      !
      ichunk = 0
-     !
-     ipos =  1
-     ipos0 = 0
      !
      loop_tran: do
         !
@@ -3390,113 +3309,34 @@ module spectrum
            endif
            !
         else ! ExoMol format of the line-by-line trans-file
-          !
-          if (do_read_whole_file) then ! ExoMol format of the whole-read trans-file
+           !
+           ! line by line read
+           !
+           call TimerStart('read-normal-trans')
+           !
+           do iswap = 1,N_to_RAM
              !
-             call TimerStart('do_read_whole_file:array') 
+             read(tunit,*,end=121) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
              !
-             if (ichunk==1) then 
-                !
-                ! open it again to read and count charcaters in the 1st line 
-                !
-                open(newunit=iunit,file=filename,status='OLD',form='FORMATTED',iostat=istat)
-                !
-                if (istat/=0) then
-                  write(*,*) 'read_file: Error opening file.'
-                  stop 'read_file: Error opening file.'
-                endif
-                !
-                read(iunit,"(Q,A)") ilen,line
-                !
-                nchunk = ilen+1
-                !
-                Nlines = filesize/nchunk
-                !
-                N_to_RAM_ = min(Nlines,N_to_RAM)
-                !
-                close(iunit)
-                !
-             endif
+             cycle
              !
-             if (ipos0+nchunk*N_to_RAM_>filesize) then 
-               N_to_RAM_ = mod(Nlines,N_to_RAM)
-             endif
+           121 continue
              !
-             !$omp parallel do private(iswap,ipos,ipos_) shared(indexf_RAM,indexi_RAM,acoef_RAM) schedule(static)
-             do iswap = 1,N_to_RAM_
-                !
-                ipos  = ipos0+(iswap-1)*nchunk+1
-                ipos_ = ipos+nchunk-2
-                !
-                !read(str(ipos:ipos_),"(i12,1x,i12,1x,e10.4)") indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
-                !
-                read(str(ipos:ipos_),*) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
-                !
-             enddo
-             !$omp end parallel do
+             nswap_ = iswap-1
+             eof = .true.
+             exit
              !
-             ipos  = ipos0+(N_to_RAM_-1)*nchunk+1
-             ipos0 = ipos+nchunk-2+1
-             !
-             !do while(iswap<N_to_RAM.and.ipos+nchunk-1<=filesize)
-             !   !
-             !   iswap = iswap + 1
-             !   ipos_ = ipos+nchunk-2
-             !   !
-             !   read(str(ipos:ipos_),"(i12,1x,i12,1x,e11.4)") indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
-             !   ipos  = ipos  + nchunk
-             !   !
-             !enddo
-             !
-             if (ipos_+1>=filesize) then
-               !
-               nswap_ = iswap-1
-               eof = .true.
-               !
-             endif
-             !
-             call TimerStop('do_read_whole_file:array')
-             !
-             if (nswap_<1) then
-                !
-                if (verbose>=5) write(out,"('... Finish swap')")
-                !
-                exit loop_tran
-                !
-                stop 'Error nswap_=0'
-             endif
-             !
-           else
-             !
-             ! the normal line by line read
-             !
-             call TimerStart('read-normal-trans')
-             !
-             do iswap = 1,N_to_RAM
-               !
-               read(tunit,*,end=121) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
-               !
-               cycle
-               !
-             121 continue
-               !
-               nswap_ = iswap-1
-               eof = .true.
-               exit
-               !
-             enddo
-             !
-             call TimerStop('read-normal-trans')
-             !
-             if (nswap_<1) then
-                !
-                if (verbose>=5) write(out,"('... Finish swap')")
-                !
-                exit loop_tran
-                !
-                stop 'Error nswap_=0'
-             endif
-             !
+           enddo
+           !
+           call TimerStop('read-normal-trans')
+           !
+           if (nswap_<1) then
+              !
+              if (verbose>=5) write(out,"('... Finish swap')")
+              !
+              exit loop_tran
+              !
+              stop 'Error nswap_=0'
            endif
            !
            if (verbose>=5.and.nswap_<N_to_RAM.and.proftype(1:5)/="STICK") print('(a,i12,a)'), &
@@ -4484,9 +4324,9 @@ module spectrum
        if (energies(ilevelf)>99999.99999_rk) my_fmt0 = my_fmt100K
        !
        if ( mod(nint(2.0_rk*jrot(1)),2)==0 ) then 
-        write(tunit,my_fmt0,advance="no") level_IDs(ilevelf),energies(ilevelf),nint(gtot(ilevelf)),nint(jrot(ilevelf))
+         write(tunit,my_fmt0,advance="no") level_IDs(ilevelf),energies(ilevelf),nint(gtot(ilevelf)),nint(jrot(ilevelf))
        else
-        write(tunit,my_fmt0,advance="no") level_IDs(ilevelf),energies(ilevelf),nint(gtot(ilevelf)),jrot(ilevelf)
+         write(tunit,my_fmt0,advance="no") level_IDs(ilevelf),energies(ilevelf),nint(gtot(ilevelf)),jrot(ilevelf)
        endif
        !
        do kitem = 1,maxitems
@@ -4818,11 +4658,6 @@ module spectrum
       if (allocated(sigma2_ram)) then 
          deallocate(sigma2_ram)
          call ArrayStop('swap:sigma2_ram')
-      endif
-      !
-      if (allocated(str)) then 
-         deallocate(str)
-         call ArrayStop('full-read')
       endif
       !   
    end subroutine clean_up_memory_allocations
