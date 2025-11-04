@@ -3006,7 +3006,9 @@ module spectrum
      !
      filename = trim(intfilename(i))
      !
-     if ( do_read_whole_file ) then 
+     if ( do_read_whole_file ) then
+       !
+       call TimerStart('do_read_whole_file') 
        !
        ! a feature to read the whle file as a string 
        !call read_file(intfilename(i),N_to_RAM,indexf_RAM,indexi_RAM,acoef_RAM,nlines)
@@ -3022,7 +3024,12 @@ module spectrum
        !
        if (filesize>0) then
            !
-           ! allocate tge string             
+           if (allocated(str)) then 
+              deallocate(str)
+              call ArrayStop('full-read')
+           endif
+           !
+           ! allocate the string             
            allocate( character(len=filesize) :: str,stat=info )
            call ArrayStart('full-read',info,1_ik,1_ik,filesize)
            !
@@ -3045,6 +3052,8 @@ module spectrum
            write(*,*) 'full-read: Error getting file size.'
            stop 'full-read: Error getting file size.'
        end if
+       !
+       call TimerStop('do_read_whole_file') 
        !
      else
        ! a normal line by line read
@@ -3374,6 +3383,8 @@ module spectrum
           !
           if (do_read_whole_file) then ! ExoMol format of the whole-read trans-file
              !
+             call TimerStart('do_read_whole_file:array') 
+             !
              if (ichunk==1) then 
                 !
                 ! open it again to read and count charcaters in the 1st line 
@@ -3402,7 +3413,7 @@ module spectrum
                 iswap = iswap + 1
                 ipos_ = ipos+nchunk-2
                 !
-                read(str(ipos:ipos_),*) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
+                read(str(ipos:ipos_),"(i12,1x,i12,1x,e11.4)") indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
                 ipos  = ipos  + nchunk
                 !
              enddo
@@ -3413,6 +3424,8 @@ module spectrum
                eof = .true.
                !
              endif
+             !
+             call TimerStop('do_read_whole_file:array')
              !
              if (nswap_<1) then
                 !
@@ -3427,6 +3440,8 @@ module spectrum
              !
              ! the normal line by line read
              !
+             call TimerStart('read-normal-trans')
+             !
              do iswap = 1,N_to_RAM
                !
                read(tunit,*,end=121) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
@@ -3440,6 +3455,8 @@ module spectrum
                exit
                !
              enddo
+             !
+             call TimerStop('read-normal-trans')
              !
              if (nswap_<1) then
                 !
@@ -4771,6 +4788,11 @@ module spectrum
       if (allocated(sigma2_ram)) then 
          deallocate(sigma2_ram)
          call ArrayStop('swap:sigma2_ram')
+      endif
+      !
+      if (allocated(str)) then 
+         deallocate(str)
+         call ArrayStop('full-read')
       endif
       !   
    end subroutine clean_up_memory_allocations
