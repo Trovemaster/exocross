@@ -1488,7 +1488,7 @@ module spectrum
    !
    character(len=9) :: npoints_fmt  !text variable containing formats for reads/writes
    character(len=9) :: b_fmt
-   integer(hik):: Nintens(-60:60),filesize,ipos,ipos_
+   integer(hik):: Nintens(-60:60),filesize,ipos,ipos_,N_to_RAM_,ipos0
    !   
    logical :: eof
    character(len=cl) :: w,print_fmt
@@ -2110,7 +2110,7 @@ module spectrum
           !
           i = 0 
           !
-          do i = 1,nlevels
+          do i = 1,nrows
              !
              !call read_line(eof,enunit) ; if (eof) exit
              !
@@ -3053,6 +3053,15 @@ module spectrum
            stop 'full-read: Error getting file size.'
        end if
        !
+       ! read ASCII file as you already do
+       ! parse line by line with formatted READ
+       ! then write a binary file:
+       !open(newunit=ounit, file='data.bin', form='UNFORMATTED', access='STREAM')
+       !do i = 1, N_to_RAM_
+       !   write(ounit) indexf_RAM(i), indexi_RAM(i), acoef_RAM(i)
+       !end do
+       !close(ounit)       
+       !
        call TimerStop('do_read_whole_file') 
        !
      else
@@ -3081,6 +3090,7 @@ module spectrum
      ichunk = 0
      !
      ipos =  1
+     ipos0 = 0
      !
      loop_tran: do
         !
@@ -3402,21 +3412,41 @@ module spectrum
                 !
                 Nlines = filesize/nchunk
                 !
+                N_to_RAM_ = min(Nlines,N_to_RAM)
+                !
                 close(iunit)
                 !
              endif
              !
-             iswap = 0
+             if (ipos0+nchunk*N_to_RAM_>filesize) then 
+               N_to_RAM_ = mod(Nlines,N_to_RAM)
+             endif
              !
-             do while(iswap<N_to_RAM.and.ipos+nchunk-1<=filesize)
+             !$omp parallel do private(iswap,ipos,ipos_) shared(indexf_RAM,indexi_RAM,acoef_RAM) schedule(static)
+             do iswap = 1,N_to_RAM_
                 !
-                iswap = iswap + 1
+                ipos  = ipos0+(iswap-1)*nchunk+1
                 ipos_ = ipos+nchunk-2
                 !
-                read(str(ipos:ipos_),"(i12,1x,i12,1x,e11.4)") indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
-                ipos  = ipos  + nchunk
+                !read(str(ipos:ipos_),"(i12,1x,i12,1x,e10.4)") indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
+                !
+                read(str(ipos:ipos_),*) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
                 !
              enddo
+             !$omp end parallel do
+             !
+             ipos  = ipos0+(N_to_RAM_-1)*nchunk+1
+             ipos0 = ipos+nchunk-2+1
+             !
+             !do while(iswap<N_to_RAM.and.ipos+nchunk-1<=filesize)
+             !   !
+             !   iswap = iswap + 1
+             !   ipos_ = ipos+nchunk-2
+             !   !
+             !   read(str(ipos:ipos_),"(i12,1x,i12,1x,e11.4)") indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
+             !   ipos  = ipos  + nchunk
+             !   !
+             !enddo
              !
              if (ipos_+1>=filesize) then
                !
