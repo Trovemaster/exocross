@@ -3475,7 +3475,7 @@ module spectrum
            if (array_job_do) then
               !
               !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,&
-              !$omp& tranfreq,tranfreq0,abscoef,jf,ji,Ki,temp_gamma_n,&
+              !$omp& tranfreq,tranfreq0,abscoef,jf,ji,Ki,temp_gamma_n)&
               !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,gamma_ram)
               loop_swap_array : do iswap = 1,nswap_
                 !
@@ -3897,7 +3897,7 @@ module spectrum
                end if
                !
                !$omp do private(iomp,iswap,abscoef,tranfreq,halfwidth,hwhm_gauss,ileveli,energyi,itemp,temp0,beta0) &
-               !$omp&  shared(intens_omp) schedule(dynamic)
+               !$omp&  schedule(dynamic)
                do iomp = 1,N_omp_procs
                  !
                  do iswap = iomp,nswap,N_omp_procs
