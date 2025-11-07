@@ -16,9 +16,10 @@ module spectrum
   integer(hik),parameter  :: max_transitions_to_ram = 1000000000
   integer(ik) :: N_omp_procs=1
   !
-  integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,icutoff = 10,iso=1,imolecule =-1
+  integer(ik)   :: GNS=1,n_T_points=1001,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,icutoff = 10,iso=1,imolecule =-1
   real(rk)      :: temp=298.0,partfunc=-1.0,partfunc_ref=-1.0,freql=-small_,freqr= 200000.0,thresh=1.0d-70
-  real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, cutoff = 25.0, pressure = 1.0_rk,halfwidth=1e-2,meanmass=1.0,maxtemp=10000.0
+  real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, cutoff = 25.0, pressure = 1.0_rk,halfwidth=1e-2,meanmass=1.0,T_max=10000.0
+  real(rk)      :: T_min = 0.0d0
   real(rk)      :: lineshift=0,hwhm
   real(rk)      :: enermax = 1e7, abscoef_thresh = 1.0d-50, abundance = 1.0d0, gf_factor = 1.0d0
   real(rk)      :: S_crit = 1e-29      ! cm/molecule, HITRAN cut-off paramater
@@ -143,6 +144,7 @@ module spectrum
   logical :: completed_work = .true.
   logical :: all_done = .false.
   logical :: upper_filter_active = .false.,lower_filter_active = .false.
+  logical :: array_job_do = .false.,cross_sections_do = .false.
   !
   type(VoigtKampffCollection),save :: fast_voigt
   
@@ -266,7 +268,6 @@ module spectrum
              endif 
              !
           endif
-         
           !
         case ("RESOLVING","R")
           !
@@ -408,7 +409,6 @@ module spectrum
           !
         case ("PARTFUNC","PARTITION-FUNCTION","COOLING")
           !
-          !specttype = trim(w)
           proftype = trim(w)
           !
           call read_line(eof) ; if (eof) exit
@@ -417,16 +417,20 @@ module spectrum
           do while (trim(w)/="".and.trim(w)/="END")
             !
             select case(w)
-            !
+              !
             case('TEMPMAX','MAXTEMP','MAX-TEMPERATURE',"TMAX","TEMPERATURE-MAX")
               !
-              call readf(maxtemp)
+              call readf(T_max)
               !
-              if (maxtemp<small_) call report ("Illegal Max Temperature maxtem=0 "//trim(w),.true.)
+              if (T_max<small_) call report ("Illegal Max Temperature maxtem=0 "//trim(w),.true.)
+              !
+            case('TMIN')
+              !
+              call readf(T_min)
               !
             case ("NTEMPS","NPOINTS","NSTEPS","NUMBER-OF-TEMPERATURES","N")
               !
-              call readi(npoints)
+              call readi(n_T_points)
               !
             case ("MOMENT")
               !
@@ -449,8 +453,53 @@ module spectrum
           !
           if (trim(w)/="".and.trim(w)/="END") then
              !
-             write (out,"('input: wrong last line in PARTFUNC =',a)") trim(w)
+             write (out,"('input: wrong last line in PARTFUNC/COOLING =',a)") trim(w)
              stop 'input - illigal last line in PARTFUNC'
+             !
+          endif
+          !
+        case ("ARRAY")
+          !
+          array_job_do = .true.
+          !
+          call read_line(eof) ; if (eof) exit
+          call readu(w)
+          !
+          do while (trim(w)/="".and.trim(w)/="END")
+            !
+            select case(w)
+              !
+            case('TEMPMAX',"TMAX")
+              !
+              call readf(T_max)
+              !
+              if (T_max<small_) call report ("Illegal Max Temperature maxtem=0 "//trim(w),.true.)
+              !
+            case('TMIN')
+              !
+              call readf(T_min)
+              !
+            case ("N")
+              !
+              call readi(n_T_points)
+              !
+            case default
+              !
+              call report ("Unrecognized unit name "//trim(w),.true.)
+              !
+            end select
+            !
+            call read_line(eof) ; if (eof) exit
+            call readu(w)
+            !
+          enddo
+          !
+          if (T_min>=T_max) stop "Illegal Min>Max Temperature"
+          !
+          if (trim(w)/="".and.trim(w)/="END") then
+             !
+             write (out,"('input: wrong last line in ARRAY =',a)") trim(w)
+             stop 'input - illigal last line in ARRAY'
              !
           endif
           !
@@ -1247,6 +1296,31 @@ module spectrum
       !
     enddo
     !
+    ! limit array_job_do for the currently implemented case of Voigt and absorption 
+    !
+    if (array_job_do) then
+       if (trim(specttype)/='ABSORPTION'.or.trim(proftype)/='VOIGT' ) then
+         write (out,"('input: ARRAY can currently work only with VOIGT in ABSORPTION')")
+         stop 'input - illigal use of ARRAY: only VOIGT in ABSORPTION'
+       endif
+       !
+       if (filter) then 
+         write (out,"('input: ARRAY does currently work with FILTERs')")
+         stop 'input - illigal use of ARRAY with FILTERs'
+       endif
+       !
+       if (trim(pffilename)/='NONE') then 
+         write (out,"('input: ARRAY does currently work with pffile')")
+         stop 'input - illigal use of ARRAY with pffile'
+       endif
+       !
+    endif
+    !
+    ! these keywords indicate that we compute cross sectons:
+    if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE','COO','ELO'/)) ) then
+      cross_sections_do = .true.
+    endif
+    !
     ! If both upper and lower filters are active, the selection of the states is very limited and can be done in advance 
     !
     if (lower_filter_active.and.upper_filter_active) then  
@@ -1444,7 +1518,7 @@ module spectrum
    !
    use  input
    !
-   use, intrinsic :: ieee_arithmetic !, only: IEEE_Value, IEEE_QUIET_NAN
+   use, intrinsic :: ieee_arithmetic !only: IEEE_Value, IEEE_QUIET_NAN
    use, intrinsic :: iso_fortran_env, only: real32
    !
    !
@@ -1453,7 +1527,7 @@ module spectrum
    integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems,iline,intunit,inu,nrows
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air,beta_ref
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef,m0,k0,Ki
-   real(rk)    :: acoef_,int_cutoff,ndensity,abscoef_ref
+   real(rk)    :: acoef_,int_cutoff,ndensity,abscoef_ref,dpwcoef0
    integer(ik) :: Jmax,Jp,Jpp,Ncutoff,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin,gtot_,KmaxAll,Kmax,kpp
    real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc_i,unc_f,time_,hwhm_gauss,gtot_rk
    character(len=cl) :: ioname,intname
@@ -1465,10 +1539,12 @@ module spectrum
    character(len=20),allocatable :: quantum_numbers(:,:),quantum_numbers_vib(:,:)
    !
    real(rk),allocatable :: acoef_RAM(:),abscoef_ram(:),nu_ram(:),intens_omp(:,:),gamma_ram(:),sigma2_ram(:)
+   real(rk),allocatable :: intens_T_omp(:,:,:)
    integer(ik),allocatable :: indexi_RAM(:),indexf_RAM(:)
    integer(ik),allocatable :: ileveli_RAM(:),ilevelf_RAM(:),gamma_idx_RAM(:)
    integer(ik) :: nswap_,nswap,iswap,iswap_,iomp,ichunk
    real(rk),allocatable :: energies_vib(:),dens_vib(:),gamma_radiative(:),population(:)
+   real(rk),allocatable :: line_intensity(:),intensity_T(:,:),temperature_array(:)
    integer(ik),allocatable :: ivib_state(:),ivib_state_pf(:)
    !
    integer(ik),allocatable :: nchars_quanta(:)  ! max number of characters used for each quantum number
@@ -1480,10 +1556,11 @@ module spectrum
    logical :: eof
    character(len=cl) :: w,print_fmt
    !
-   integer(ik) :: imol,iostat_,isotope
+   integer(ik) :: imol,iostat_,isotope,alloc_p
    real(rk)    :: gf,gi,mem_t,temp_gamma_n,cutoff_
    character(55) ch_q,ch_broad
    character(len=cl)   :: my_fmt100K,my_fmt0
+   character(len=cl)   :: fmt_T_array
    real(real32) :: nan
    logical :: upper_state_selected,lower_state_selected
    !
@@ -1507,8 +1584,8 @@ module spectrum
    !
    !   half width for Doppler profiling
    !
-   dpwcoef=sqrt(2.0*ln2*boltz*avogno)/vellgt
-   dpwcoef = dpwcoef*sqrt(temp/meanmass)
+   dpwcoef0=sqrt(2.0*ln2*boltz*avogno)/vellgt/sqrt(meanmass)
+   dpwcoef = dpwcoef0*sqrt(temp)
    !
    ! switch to Watt per molecule per str 
    if (trim(units)=='WATT') emcoef = emcoef*1e-7
@@ -1799,9 +1876,9 @@ module spectrum
       gtot = 0
       !
       ! In case of specttype = partfunc the partition function will be computed for a series of temperatures.
-      ! npoints stands for the number of temperature steps, and the frequency limits as temperature limits
+      ! n_T_points stands for the number of temperature steps, and the frequency limits as temperature limits
       !
-      if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL') then
+      if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL'.or.array_job_do) then
         !
         if (trim(enrfilename)=="none") then
            !
@@ -1810,7 +1887,18 @@ module spectrum
            !
         endif
         !
-        dtemp=maxtemp/real(npoints,rk)
+        dtemp=(T_max-T_min)/real((n_T_points-1),rk)
+        !
+        allocate(temperature_array(n_T_points),stat=info)
+        call ArrayStart('temperature_array',info,size(temperature_array),kind(temperature_array))
+        !
+        do itemp = 1,n_T_points
+          !
+          temp0 = real(itemp-1,rk)*dtemp+T_min
+          !
+          temperature_array(itemp) = temp0
+          !
+        enddo
         !
         if (proftype(1:4)=='PART') then
           !
@@ -1824,6 +1912,8 @@ module spectrum
         !
         allocate(pf(0:3,npoints),stat=info)
         call ArrayStart('pf',info,size(pf),kind(pf))
+        !
+        pf = 0
         !
         if (proftype(1:4)=='COOL') then
           !
@@ -1845,9 +1935,8 @@ module spectrum
           !
         endif
         !
-        pf = 0
-        !
       endif
+      !
       j0 = 0
       i = 0
       iline = 0 
@@ -2162,11 +2251,11 @@ module spectrum
              !
              if (proftype(1:4)=='PART') then
                !
-               do itemp = 1,npoints
+               do itemp = 1,n_T_points
                  !
                  if (energy>enermax) cycle
                  !
-                 temp0 = real(itemp,rk)*dtemp
+                 temp0 = real(itemp,rk)*dtemp+T_min
                  !
                  beta0 = c2/temp0
                  !
@@ -2178,13 +2267,13 @@ module spectrum
                !
              endif
              !
-             if (proftype(1:4)=='COOL') then
+             if (proftype(1:4)=='COOL'.or.array_job_do) then
                !
-               do itemp = 1,npoints
+               do itemp = 1,n_T_points
                  !
                  if (energy>enermax) cycle
                  !
-                 temp0 = real(itemp,rk)*dtemp
+                 temp0 = temperature_array(itemp)
                  !
                  beta0 = c2/temp0
                  !
@@ -2219,7 +2308,7 @@ module spectrum
            open(unit=tunit,file=trim(output)//".cp",action='write',status='replace')
         endif
         !
-        do itemp = 1,npoints
+        do itemp = 1,n_T_points
           !
           temp0 = real(itemp,rk)*dtemp
           !
@@ -2235,18 +2324,18 @@ module spectrum
         !
         j0rk = real(j0-1)*0.5_rk
         !
-        if (verbose>=0) print('("!",f8.1,3(1x,'//npoints_fmt//'es20.8/))'),j0rk,pf(ipartf,1:npoints)
+        if (verbose>=0) print('("!",f8.1,3(1x,'//npoints_fmt//'es20.8/))'),j0rk,pf(ipartf,1:n_T_points)
         !
-        if (verbose>=0) print('("!0",8x,'//npoints_fmt//'es20.8)'),pf(0,1:npoints)
-        if (verbose>=0) print('("!1",8x,'//npoints_fmt//'es20.8)'),pf(1,1:npoints)
-        if (verbose>=0) print('("!2",8x,'//npoints_fmt//'es20.8)'),pf(2,1:npoints)
-        if (verbose>=0) print('("!3",8x,'//npoints_fmt//'es20.8)'),pf(3,1:npoints)
+        if (verbose>=0) print('("!0",8x,'//npoints_fmt//'es20.8)'),pf(0,1:n_T_points)
+        if (verbose>=0) print('("!1",8x,'//npoints_fmt//'es20.8)'),pf(1,1:n_T_points)
+        if (verbose>=0) print('("!2",8x,'//npoints_fmt//'es20.8)'),pf(2,1:n_T_points)
+        if (verbose>=0) print('("!3",8x,'//npoints_fmt//'es20.8)'),pf(3,1:n_T_points)
         !
         if (verbose>=3) print('(/a,1x,es16.8/)'),'! partition function value is',partfunc
         !
         if (verbose>=0) then
           print('(a)'),"Partition function"
-          do itemp = 1,npoints
+          do itemp = 1,n_T_points
             temp0 = real(itemp,rk)*dtemp
             print('(f12.2,1x,es20.8)'),temp0,pf(0,itemp)
           enddo
@@ -2257,7 +2346,7 @@ module spectrum
         !
         open(unit=tunit,file=trim(output)//".pf",action='write',status='replace')
         !
-        do itemp = 1,npoints
+        do itemp = 1,n_T_points
           !
           temp0 = real(itemp,rk)*dtemp
           !
@@ -2690,13 +2779,18 @@ module spectrum
    !
    gamma_idx = 1
    gamma_comb = -1
-   do i=0,JmaxAll
-     do j= max(0,i-2),min(JmaxAll,i+2)
-       do k=0,KmaxAll
-          gamma_comb(j,i-j,k) = get_Voigt_gamma_val(Nspecies,real(i,rk),real(j,rk),real(k,rk))
-       enddo
-     enddo
-   enddo
+   !
+   if (Nspecies<1) then
+      gamma_comb = halfwidth
+   else
+      do i=0,JmaxAll
+        do j= max(0,i-2),min(JmaxAll,i+2)
+          do k=0,KmaxAll
+             gamma_comb(j,i-j,k) = get_Voigt_gamma_val(Nspecies,real(i,rk),real(j,rk),real(k,rk))
+          enddo
+        enddo
+      enddo
+   endif
    !
    if(proftype(1:5) == 'VOI-F') then
      !    
@@ -2922,17 +3016,34 @@ module spectrum
      stop 'Undefined reference Temperature'
    endif
    !
-   if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE','COO','ELO'/)) ) then
-     allocate(intens_omp(npoints,N_omp_procs),stat=info)
-     intens_omp = 0
-     call ArrayStart('swap:intens_omp',info,1_ik,kind(intens_omp),size(intens_omp,kind=hik))
+   if (cross_sections_do) then 
+     if (array_job_do) then
+       !
+       ! In case of ARRAY cross sections are computed for a series of temperatures.
+       ! n_T_points stands for the number of temperature steps.
+       !
+       allocate(intensity_T(npoints,n_T_points),stat=info)
+       call ArrayStart('intensity_T',info,size(intensity_T),kind(intensity_T))
+       intensity_T = 0
+       !
+       allocate(intens_T_omp(npoints,n_T_points,N_omp_procs),stat=info)
+       call ArrayStart('intens_T_omp',info,1_ik,kind(intens_T_omp),size(intens_T_omp,kind=hik))
+       intens_T_omp = 0
+       !
+     else
+       !
+       allocate(intens_omp(npoints,N_omp_procs),stat=info)
+       intens_omp = 0
+       call ArrayStart('swap:intens_omp',info,1_ik,kind(intens_omp),size(intens_omp,kind=hik))
+     endif
+     !
    endif
    !
    ! estimate how many transitions we can out into RAM
    !
    if (N_to_RAM<0) then
      !
-     mem_t = real(6*rk+5*ik,rk)/1024_rk**3
+     mem_t = real(6*rk+5*ik,rk)*1024_rk**3
      !
      N_to_RAM = max(100,min( max_transitions_to_ram,int((memory_limit-memory_now)/mem_t,hik),hik))
      !
@@ -3361,285 +3472,346 @@ module spectrum
            ileveli_ram = -1
            abscoef_ram = 0
            !
-           !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,ifilter,&
-           !$omp& ivib,ener_vib,ener_rot,jf,ji,Ki,tranfreq,tranfreq0,cutoff,abscoef,ndensity,int_cutoff,abscoef_ref,&
-           !$omp& temp_gamma_n,unc_f,unc_i)&
-           !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,gamma_ram,sigma2_ram)
-           loop_swap : do iswap = 1,nswap_
-             !
-             indexf = indexf_RAM(iswap)
-             indexi = indexi_RAM(iswap)
-             acoef = acoef_RAM(iswap)
-             !
-             if (indexf>nlevels.or.indexi>nlevels) cycle loop_swap
-             !
-             ilevelf = indices(indexf)
-             ileveli = indices(indexi)
-             !
-             if (ilevelf==0.or.ileveli==0) then 
-                continue
-                cycle loop_swap
-             endif 
-             !
-             energyf = energies(ilevelf)
-             energyi = energies(ileveli)
-             !
-             tranfreq = energyf-energyi
-             !
-             if (interpolated) then 
-               !
-               tranfreq = energyf
-               energyf = tranfreq + energyi
-               !
-             endif
-             !
-             tranfreq = tranfreq + lineshift
-             !
-             tranfreq0 = tranfreq
-             !
-             if (microns) then
-               cutoff = cutoff/tranfreq**2
-               tranfreq0 = 10000.0_rk/(tranfreq+small_)
-             endif
-             !
-             if (energyf-energyi<-30e1) then
-               write(out,"('Error Ei>Ef+30: i,f,indi,indf,Aif,Ef,Ei = ',4i12,2x,3es16.8)") & 
-                    ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
-               stop 'wrong order of indices'
-               cycle loop_swap
-             elseif (energyf-energyi<small_) then
-               cycle loop_swap
-             endif
-             !
-             if (tranfreq0<freql.or.tranfreq0>freqr) cycle
-             !
-             if (filter) then
-               !
-               do ifilter = 1,Nfilters
-                 !
-                 if (upper(ifilter)%mask/=trim(quantum_numbers(upper(ifilter)%i,ilevelf)).and.&
-                     trim(upper(ifilter)%mask)/="") cycle loop_swap
-                 if (lower(ifilter)%mask/=trim(quantum_numbers(lower(ifilter)%i,ileveli)).and.&
-                     trim(lower(ifilter)%mask)/="") cycle loop_swap
-                 !
-               enddo
-               !
-               ! filter based on the uncertainty 
-               !if (uncertainty_filter_do) then
-               !   !
-               !   ! reconstruct the uncertainty from 
-               !   read(quantum_numbers(QN%unc_col-4,ilevelf),*) unc_f
-               !   read(quantum_numbers(QN%unc_col-4,ileveli),*) unc_i
-               !   !
-               !   if (unc_f>unc_threshold.or.unc_i>unc_threshold) cycle loop_swap
-               !   !
-               !endif
-               !
-             endif
-             !
-             if (vibtemperature_do) then
+           if (array_job_do) then
+              !
+              !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,&
+              !$omp& tranfreq,tranfreq0,abscoef,jf,ji,Ki,temp_gamma_n,&
+              !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,gamma_ram)
+              loop_swap_array : do iswap = 1,nswap_
                 !
-                !if (trim(specttype)=='ABSORPTION') then 
-                  ivib = ivib_state(ileveli)
-                  ener_vib = energies_vib(ivib)
-                  !
-                  ! let's assume that negative rotational energies can be made positive without breaking the physics
-                  ener_rot = abs(energyi-ener_vib)
-                  !
-                !else
-                !  ivib = ivib_state(ilevelf)
-                !  ener_vib = energies_vib(ivib)
-                !  ener_rot = abs(energyf-ener_vib)
-                !  !
-                !endif
+                indexf = indexf_RAM(iswap)
+                indexi = indexi_RAM(iswap)
+                acoef = acoef_RAM(iswap)
                 !
-                if(vibpopulation_do) then
-                  ndensity = dens_vib(ivib)
+                if (indexf>nlevels.or.indexi>nlevels) cycle loop_swap_array
+                !
+                ilevelf = indices(indexf)
+                ileveli = indices(indexi)
+                !
+                if (ilevelf==0.or.ileveli==0) then 
+                   continue
+                   cycle loop_swap_array
+                endif 
+                !
+                energyf = energies(ilevelf)
+                energyi = energies(ileveli)
+                !
+                tranfreq = energyf-energyi
+                !
+                tranfreq = tranfreq + lineshift
+                !
+                tranfreq0 = tranfreq
+                !
+                if (energyf-energyi<-30e1) then
+                  write(out,"('Error Ei>Ef+30: i,f,indi,indf,Aif,Ef,Ei = ',4i12,2x,3es16.8)") & 
+                       ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
+                  stop 'wrong order of indices'
+                  cycle loop_swap_array
+                elseif (energyf-energyi<small_) then
+                  cycle loop_swap_array
                 endif
                 !
-             endif
-             !
-             select case (trim(specttype))
-               !
-             case ('ABSORPTION')
-               !
-               !abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
-               !
-               if (.not.nonLTE_do) then
+                if (tranfreq0<freql.or.tranfreq0>freqr) cycle
+                !
+                abscoef=cmcoef*acoef*gtot(ilevelf)/tranfreq**2
+                !
+                ilevelf_ram(iswap) = ilevelf
+                ileveli_ram(iswap) = ileveli
+                abscoef_ram(iswap) = abscoef
+                acoef_ram(iswap)   = acoef
+                !
+                nu_ram(iswap) = tranfreq
+                !
+                if (lineprofile_do) then
+                   !
+                   jf = jrot(ilevelf)
+                   ji = jrot(ileveli)
+                   Ki = krot(ilevelf)
+                   !
+                   !gamma_ram(iswap) = halfwidth
+                   !
+                   gamma_ram(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji,Ki)
+                   temp_gamma_n = get_Voigt_gamma_n(Nspecies,Jf,Ji,Ki,gamma_idx_RAM(iswap))
+                   !
+                   ! for predissociative case we redefine collisional gamma by a radiative gamma if the latter is larger
+                   !
+                   if (predissociation_do) then 
+                     !
+                     gamma_ram(iswap) = max(gamma_radiative(ilevelf),gamma_ram(iswap))
+                     !
+                   endif
+                   !
+                endif
+                !
+              enddo loop_swap_array
+              !$omp end parallel do
+              !
+           else
+              ! A single tempeture job 
+              !
+              !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,ifilter,&
+              !$omp& ivib,ener_vib,ener_rot,jf,ji,Ki,tranfreq,tranfreq0,cutoff,abscoef,ndensity,int_cutoff,abscoef_ref,&
+              !$omp& temp_gamma_n,unc_f,unc_i)&
+              !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,gamma_ram,sigma2_ram)
+              loop_swap : do iswap = 1,nswap_
+                !
+                indexf = indexf_RAM(iswap)
+                indexi = indexi_RAM(iswap)
+                acoef = acoef_RAM(iswap)
+                !
+                if (indexf>nlevels.or.indexi>nlevels) cycle loop_swap
+                !
+                ilevelf = indices(indexf)
+                ileveli = indices(indexi)
+                !
+                if (ilevelf==0.or.ileveli==0) then 
+                   continue
+                   cycle loop_swap
+                endif 
+                !
+                energyf = energies(ilevelf)
+                energyi = energies(ileveli)
+                !
+                tranfreq = energyf-energyi
+                !
+                if (interpolated) then 
+                  !
+                  tranfreq = energyf
+                  energyf = tranfreq + energyi
+                  !
+                endif
+                !
+                tranfreq = tranfreq + lineshift
+                !
+                tranfreq0 = tranfreq
+                !
+                if (microns) then
+                  cutoff = cutoff/tranfreq**2
+                  tranfreq0 = 10000.0_rk/(tranfreq+small_)
+                endif
+                !
+                if (energyf-energyi<-30e1) then
+                  write(out,"('Error Ei>Ef+30: i,f,indi,indf,Aif,Ef,Ei = ',4i12,2x,3es16.8)") & 
+                       ilevelf,ileveli,indexf,indexi,acoef,energyf,energyi
+                  stop 'wrong order of indices'
+                  cycle loop_swap
+                elseif (energyf-energyi<small_) then
+                  cycle loop_swap
+                endif
+                !
+                if (tranfreq0<freql.or.tranfreq0>freqr) cycle
+                !
+                if (filter) then
+                  !
+                  do ifilter = 1,Nfilters
+                    !
+                    if (upper(ifilter)%mask/=trim(quantum_numbers(upper(ifilter)%i,ilevelf)).and.&
+                        trim(upper(ifilter)%mask)/="") cycle loop_swap
+                    if (lower(ifilter)%mask/=trim(quantum_numbers(lower(ifilter)%i,ileveli)).and.&
+                        trim(lower(ifilter)%mask)/="") cycle loop_swap
+                    !
+                  enddo
+                  !
+                endif
+                !
+                if (vibtemperature_do) then
+                   !
+                   ivib = ivib_state(ileveli)
+                   ener_vib = energies_vib(ivib)
+                   !
+                   ! let's assume that negative rotational energies can be made positive without breaking the physics
+                   ener_rot = abs(energyi-ener_vib)
+                   !
+                   !
+                   if(vibpopulation_do) then
+                     ndensity = dens_vib(ivib)
+                   endif
+                   !
+                endif
+                !
+                select case (trim(specttype))
+                  !
+                case ('ABSORPTION')
+                  !
+                  !abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+                  !
+                  if (.not.nonLTE_do) then
+                     !
+                     abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+                     !
+                  elseif (vibpopulation_do) then
+                     ! apply vibrational population
+                     !read(quantum_numbers(QN%dens_col-4,ileveli),*) ndensity
+                     !
+                     abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*ndensity*&
+                             (1.0_rk-exp(-c2/temp*tranfreq))/(tranfreq**2*partfunc)
+                     !
+                     ! split into a product of vib and rot parts
+                     !
+                  elseif (population_do) then 
+                     !
+                     abscoef=cmcoef*acoef*gtot(ilevelf)/( gtot(ileveli)*tranfreq**2 )*population(ileveli)
+                     !
+                     ! add /g(i)
+                     !
+                  elseif (vibtemperature_do) then
+                     !
+                     abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)*&
+                             (1.0_rk-exp(-c2/temp_vib*tranfreq))/(tranfreq**2*partfunc)
+                  endif 
+                  !
+                case ('EMISSION')
+                  !
+                  ! emission coefficient [Ergs/mol/Sr]
+                  !
+                  if (.not.nonLTE_do) then
+                     abscoef=emcoef*acoef*gtot(ilevelf)*exp(-beta*energyf)*tranfreq/(partfunc)
+          
+                  elseif(vibpopulation_do) then
+                     ! apply vibrational population
+                     !read(quantum_numbers(QN%dens_col-4,ilevelf),*) ndensity
+                     !
+                     abscoef=emcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*ndensity*&
+                             tranfreq/(partfunc)
+                     !
+                  elseif (population_do) then 
+                     !
+                     abscoef=emcoef*acoef*tranfreq*population(ilevelf)
+                     !
+                  elseif (vibtemperature_do) then
+                     ! split into a product of vib and rot parts 
+                     abscoef=emcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*&
+                             exp(-c2/temp_vib*ener_vib)*tranfreq/(partfunc)
+          
+                     !
+                  endif 
+                  !
+                case ('GF')
+                  !
+                  ! oscillator strength gf; abscoef is to check agains the intensity thresholds 
                   !
                   abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
+                  acoef=gfcoef*acoef*gtot(ilevelf)/(vellgt*tranfreq)**2
                   !
-               elseif (vibpopulation_do) then
-                  ! apply vibrational population
-                  !read(quantum_numbers(QN%dens_col-4,ileveli),*) ndensity
+                case ('LIFETIME','T-LIFETIME','COOLING')
                   !
-                  abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*ndensity*&
-                          (1.0_rk-exp(-c2/temp*tranfreq))/(tranfreq**2*partfunc)
+                  ilevelf_ram(iswap) = ilevelf
+                  ileveli_ram(iswap) = ileveli
+                  abscoef_ram(iswap) = 0
+                  acoef_ram(iswap) = acoef
                   !
-                  ! split into a product of vib and rot parts
+                  nu_ram(iswap) = tranfreq
                   !
-               elseif (population_do) then 
-                  !
-                  abscoef=cmcoef*acoef*gtot(ilevelf)/( gtot(ileveli)*tranfreq**2 )*population(ileveli)
-                  !
-                  ! add /g(i)
-                  !
-               elseif (vibtemperature_do) then
-                  !
-                  abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*exp(-c2/temp_vib*ener_vib)*&
-                          (1.0_rk-exp(-c2/temp_vib*tranfreq))/(tranfreq**2*partfunc)
-               endif 
-               !
-             case ('EMISSION')
-               !
-               ! emission coefficient [Ergs/mol/Sr]
-               !
-               if (.not.nonLTE_do) then
-                  abscoef=emcoef*acoef*gtot(ilevelf)*exp(-beta*energyf)*tranfreq/(partfunc)
-
-               elseif(vibpopulation_do) then
-                  ! apply vibrational population
-                  !read(quantum_numbers(QN%dens_col-4,ilevelf),*) ndensity
-                  !
-                  abscoef=emcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*ndensity*&
-                          tranfreq/(partfunc)
-                  !
-               elseif (population_do) then 
-                  !
-                  abscoef=emcoef*acoef*tranfreq*population(ilevelf)
-                  !
-               elseif (vibtemperature_do) then
-                  ! split into a product of vib and rot parts 
-                  abscoef=emcoef*acoef*gtot(ilevelf)*exp(-c2/temp*ener_rot)*&
-                          exp(-c2/temp_vib*ener_vib)*tranfreq/(partfunc)
-
-                  !
-               endif 
-               !
-             case ('GF')
-               !
-               ! oscillator strength gf; abscoef is to check agains the intensity thresholds 
-               !
-               abscoef=cmcoef*acoef*gtot(ilevelf)*exp(-beta*energyi)*(1.0_rk-exp(-beta*tranfreq))/(tranfreq**2*partfunc)
-               acoef=gfcoef*acoef*gtot(ilevelf)/(vellgt*tranfreq)**2
-               !
-             case ('LIFETIME','T-LIFETIME','COOLING')
-               !
-               ilevelf_ram(iswap) = ilevelf
-               ileveli_ram(iswap) = ileveli
-               abscoef_ram(iswap) = 0
-               acoef_ram(iswap) = acoef
-               !
-               nu_ram(iswap) = tranfreq
-               !
-               cycle loop_swap
-               !
-             end select
-             !
-             !if (abscoef<abscoef_thresh) cycle loop_swap
-             !
-             int_cutoff = thresh
-             !
-             select case (trim(cutoff_intensity_model))
-                !
-             case ("NONE")
-                !
-                if (abscoef<int_cutoff) then
                   cycle loop_swap
+                  !
+                end select
+                !
+                !if (abscoef<abscoef_thresh) cycle loop_swap
+                !
+                int_cutoff = thresh
+                !
+                select case (trim(cutoff_intensity_model))
+                   !
+                case ("NONE")
+                   !
+                   if (abscoef<int_cutoff) then
+                     cycle loop_swap
+                   endif
+                   !
+                case ("EXP","GRID")
+                   !
+                   abscoef_ref =cmcoef*acoef*gtot(ilevelf)*exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))/&
+                                (tranfreq**2*partfunc_ref)
+                   !
+                   abscoef = max(abscoef,abscoef_ref)
+                   !
+                case ("EXP-WEAK")
+                   !
+                   abscoef_ref =cmcoef*acoef*gtot(ilevelf)*exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))/&
+                                (tranfreq**2*partfunc_ref)
+                   !
+                   int_cutoff = S_crit*exp(-tranfreq/nu_crit)
+                   !
+                   if ((abscoef>=int_cutoff.or.abscoef_ref>=int_cutoff).or.energyi<=Int_Cutoffs%enercut) then
+                     cycle loop_swap
+                   endif
+                   !
+                case ("EXP-STRONG")
+                   !
+                   abscoef_ref =cmcoef*acoef*gtot(ilevelf)*exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))/&
+                                (tranfreq**2*partfunc_ref)
+                   !
+                   int_cutoff = S_crit*exp(-tranfreq/nu_crit)
+                   !
+                   if ((abscoef<int_cutoff.and.abscoef_ref<int_cutoff).and.energyi>Int_Cutoffs%enercut) then
+                     cycle loop_swap
+                   endif
+                   !
+                case ("HITRAN") 
+                   !
+                   if (tranfreq<=nu_crit) then
+                     int_cutoff = S_crit*tranfreq/nu_crit*tanh(0.5_rk*c2/temp*tranfreq)
+                   else
+                     int_cutoff = S_crit
+                   endif
+                   !
+                   if (abscoef<int_cutoff) then
+                     cycle loop_swap
+                   endif
+                   !
+                end select
+                !
+                ilevelf_ram(iswap) = ilevelf
+                ileveli_ram(iswap) = ileveli
+                abscoef_ram(iswap) = abscoef
+                acoef_ram(iswap) = acoef
+                !
+                nu_ram(iswap) = tranfreq
+                !
+                if (lineprofile_do) then
+                   !
+                   jf = jrot(ilevelf)
+                   ji = jrot(ileveli)
+                   Ki = krot(ilevelf)
+                   !
+                   !gamma_ram(iswap) = halfwidth
+                   !
+                   gamma_ram(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji,Ki)
+                   temp_gamma_n = get_Voigt_gamma_n(Nspecies,Jf,Ji,Ki,gamma_idx_RAM(iswap))
+                   !
+                   ! for predissociative case we redefine collisional gamma by a radiative gamma if the latter is larger
+                   !
+                   if (predissociation_do) then 
+                     !
+                     gamma_ram(iswap) = max(gamma_radiative(ilevelf),gamma_ram(iswap))
+                     !
+                   endif
+                   !
+                   if (error_broadening_do) then 
+                     !
+                     read(quantum_numbers(QN%unc_col-4,ilevelf),*) unc_f
+                     read(quantum_numbers(QN%unc_col-4,ileveli),*) unc_i
+                     !
+                     ! this is now sigma-squared-squared but will be converted to sigma after combining with Doppler gamma
+                     sigma2_ram(iswap) = unc_f**2+unc_i**2
+                     !
+                   endif
+                   !
+                   if (error_cross_sections_do) then 
+                     !
+                     read(quantum_numbers(QN%unc_col-4,ilevelf),*) unc_f
+                     read(quantum_numbers(QN%unc_col-4,ileveli),*) unc_i
+                     !
+                     abscoef_ram(iswap) = abscoef**2*(unc_f**2+unc_i**2)
+                     !
+                   endif
+                   !
                 endif
                 !
-             case ("EXP","GRID")
-                !
-                abscoef_ref =cmcoef*acoef*gtot(ilevelf)*exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))/&
-                             (tranfreq**2*partfunc_ref)
-                !
-                abscoef = max(abscoef,abscoef_ref)
-                !
-             case ("EXP-WEAK")
-                !
-                abscoef_ref =cmcoef*acoef*gtot(ilevelf)*exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))/&
-                             (tranfreq**2*partfunc_ref)
-                !
-                int_cutoff = S_crit*exp(-tranfreq/nu_crit)
-                !
-                if ((abscoef>=int_cutoff.or.abscoef_ref>=int_cutoff).or.energyi<=Int_Cutoffs%enercut) then
-                  cycle loop_swap
-                endif
-                !
-             case ("EXP-STRONG")
-                !
-                abscoef_ref =cmcoef*acoef*gtot(ilevelf)*exp(-beta_ref*energyi)*(1.0_rk-exp(-beta_ref*tranfreq))/&
-                             (tranfreq**2*partfunc_ref)
-                !
-                int_cutoff = S_crit*exp(-tranfreq/nu_crit)
-                !
-                if ((abscoef<int_cutoff.and.abscoef_ref<int_cutoff).and.energyi>Int_Cutoffs%enercut) then
-                  cycle loop_swap
-                endif
-                !
-             case ("HITRAN") 
-                !
-                if (tranfreq<=nu_crit) then
-                  int_cutoff = S_crit*tranfreq/nu_crit*tanh(0.5_rk*c2/temp*tranfreq)
-                else
-                  int_cutoff = S_crit
-                endif
-                !
-                if (abscoef<int_cutoff) then
-                  cycle loop_swap
-                endif
-                !
-             end select
-             !
-             ilevelf_ram(iswap) = ilevelf
-             ileveli_ram(iswap) = ileveli
-             abscoef_ram(iswap) = abscoef
-             acoef_ram(iswap) = acoef
-             !
-             nu_ram(iswap) = tranfreq
-             !
-             if (lineprofile_do) then
-                !
-                jf = jrot(ilevelf)
-                ji = jrot(ileveli)
-                Ki = krot(ilevelf)
-                !
-                !gamma_ram(iswap) = halfwidth
-                !
-                gamma_ram(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji,Ki)
-                temp_gamma_n = get_Voigt_gamma_n(Nspecies,Jf,Ji,Ki,gamma_idx_RAM(iswap))
-                !
-                ! for predissociative case we redefine collisional gamma by a radiative gamma if the latter is larger
-                !
-                if (predissociation_do) then 
-                  !
-                  gamma_ram(iswap) = max(gamma_radiative(ilevelf),gamma_ram(iswap))
-                  !
-                endif
-                !
-                if (error_broadening_do) then 
-                  !
-                  read(quantum_numbers(QN%unc_col-4,ilevelf),*) unc_f
-                  read(quantum_numbers(QN%unc_col-4,ileveli),*) unc_i
-                  !
-                  ! this is now sigma-squared-squared but will be converted to sigma after combining with Doppler gamma
-                  sigma2_ram(iswap) = unc_f**2+unc_i**2
-                  !
-                endif
-                !
-                if (error_cross_sections_do) then 
-                  !
-                  read(quantum_numbers(QN%unc_col-4,ilevelf),*) unc_f
-                  read(quantum_numbers(QN%unc_col-4,ileveli),*) unc_i
-                  !
-                  abscoef_ram(iswap) = abscoef**2*(unc_f**2+unc_i**2)
-                  !
-                endif
-                !
-             endif
-             !
-           enddo loop_swap
-           !$omp end parallel do
+              enddo loop_swap
+              !$omp end parallel do
+              !
+           endif
            !
            iswap_ = 1
            !
@@ -3714,22 +3886,72 @@ module spectrum
             !
         case ('VOIGT')
             !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth,hwhm_gauss) shared(intens_omp) schedule(dynamic)
-            do iomp = 1,N_omp_procs
-              !
-              do iswap = iomp,nswap,N_omp_procs
-                !
-                abscoef = abscoef_ram(iswap)
-                tranfreq = nu_ram(iswap)
-                halfwidth = gamma_ram(iswap)
-                hwhm_gauss=dpwcoef*tranfreq
-                !
-                call do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth,hwhm_gauss,cutoff,freql,intens_omp(:,iomp))
-                !
-              enddo
-              !
-            enddo
-            !$omp end parallel do            
+            if (array_job_do) then 
+               !
+               !$omp parallel private(line_intensity,alloc_p) shared(intens_T_omp)
+               !
+               allocate(line_intensity(n_T_points),stat=alloc_p)
+               if (alloc_p/=0) then
+                   write (out,"(' VOIGT array: ',i9,' trying to allocate line_intensity')") alloc_p
+                   stop 'line_intensity - out of memory'
+               end if
+               !
+               !$omp do private(iomp,iswap,abscoef,tranfreq,halfwidth,hwhm_gauss,ileveli,energyi,itemp,temp0,beta0) &
+               !$omp&  shared(intens_omp) schedule(dynamic)
+               do iomp = 1,N_omp_procs
+                 !
+                 do iswap = iomp,nswap,N_omp_procs
+                   !
+                   abscoef = abscoef_ram(iswap)
+                   tranfreq = nu_ram(iswap)
+                   halfwidth = gamma_ram(iswap)
+                   hwhm_gauss=dpwcoef0*tranfreq
+                   ileveli = ileveli_ram(iswap)
+                   energyi = energies(ileveli)
+                   !
+                   do itemp = 1,n_T_points
+                     !
+                     temp0 = temperature_array(itemp)
+                     !
+                     beta0 = c2/temp0
+                     !
+                     line_intensity(itemp) = abscoef*exp(-beta0*energyi)*(1.0_rk-exp(-beta0*tranfreq))/pf(0,itemp)
+                     !
+                   enddo
+                   !
+                   if (all(line_intensity(:)<abscoef_thresh)) cycle
+                   !
+                   call do_Voigt_array(npoints,n_T_points,tranfreq,freq,halfwidth,hwhm_gauss,&
+                        temperature_array,cutoff,freql,line_intensity,intens_T_omp(:,:,iomp))
+                   !
+                 enddo
+                 !
+               enddo
+               !$omp enddo
+               !
+               deallocate(line_intensity)    
+               !$omp end parallel
+               !
+            else
+               !
+               !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth,hwhm_gauss) shared(intens_omp) schedule(dynamic)
+               do iomp = 1,N_omp_procs
+                 !
+                 do iswap = iomp,nswap,N_omp_procs
+                   !
+                   abscoef = abscoef_ram(iswap)
+                   tranfreq = nu_ram(iswap)
+                   halfwidth = gamma_ram(iswap)
+                   hwhm_gauss=dpwcoef*tranfreq
+                   !
+                   call do_Voigt(tranfreq,abscoef,freq,halfwidth,hwhm_gauss,cutoff,freql,intens_omp(:,iomp))
+                   !
+                 enddo
+                 !
+               enddo
+               !$omp end parallel do
+               !
+            endif
             !
         case ('VOI-U')
             !
@@ -3746,7 +3968,7 @@ module spectrum
                 !
                 hwhm_gauss = sqrt( sigma2_ram(iswap)*2.0_rk*log(2.0_rk)+(dpwcoef*tranfreq)**2 )
                 !
-                call do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth,hwhm_gauss,cutoff,freql,intens_omp(:,iomp))
+                call do_Voigt(tranfreq,abscoef,freq,halfwidth,hwhm_gauss,cutoff,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -4235,9 +4457,17 @@ module spectrum
    !
    if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','PSE','COO'/)) ) then
      !
-     do i=1,N_omp_procs
-      intens(:) = intens(:) + intens_omp(:,i)
-     enddo
+     if (array_job_do) then 
+        !
+        do i=1,N_omp_procs
+           intensity_T(:,:) = intensity_T(:,:) + intens_T_omp(:,:,i)
+        enddo
+        !
+     else
+        do i=1,N_omp_procs
+         intens(:) = intens(:) + intens_omp(:,i)
+        enddo
+     endif
      !
    elseif (any( trim(proftype(1:3))==(/'ELO'/)) ) then
      !
@@ -4397,7 +4627,7 @@ module spectrum
      !
      !intens = intens*emcoef
      !
-     do itemp = 1,npoints
+     do itemp = 1,n_T_points
        !
        temp0 = real(itemp,rk)*dtemp
        !
@@ -4407,7 +4637,7 @@ module spectrum
      !
      close(tunit,status='keep')
      !
-   elseif (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE','ELO'/)) ) then
+   elseif (cross_sections_do) then
      !
      write(ioname, '(a)') 'Cross sections or intensities'
      call IOstart(trim(ioname),tunit)
@@ -4438,14 +4668,41 @@ module spectrum
        !
      else
        !
-       write(tunit,'(2(1x,es16.8E3))') (freq(ipoint),intens(ipoint),ipoint=1,npoints)
+       ! Intensity_T output
+       if (array_job_do) then
+         !
+         write(fmt_T_array,'(a,i0,a)')  '((1x,es16.8E3),1x,',n_T_points,'(1x,es16.8E3))'
+         !
+         do i=1,npoints
+            !write(tunit,'(2(1x,es16.8E3))') freq(i),intensity_T(i,1)
+            write(tunit,fmt_T_array) freq(i),intensity_T(i,1:n_T_points)
+         enddo
+         !
+       else 
+         !
+         write(tunit,'(2(1x,es16.8E3))') (freq(ipoint),intens(ipoint),ipoint=1,npoints)
+         !
+       endif 
        !
      endif
      !
      ! no need to scale with dfreq for bin or max
      if (any( trim(proftype(1:3))==(/'BIN','MAX'/)) ) dfreq = 1.0d0
      !
-     if (verbose>=2) print('(/"Total intensity  (sum):",es16.8," (int):",es16.8)'), intband,sum(intens)*dfreq
+     if (verbose>=2) then 
+       if (array_job_do) then
+         write(fmt_T_array,'(a,i0,a)') '(',n_T_points,'(1x,f16.3))'
+         write(out,'(/"Total intensities (T in K):")')
+         write(out,fmt_T_array) temperature_array(1:n_T_points)
+         write(fmt_T_array,'(a,i0,a)') '(',n_T_points,'(1x,es16.8E3))'
+         do ipoint_=1,n_T_points
+           temperature_array(ipoint_) = sum(intensity_T(:,ipoint_))*dfreq
+         enddo
+         write(out,fmt_T_array) temperature_array(1:n_T_points)
+       else
+         print('(/"Total intensity  (sum):",es16.8," (int):",es16.8)'), intband,sum(intens)*dfreq
+       endif
+     endif
      !
      close(tunit,status='keep')
      !
@@ -4658,6 +4915,26 @@ module spectrum
       if (allocated(sigma2_ram)) then 
          deallocate(sigma2_ram)
          call ArrayStop('swap:sigma2_ram')
+      endif
+      !
+      if (allocated(intens_omp)) then 
+         deallocate(intens_omp)
+         call ArrayStop('swap:intens_omp')
+      endif
+      !
+      if (allocated(intens_T_omp)) then 
+         deallocate(intens_T_omp)
+         call ArrayStop('intens_T_omp')
+      endif
+      !
+      if (allocated(intensity_T)) then 
+         deallocate(intensity_T)
+         call ArrayStop('intensity_T')
+      endif
+      !
+      if (allocated(temperature_array)) then 
+         deallocate(temperature_array)
+         call ArrayStop('temperature_array')
       endif
       !   
    end subroutine clean_up_memory_allocations
@@ -5315,7 +5592,7 @@ module spectrum
      !
   end subroutine  do_Voi_Q
   !
-  subroutine  do_Voigt(tranfreq,abscoef,use_resolving_power,freq,halfwidth_Lorentz,halfwidth_doppler,cutoff,freql,intens)
+  subroutine  do_Voigt(tranfreq,abscoef,freq,halfwidth_Lorentz,halfwidth_doppler,cutoff,freql,intens)
      !
      implicit none
      !
@@ -5324,7 +5601,6 @@ module spectrum
      real(rk),intent(inout) :: intens(:)
      real(rk) :: tranfreq_i,cutoff_
      integer(ik) :: ib,ie,ipoint
-     logical, intent(in) :: use_resolving_power
       !
       !halfwidth_doppler=dpwcoef*tranfreq
       !
@@ -5334,20 +5610,6 @@ module spectrum
       call get_ipoint_ranges(tranfreq,freq,cutoff_,ib,ie)
       !
       if (halfwidth_doppler<100.0_rk*small_) return
-      !
-      !if (use_resolving_power) then
-      !   d_ln_freq = log(freq(2)) - log(freq(1))
-      !   ib = nint((log(tranfreq - cutoff) - log(freql))/d_ln_freq) + 1
-      !   ib = max(ib, 1)
-      !   
-      !   ie = nint((log(tranfreq + cutoff) - log(freql))/d_ln_freq) + 1
-      !   ie = min(ie, npoints)
-      !else
-      !   d_freq = freq(2) - freq(1)
-      !   ib =  max(nint( ( tranfreq-cutoff-freql)/d_freq )+1,1)
-      !   ie =  min(nint( ( tranfreq+cutoff-freql)/d_freq )+1,npoints)
-      !   !
-      !endif
       !
       if (ie<=ib) return
       !
@@ -5364,6 +5626,49 @@ module spectrum
       !
   end subroutine  do_Voigt
   !
+  subroutine do_Voigt_array(npoints,n_T_points,tranfreq,freq,&
+                            halfwidth_Lorentz,halfwidth_gauss,temperature_array,cutoff,freql,line_intensity,intensity)
+     !
+     implicit none
+     !
+     integer(ik),intent(in) :: n_T_points,npoints
+     
+     real(rk),intent(in) :: tranfreq,halfwidth_Lorentz,halfwidth_gauss,cutoff,freql
+     real(rk),intent(in) :: freq(npoints),line_intensity(n_T_points),temperature_array(n_T_points)
+     real(rk),intent(inout) :: intensity(npoints,n_T_points)
+     real(rk) :: tranfreq_i,cutoff_,voigt,halfwidth_doppler,T
+     integer(ik) :: ib,ie,ipoint,itemp
+      !
+      cutoff_ = cutoff
+      if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth_Lorentz
+      !
+      call get_ipoint_ranges(tranfreq,freq,cutoff_,ib,ie)
+      !
+      do itemp = 1,n_T_points
+        !
+        T  = temperature_array(itemp)
+        !
+        halfwidth_doppler=halfwidth_gauss*sqrt(T)
+        !
+        if (halfwidth_doppler<100.0_rk*small_) return
+        !
+        if (ie<=ib) return
+        !
+        !omp parallel do private(ipoint,tranfreq_i,voigt) shared(intens) schedule(dynamic)
+        do ipoint = ib, ie
+           !
+           tranfreq_i = freq(ipoint)
+           !
+           voigt = voigt_humlicek(tranfreq_i,tranfreq,halfwidth_doppler,halfwidth_Lorentz)
+           intensity(ipoint,itemp)=intensity(ipoint,itemp)+voigt*line_intensity(itemp)
+           !
+        enddo
+        !omp end parallel do
+        !
+      enddo
+      !
+  end subroutine  do_Voigt_array
+
 
   subroutine  do_Voigt_Fast(tranfreq,abscoef,use_resolving_power,freq,index_Lorentz,halfwidth_doppler,cutoff,freql,intens)
      !
