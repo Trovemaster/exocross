@@ -6,8 +6,8 @@ The cooling function is computed as emissivity (erg/molecule/sterradian) on a gr
 ::
 
     cooling
-     Ntemps     500
-     tempmax  5000.0
+     Tmax     5000.0
+     N  5000
     end
 
     output      ScH_adj_16665     
@@ -20,6 +20,6 @@ The cooling function is computed as emissivity (erg/molecule/sterradian) on a gr
 Keywords: 
 ^^^^^^^^^
 
-* `Ntemp` or `Npoints` is the number of temperature steps 
-* `tempmax`, `Maxtemp` or `Max-Temperature`  is the maximal temperature in K (minimal T = 1K ) 
+* ``N`` or ``Ntemps`` is the number of temperature steps 
+* ``Tmax``, ``tempmax``, ``Maxtemp`` or ``Max-Temperature``  is the maximal temperature in K (minimal T = 0K ) 
 

@@ -3428,6 +3428,7 @@ module spectrum
            do iswap = 1,N_to_RAM
              !
              read(tunit,*,end=121) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
+             !read(tunit,'(i12,1x,i12,1x,es11.4)',end=121) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
              !
              cycle
              !
