@@ -65,7 +65,7 @@ An single partition function value can be defined using the keyword ``pf``:
     pf 3817.0 
 
 
-Alternatively, a file containing a partition function on a grid of temperatures (assuming the standard format, :math:`T   Q(T)`) can be provided using the keyword ``pffile``, e.g. 
+Alternatively, a file containing a partition function on a grid of temperatures (assuming the standard format, :math:`T\,\,\,\,\,Q(T)`) can be provided using the keyword ``pffile``, e.g.
 ::
 
     pffile  28Si-16O__SiOUVenIR.pf
