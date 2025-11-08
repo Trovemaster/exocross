@@ -1311,7 +1311,7 @@ module spectrum
        !
        if (trim(pffilename)/='NONE') then 
          write (out,"('input: ARRAY does currently work with pffile')")
-         stop 'input - illigal use of ARRAY with pffile'
+         !stop 'input - illigal use of ARRAY with pffile'
        endif
        !
     endif
@@ -1562,7 +1562,7 @@ module spectrum
    character(len=cl)   :: my_fmt100K,my_fmt0
    character(len=cl)   :: fmt_T_array
    real(real32) :: nan
-   logical :: upper_state_selected,lower_state_selected
+   logical :: upper_state_selected,lower_state_selected,pf_use_from_file = .true.
    !
    !
    ln2=log(2.0_rk)
@@ -1906,11 +1906,9 @@ module spectrum
           !
           if (verbose>=1) print("('0,1,2,3 stand for PF, 1st and 2d moments and Cp')")
           !
-          !if (verbose>=1) print('("!",5x,a4,( 1x,'//npoints_fmt//'( 5x,"T=",f8.2,5x) ) )'),'  J ',(i*dtemp,i=1,npoints)
-          !
         endif
         !
-        allocate(pf(0:3,npoints),stat=info)
+        allocate(pf(0:3,n_T_points),stat=info)
         call ArrayStart('pf',info,size(pf),kind(pf))
         !
         pf = 0
@@ -1928,10 +1926,6 @@ module spectrum
             write(out,"('Error: COOLING does not work for HISTOGRAM')")
             stop 'Error: COOLING does not work with HISTOGRAM'
           endif
-          !
-          !allocate(cooling(npoints),stat=info)
-          !call ArrayStart('cooling',info,size(cooling),kind(cooling))
-          !cooling = 0
           !
         endif
         !
@@ -2375,28 +2369,71 @@ module spectrum
      call IOstart(trim(ioname),pfunit)
      open(unit=pfunit,file=trim(pffilename),action='read',status='old')
      !
-     pf_2 = 1.0_rk
-     if (trim(enrfilename)/="NONE") pf_2 = gtot(1)
-     T_1 = 0
-     T_2 = 0
-     do while (T_2<Temp)
-      T_1 = T_2 ; pf_1 = pf_2
-      read(pfunit,*,end=31) t_2,pf_2
-      !
-      cycle
-      !
-      31 continue
-      !
-      write(out,"('The tempreture requested ',f12.4,' is > Tmax=',f9.2,'K of ',a)") Temp,t_2,trim(pffilename)
-      write(out,"('The PF-file is not applicable, consider providing PF value (keyword PF) explicitly ... ')")
-      write(out,"('... or let exocross do re-compute pf using eneegies (no PF keyword needed).')")
-      stop 'The PF-file is not applicable'
-     enddo
-     !
-     ! From Numerical Recipes in Fortran 77
-     if (abs(T_1-T_2)<small_) stop 'Duplicate temperature in partition file'
-     partfunc = pf_1 + (temp - T_1) * (pf_2 - pf_1)/(T_2 - T_1)
-     !
+     if (array_job_do) then 
+        ! multiple T search 
+        ! 
+        do_pf_file_read: do itemp = 1,n_T_points
+          !
+          temp0 = temperature_array(itemp)
+          !
+          pf_2 = 1.0_rk
+          if (trim(enrfilename)/="NONE") pf_2 = gtot(1)
+          T_1 = 0
+          T_2 = 0
+          do while (T_2<temp0)
+           T_1 = T_2 ; pf_1 = pf_2
+           read(pfunit,*,end=41) t_2,pf_2
+           !
+           cycle
+           !
+           41 continue 
+             !
+             write(out,"('The tempreture requested ',f12.4,' is > Tmax=',f9.2,'K of ',a)") Temp0,t_2,trim(pffilename)
+             write(out,"('We will use the exocross computed pf value.')")
+             !
+             exit do_pf_file_read
+             !
+           ! end 41
+           !
+          enddo
+          !
+          ! From Numerical Recipes in Fortran 77
+          if (abs(T_1-T_2)<small_) stop 'Duplicate temperature in partition file'
+          pf(0,itemp) = pf_1 + (temp0 - T_1) * (pf_2 - pf_1)/(T_2 - T_1)
+          !
+        enddo do_pf_file_read
+        !
+     else
+        !
+        ! single T search 
+        !
+        pf_2 = 1.0_rk
+        if (trim(enrfilename)/="NONE") pf_2 = gtot(1)
+        T_1 = 0
+        T_2 = 0
+        do while (T_2<Temp)
+          T_1 = T_2 ; pf_1 = pf_2
+          read(pfunit,*,end=31) t_2,pf_2
+          !
+          cycle
+          !
+          31 continue
+          !
+          write(out,"('The tempreture requested ',f12.4,' is > Tmax=',f9.2,'K of ',a)") Temp,t_2,trim(pffilename)
+          !write(out,"('The PF-file is not applicable, consider providing PF value (keyword PF) explicitly ... ')")
+          write(out,"('We will use exocross computed pf using energy values from .states.')")
+          pf_use_from_file = .false.
+          exit 
+        enddo
+        !
+        if (pf_use_from_file) then 
+          ! From Numerical Recipes in Fortran 77
+          if (abs(T_1-T_2)<small_) stop 'Duplicate temperature in partition file'
+          partfunc = pf_1 + (temp - T_1) * (pf_2 - pf_1)/(T_2 - T_1)
+          !
+        endif
+        !
+     endif
    endif
    !
    if (verbose>=2.or.(partfunc_do.and.verbose>0)) print('(1x,a,1x,es16.8/)'),'! partition function value is',partfunc
