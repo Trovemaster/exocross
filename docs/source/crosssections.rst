@@ -231,7 +231,11 @@ Computing cross sections on a grid of temperatures (array job)
 For opacity productions when cross sections are computed for a large set of temperatures, it can be more efficient to process cross sections for all temperatures simultaneously, similarly how the partition and cooling functions are computed. To this end, the following ``ARRAY`` block structure can be used.
 
 ::
-
+     
+     Range 0 5900
+     
+     Npoints 5901
+     
      array
       n 10
       tmin 100
