@@ -27,7 +27,8 @@ module spectrum
   real(rk)      :: resolving_power  = 1e6,resolving_f ! using resolving_power to set up grid
   character(len=cl) :: cutoff_intensity_model = "NONE"
   integer(ik)   :: nquad = 20      ! Number of quadrature points
-  integer(hik)   :: N_to_RAM = -1000 ! Lines to keep in RAM
+  integer(hik)  :: N_to_RAM = -1000 ! Lines to keep in RAM
+  integer(ik)   :: npoints_=1001
   !
   character(len=cl) :: specttype="ABSORPTION",proftype="DOPPL"
   character(len=wl) :: enrfilename="NONE",intfilename(nfiles_max),output="output"
@@ -161,7 +162,7 @@ module spectrum
     logical :: eof,if_halfwidth_defined = .false., if_species_defined = .false., if_QN_defined = .false.
     character(len=cl) :: w
     character(len=wl) :: vl
-    integer(ik)   :: i,ifilter,iE,iS,npoints0,ierror,igrid,i_t
+    integer(ik)   :: i,ifilter,iE,iS,ierror,igrid,i_t
     type(HitranErrorT),pointer :: HITRAN
     real(rk) :: f_t
     ! -----------------------------------------------------------
@@ -319,6 +320,7 @@ module spectrum
           ! must be an odd number
           !
           if (mod(npoints,2)==0) npoints = npoints + 1
+          npoints_ = npoints
           !
         case ("ABSORPTION","EMISSION","GF")
           !
@@ -1012,7 +1014,7 @@ module spectrum
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
             'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX',&
             'LIFETIME','LIFETIMES','VOI-FAST','VOI-FNORM','VOI-916','T-LIFETIME','TRANS','VALD','ELORENTZ',&
-            'ELORENTZIAN','LORENTZ0','LORENTZIAN0','VOI-UNC','VOIGT-UNC')
+            'ELORENTZIAN','LORENTZ0','LORENTZIAN0','VOI-UNC','VOIGT-UNC','VOIGT-SUPER')
           !
           if (pressure<small_.and.(w(1:3)=='VOI'.or.w(1:3)=='PSE')) then
              !
@@ -1027,6 +1029,7 @@ module spectrum
           if (trim(w)=='LORENTZ0'.or.trim(w)=='LORENTZIAN0') w = 'LORE0'
           !
           if (trim(w)=='VOIGT-UNC') w = 'VOI-U'
+          if (trim(w)=='VOIGT-SUPER') w = 'VOI-S'
           !
           if (trim(w)=='PHOENIX') phoenix_do = .true.
           !
@@ -1074,6 +1077,11 @@ module spectrum
                 !
                 if (proftype(1:5)=="LOREN")    proftype = 'LORE0'
                 if (proftype(1:5)=="VOIGT")    proftype = 'VOI-QUAD'
+                !
+              case("SUPER")
+                !
+                if (proftype(1:5)=="LOREN")    proftype = 'LOR-S'
+                if (proftype(1:5)=="VOIGT")    proftype = 'VOI-S'
                 !
               case("SAMPLING")
                 !
@@ -1299,7 +1307,7 @@ module spectrum
     ! limit array_job_do for the currently implemented case of Voigt and absorption 
     !
     if (array_job_do) then
-       if (trim(specttype)/='ABSORPTION'.or.trim(proftype)/='VOIGT' ) then
+       if (trim(specttype)/='ABSORPTION'.or.(trim(proftype)/='VOIGT'.and.trim(proftype)/='VOI-S')) then
          write (out,"('input: ARRAY can currently work only with VOIGT in ABSORPTION')")
          stop 'input - illigal use of ARRAY: only VOIGT in ABSORPTION'
        endif
@@ -1411,17 +1419,17 @@ module spectrum
         stop 'Error: resolving power (option R) cannot be used with multiple grids'
       endif
       !
-      npoints0 = nint(real((log(freqr)-log(freql))/resolving_f,rk))+1
+      npoints_ = npoints
       !
-      !if (npoints0>npoints) then
+      npoints = nint(real((log(freqr)-log(freql))/resolving_f,rk))+1
+      !
+      !if (npoints_>npoints) then
         write(out,"('For the resolving power of ',f15.1,' and range of',2f12.2)") resolving_power,freql,freqr
-        write(out,"('Npoints is',i18)") npoints0
+        write(out,"('Npoints is',i18)") npoints
         !write(out,"('Consider increasing npoints > ',i15)") npoints
         write(out,"('npoints(max) = ln(nu2/nu1)/ln(1+1/R)+1')")
         !stop "Too small number of points for resolving_power and range given!"
       !endif
-      !
-      npoints = npoints0
       !
       if (freql<small_) then
         write(out,"('use_resolving_power cannot be used for range starting at zero',2f11.3)") freql,freqr
@@ -1527,8 +1535,8 @@ module spectrum
    integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems,iline,intunit,inu,nrows
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air,beta_ref
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef,m0,k0,Ki
-   real(rk)    :: acoef_,int_cutoff,ndensity,abscoef_ref,dpwcoef0
-   integer(ik) :: Jmax,Jp,Jpp,Ncutoff,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin,gtot_,KmaxAll,Kmax,kpp
+   real(rk)    :: acoef_,int_cutoff,ndensity,abscoef_ref,dpwcoef0,abscoef_
+   integer(ik) :: Jmax,Jp,Jpp,Ncutoff,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin,gtot_,KmaxAll,Kmax,kpp,npoints0
    real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc_i,unc_f,time_,hwhm_gauss,gtot_rk
    character(len=cl) :: ioname,intname
    character(len=wl) :: filename
@@ -1544,7 +1552,8 @@ module spectrum
    integer(ik),allocatable :: ileveli_RAM(:),ilevelf_RAM(:),gamma_idx_RAM(:)
    integer(ik) :: nswap_,nswap,iswap,iswap_,iomp,ichunk
    real(rk),allocatable :: energies_vib(:),dens_vib(:),gamma_radiative(:),population(:)
-   real(rk),allocatable :: line_intensity(:),intensity_T(:,:),temperature_array(:)
+   real(rk),allocatable :: line_intensity(:),intensity_T(:,:),temperature_array(:),gamma_array_ram(:,:)
+   real(rk),allocatable :: crosssections_T(:,:),frequency_grid_(:)
    integer(ik),allocatable :: ivib_state(:),ivib_state_pf(:)
    !
    integer(ik),allocatable :: nchars_quanta(:)  ! max number of characters used for each quantum number
@@ -2823,7 +2832,7 @@ module spectrum
       do i=0,JmaxAll
         do j= max(0,i-2),min(JmaxAll,i+2)
           do k=0,KmaxAll
-             gamma_comb(j,i-j,k) = get_Voigt_gamma_val(Nspecies,real(i,rk),real(j,rk),real(k,rk))
+             gamma_comb(j,i-j,k) = get_Voigt_gamma_val(Nspecies,real(i,rk),real(j,rk),real(k,rk),temp)
           enddo
         enddo
       enddo
@@ -2864,7 +2873,7 @@ module spectrum
    !
    select case (trim(proftype(1:5)))
        !
-   case ('GAUSS','DOPPL','LOREN','LORE0','GAUS0','DOPP0','VOIGT','PSEUD','PSE-R','PSE-L','VOI-Q','VOI-F','VOI-9','VOI-U')
+   case ('GAUSS','DOPPL','LOREN','LORE0','GAUS0','DOPP0','VOIGT','PSEUD','PSE-R','PSE-L','VOI-Q','VOI-F','VOI-9','VOI-U','VOI-S')
        !
        if (verbose>=2) then
           !
@@ -3104,10 +3113,21 @@ module spectrum
    call ArrayStart('swap:ilevelf_RAM',info,size(ilevelf_RAM),kind(ilevelf_RAM))
    !
    if (lineprofile_do) then
-     !
-     allocate(gamma_ram(N_to_RAM),stat=info)
-     allocate(gamma_idx_RAM(N_to_RAM),stat=info)
-     call ArrayStart('swap:gamma_ram',info,size(gamma_ram),kind(gamma_ram))
+
+     if (array_job_do) then
+        !
+        allocate(gamma_array_ram(n_T_points,N_to_RAM),stat=info)
+        call ArrayStart('gamma_array_ram',info,size(gamma_array_ram),kind(gamma_array_ram))
+        !
+        gamma_array_ram = halfwidth
+        !
+     else
+        !
+        allocate(gamma_ram(N_to_RAM),stat=info)
+        allocate(gamma_idx_RAM(N_to_RAM),stat=info)
+        call ArrayStart('swap:gamma_ram',info,size(gamma_ram),kind(gamma_ram))
+        !
+     endif
      !
      ! additional gaussian broadening needed for the uncertainty-based gamma
      if (error_broadening_do) then 
@@ -3513,8 +3533,8 @@ module spectrum
            if (array_job_do) then
               !
               !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,&
-              !$omp& tranfreq,tranfreq0,abscoef,jf,ji,Ki,temp_gamma_n)&
-              !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,gamma_ram)
+              !$omp& tranfreq,tranfreq0,abscoef,jf,ji,Ki,itemp,temp0)&
+              !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,gamma_array_ram)
               loop_swap_array : do iswap = 1,nswap_
                 !
                 indexf = indexf_RAM(iswap)
@@ -3560,24 +3580,19 @@ module spectrum
                 !
                 nu_ram(iswap) = tranfreq
                 !
-                if (lineprofile_do) then
+                if (Nspecies>0) then
                    !
                    jf = jrot(ilevelf)
                    ji = jrot(ileveli)
                    Ki = krot(ilevelf)
                    !
-                   !gamma_ram(iswap) = halfwidth
-                   !
-                   gamma_ram(iswap)=get_Voigt_gamma_n(Nspecies,Jf,Ji,Ki)
-                   temp_gamma_n = get_Voigt_gamma_n(Nspecies,Jf,Ji,Ki,gamma_idx_RAM(iswap))
-                   !
-                   ! for predissociative case we redefine collisional gamma by a radiative gamma if the latter is larger
-                   !
-                   if (predissociation_do) then 
+                   do itemp = 1,n_T_points
                      !
-                     gamma_ram(iswap) = max(gamma_radiative(ilevelf),gamma_ram(iswap))
+                     temp0 = temperature_array(itemp)
                      !
-                   endif
+                     gamma_array_ram(itemp,iswap) = get_Voigt_gamma_val(Nspecies,Ji,Jf,Ki,temp0)
+                     !
+                   enddo
                    !
                 endif
                 !
@@ -3585,6 +3600,7 @@ module spectrum
               !$omp end parallel do
               !
            else
+              !
               ! A single tempeture job 
               !
               !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,ifilter,&
@@ -3864,12 +3880,21 @@ module spectrum
                 nu_ram(iswap_) = nu_ram(iswap)
                 !
                 if (lineprofile_do) then
-                  gamma_ram(iswap_)=gamma_ram(iswap)
-                  gamma_idx_RAM(iswap_)=gamma_idx_RAM(iswap)
                   !
-                  if (error_broadening_do) then 
+                  if (array_job_do) then 
                     !
-                    sigma2_ram(iswap_) = sigma2_ram(iswap)
+                    gamma_array_ram(:,iswap_) = gamma_array_ram(:,iswap)
+                    !
+                  else
+                    !
+                    gamma_ram(iswap_)=gamma_ram(iswap)
+                    gamma_idx_RAM(iswap_)=gamma_idx_RAM(iswap)
+                    !
+                    if (error_broadening_do) then 
+                      !
+                      sigma2_ram(iswap_) = sigma2_ram(iswap)
+                      !
+                    endif
                     !
                   endif
                   !
@@ -3942,7 +3967,6 @@ module spectrum
                    !
                    abscoef = abscoef_ram(iswap)
                    tranfreq = nu_ram(iswap)
-                   halfwidth = gamma_ram(iswap)
                    hwhm_gauss=dpwcoef0*tranfreq
                    ileveli = ileveli_ram(iswap)
                    energyi = energies(ileveli)
@@ -3959,7 +3983,7 @@ module spectrum
                    !
                    if (all(line_intensity(:)<abscoef_thresh)) cycle
                    !
-                   call do_Voigt_array(npoints,n_T_points,tranfreq,freq,halfwidth,hwhm_gauss,&
+                   call do_Voigt_array(npoints,n_T_points,tranfreq,freq,gamma_array_ram(:,iswap),hwhm_gauss,&
                         temperature_array,cutoff,freql,line_intensity,intens_T_omp(:,:,iomp))
                    !
                  enddo
@@ -3989,6 +4013,85 @@ module spectrum
                enddo
                !$omp end parallel do
                !
+            endif
+            !
+        case ('BIN')
+            !
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              !
+              do iswap = iomp,nswap,N_omp_procs
+                !
+                abscoef = abscoef_ram(iswap)
+                tranfreq = nu_ram(iswap)
+                !
+                !int_cutoff =  apply_HITRAN_cutoff(tranfreq)
+                !
+                !if (abscoef<int_cutoff) cycle
+                !
+                call get_grid_ipoint(tranfreq,freq,ipoint)
+                !
+                !ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
+                !
+                intens_omp(ipoint,iomp) = intens_omp(ipoint,iomp)+abscoef
+                !
+              enddo
+              !
+            enddo
+            !$omp end parallel do
+            !
+        case ('VOI-S')
+            !
+            if (array_job_do) then 
+              !
+              !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ileveli,energyi,itemp,temp0,beta0,abscoef_) schedule(dynamic)
+              do iomp = 1,N_omp_procs
+                !
+                do iswap = iomp,nswap,N_omp_procs
+                  !
+                  abscoef = abscoef_ram(iswap)
+                  tranfreq = nu_ram(iswap)
+                  ileveli = ileveli_ram(iswap)
+                  energyi = energies(ileveli)
+                  !
+                  call get_grid_ipoint(tranfreq,freq,ipoint)
+                  !
+                  do itemp = 1,n_T_points
+                    !
+                    temp0 = temperature_array(itemp)
+                    !
+                    beta0 = c2/temp0
+                    !
+                    abscoef_ = abscoef*exp(-beta0*energyi)*(1.0_rk-exp(-beta0*tranfreq))/pf(0,itemp)
+                    !
+                    intens_T_omp(ipoint,itemp,iomp) = intens_T_omp(ipoint,itemp,iomp)+abscoef_
+                    !
+                  enddo
+                  !
+                enddo
+                !
+              enddo
+              !$omp end parallel do
+              !
+            else
+              !
+              !$omp parallel do private(iomp,iswap,abscoef,tranfreq) schedule(dynamic)
+              do iomp = 1,N_omp_procs
+                !
+                do iswap = iomp,nswap,N_omp_procs
+                  !
+                  abscoef = abscoef_ram(iswap)
+                  tranfreq = nu_ram(iswap)
+                  !
+                  call get_grid_ipoint(tranfreq,freq,ipoint)
+                  !
+                  intens_omp(ipoint,iomp) = intens_omp(ipoint,iomp)+abscoef
+                  !
+                enddo
+                !
+              enddo
+              !$omp end parallel do
+              !
             endif
             !
         case ('VOI-U')
@@ -4398,31 +4501,6 @@ module spectrum
             enddo
             !$omp end parallel do
             !
-        case ('BIN')
-            !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint) shared(intens_omp) schedule(dynamic)
-            do iomp = 1,N_omp_procs
-              !
-              do iswap = iomp,nswap,N_omp_procs
-                !
-                abscoef = abscoef_ram(iswap)
-                tranfreq = nu_ram(iswap)
-                !
-                !int_cutoff =  apply_HITRAN_cutoff(tranfreq)
-                !
-                !if (abscoef<int_cutoff) cycle
-                !
-                call get_grid_ipoint(tranfreq,freq,ipoint)
-                !
-                !ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
-                !
-                intens_omp(ipoint,iomp) = intens_omp(ipoint,iomp)+abscoef
-                !
-              enddo
-              !
-            enddo
-            !$omp end parallel do
-            !
         case ('BIN-M');
             !
             !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint) shared(intens_omp) schedule(dynamic)
@@ -4491,15 +4569,26 @@ module spectrum
      !
    enddo loop_file
    !
+   call TimerStart('Post-processing: sum single-core')
+   !
    !Do all the summation at the end
    !
    if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','PSE','COO'/)) ) then
+     !
+     if (verbose>=4) then 
+        write(out,"(4x,a)") 'Combine intensities from different cores'
+     endif
      !
      if (array_job_do) then 
         !
         do i=1,N_omp_procs
            intensity_T(:,:) = intensity_T(:,:) + intens_T_omp(:,:,i)
         enddo
+        !
+        if (allocated(intens_T_omp)) then 
+           deallocate(intens_T_omp)
+           call ArrayStop('intens_T_omp')
+        endif
         !
      else
         do i=1,N_omp_procs
@@ -4522,6 +4611,116 @@ module spectrum
        enddo
      enddo  
    endif
+   !
+   ! combining super-lines with one profiles
+   !
+   select case (trim(proftype(1:5)))
+       !
+   case ('VOI-S')
+       !
+       if (verbose>=4) then 
+          write(out,"(/4x,a)") 'Computing cross sections from super-lines...'
+       endif
+       !
+       ! redefine frequency grid for resolving power 
+       !
+       if (use_resolving_power) then 
+          !
+          ! we can now forswap the resolving_power grid and the normal grid
+          npoints0 = npoints
+          npoints  = npoints_
+          !
+          allocate(frequency_grid_(npoints0),stat=info)
+          call ArrayStart('frequency_grid_',info,size(frequency_grid_),kind(frequency_grid_))
+          !
+          frequency_grid_ = freq
+          !
+          deallocate(freq)
+          call ArrayStop('frequency')
+          !
+          allocate(freq(npoints),stat=info)
+          call ArrayStart('frequency',info,size(freq),kind(freq))
+          !
+          dfreq=(freqr-freql)/real(npoints-1,rk)
+          !
+          forall(ipoint=1:npoints) freq(ipoint)=freql+real(ipoint-1,rk)*dfreq
+          !
+          use_resolving_power = .false.
+          !
+       endif
+       !
+       if (array_job_do) then 
+          !
+          if (verbose>=4) then 
+             write(out,"(4x,a)") '...for a set of temperatures (array job)'
+          endif
+          !
+          allocate(crosssections_T(npoints,n_T_points),stat=info)
+          call ArrayStart('crosssections_T',info,size(crosssections_T),kind(crosssections_T))
+          crosssections_T = 0
+          !
+          !$omp parallel do private(itemp,temp0,halfwidth0,i,abscoef,tranfreq,hwhm_gauss) shared(crosssections_T) schedule(dynamic)
+          do itemp = 1,n_T_points
+             !
+             temp0 = temperature_array(itemp)
+             !
+             halfwidth0 = halfwidth
+             !
+             if (Nspecies>0) then 
+               !
+               halfwidth0 = 0 
+               do i=1,Nspecies
+                 halfwidth0 =  halfwidth0 + species(i)%ratio*species(i)%gamma*(species(i)%T0/temp0)**species(i)%N*pressure/species(i)%P0
+               enddo
+               !
+             endif
+             !
+             do i = 1,npoints0
+               !
+               abscoef = intensity_T(i,itemp)
+               tranfreq = frequency_grid_(i)
+               hwhm_gauss=dpwcoef0*tranfreq*sqrt(temp0)
+               !
+               if (abscoef<abscoef_thresh) cycle
+               !
+               call do_Voigt(tranfreq,abscoef,freq,halfwidth0,hwhm_gauss,cutoff,freql,crosssections_T(:,itemp))
+               !
+             enddo
+             !
+          enddo
+          !$omp end parallel do
+          !
+       else
+          !
+          allocate(line_intensity(npoints),stat=info)
+          call ArrayStart('line_intensity',info,size(line_intensity),kind(line_intensity))
+          !
+          line_intensity = intens
+          !
+          intens = 0
+          !
+          !$omp parallel do private(i,abscoef,tranfreq,hwhm_gauss) shared(intens) schedule(dynamic)
+          do i = 1,npoints0
+            !
+            abscoef = line_intensity(i)
+            tranfreq = frequency_grid_(i)
+            hwhm_gauss=dpwcoef*tranfreq
+            !
+            if (abscoef<abscoef_thresh) cycle
+            !
+            call do_Voigt(tranfreq,abscoef,freq,halfwidth,hwhm_gauss,cutoff,freql,intens)
+            !
+          enddo
+          !$omp end parallel do
+          !
+          deallocate(line_intensity)
+          call ArrayStop('line_intensity')
+          !
+       endif
+       !
+   end select
+   !
+   call TimerStop('Post-processing: sum single-core')
    !
    ! convert units
    !
@@ -4713,7 +4912,7 @@ module spectrum
          !
          do i=1,npoints
             !write(tunit,'(2(1x,es16.8E3))') freq(i),intensity_T(i,1)
-            write(tunit,fmt_T_array) freq(i),intensity_T(i,1:n_T_points)
+            write(tunit,fmt_T_array) freq(i),crosssections_T(i,1:n_T_points)
          enddo
          !
        else 
@@ -4960,11 +5159,6 @@ module spectrum
          call ArrayStop('swap:intens_omp')
       endif
       !
-      if (allocated(intens_T_omp)) then 
-         deallocate(intens_T_omp)
-         call ArrayStop('intens_T_omp')
-      endif
-      !
       if (allocated(intensity_T)) then 
          deallocate(intensity_T)
          call ArrayStop('intensity_T')
@@ -4974,6 +5168,16 @@ module spectrum
          deallocate(temperature_array)
          call ArrayStop('temperature_array')
       endif
+      !
+      if (allocated(gamma_array_ram)) then 
+         deallocate(gamma_array_ram)
+         call ArrayStop('gamma_array_ram')
+      endif
+      !
+      if (allocated(crosssections_T)) then 
+         deallocate(crosssections_T)
+         call ArrayStop('crosssections_T')
+      endif 
       !   
    end subroutine clean_up_memory_allocations
    
@@ -5671,20 +5875,21 @@ module spectrum
      !
      integer(ik),intent(in) :: n_T_points,npoints
      
-     real(rk),intent(in) :: tranfreq,halfwidth_Lorentz,halfwidth_gauss,cutoff,freql
+     real(rk),intent(in) :: tranfreq,halfwidth_Lorentz(n_T_points),halfwidth_gauss,cutoff,freql
      real(rk),intent(in) :: freq(npoints),line_intensity(n_T_points),temperature_array(n_T_points)
      real(rk),intent(inout) :: intensity(npoints,n_T_points)
      real(rk) :: tranfreq_i,cutoff_,voigt,halfwidth_doppler,T
      integer(ik) :: ib,ie,ipoint,itemp
       !
-      cutoff_ = cutoff
-      if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth_Lorentz
-      !
-      call get_ipoint_ranges(tranfreq,freq,cutoff_,ib,ie)
       !
       do itemp = 1,n_T_points
         !
         T  = temperature_array(itemp)
+        !
+        cutoff_ = cutoff
+        if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth_Lorentz(itemp)
+        !
+        call get_ipoint_ranges(tranfreq,freq,cutoff_,ib,ie)
         !
         halfwidth_doppler=halfwidth_gauss*sqrt(T)
         !
@@ -5697,7 +5902,7 @@ module spectrum
            !
            tranfreq_i = freq(ipoint)
            !
-           voigt = voigt_humlicek(tranfreq_i,tranfreq,halfwidth_doppler,halfwidth_Lorentz)
+           voigt = voigt_humlicek(tranfreq_i,tranfreq,halfwidth_doppler,halfwidth_Lorentz(itemp))
            intensity(ipoint,itemp)=intensity(ipoint,itemp)+voigt*line_intensity(itemp)
            !
         enddo
@@ -6390,12 +6595,12 @@ module spectrum
      !
   end function get_Voigt_gamma_n
  
-  function get_Voigt_gamma_val(Nspecies,Jf,Ji,Ki) result(f)
+  function get_Voigt_gamma_val(Nspecies,Jf,Ji,Ki,Temp) result(f)
      !
      implicit none
      !
      integer(ik),intent(in) :: Nspecies
-     real(rk),intent(in) :: Jf,Ji,Ki
+     real(rk),intent(in) :: Jf,Ji,Ki,Temp
      real(rk) :: halfwidth,gamma_,n_,f
      integer(ik) :: ispecies,Jpp,Jp,Kpp
      !
