@@ -15,6 +15,7 @@ Welcome to ExoCross's documentation!
    superlines
    strong-weak
    profiles
+   opacity
    hitran
    spectra
    nonlte

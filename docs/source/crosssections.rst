@@ -225,68 +225,6 @@ one can define the cut-off in terms of the HWHM as follows:
 
 
 
-Computing cross sections on a grid of temperatures (array job)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-For opacity productions when cross sections are computed for a large set of temperatures, it can be more efficient to process cross sections for all temperatures simultaneously, similarly how the partition and cooling functions are computed. To this end, the following ``ARRAY`` block structure can be used.
-
-::
-     
-     Range 0 5900
-     
-     Npoints 5901
-     
-     array
-      n 10
-      tmin 100
-      tmax 1000
-     end
-
-     absorption
-     voigt
-
-     mass 26
-
-     species
-        air   gamma 0.007  n 0.65 t0 296.0
-     end
-
-     pressure 1
-
-     output 12C-14N__5000K_test
-     NCache 500
-     NPROCS 36
-
-     States 12C-14N__MoLLIST.states
-     Transitions 12C-14N__MoLLIST_10lines.trans
-
-Here
-
-
-* ``N``  is the number of temperature steps (e.g. 10)
-* ``Tmin``  is the minima temperature in K
-* ``Tmax``  is the maximal temperature in K
-
-All cross sections are printed out into a single ``output`` file as different columns following the frequency column, e.g.
-
-::
-
-     ....
-     5.88500000E+003   7.97795033E-036  1.72172105E-030  1.50934418E-028  1.84056995E-027  8.75964032E-027  2.47807332E-026  5.14418985E-026 
-     5.88700000E+003   1.17182482E-035  1.75296505E-030  1.32946282E-028  1.57424065E-027  7.50135150E-027  2.14298647E-026  4.51073365E-026 
-     5.88800000E+003   2.12842862E-035  2.98897895E-030  1.56465959E-028  1.28410634E-027  4.90675516E-027  1.23246563E-026  2.40312414E-026 
-     5.88900000E+003   6.41335689E-035  9.31393311E-030  4.36473210E-028  2.97204673E-027  9.52430574E-027  2.08438541E-026  3.65880214E-026 
-     ....
-
-The main (standard) output will also contain values of the total absorption for each temperature. 
-
-The partition function will be recomputed based on the .states file provided. 
-
-.. warning:: This feature works currently only for the basic case of ``Absorption`` and ``Voigt`` with no ``Filters``, ``non-LTE`` etc. 
-   
-
-
-
 multi-grid
 ^^^^^^^^^^
 

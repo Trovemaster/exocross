@@ -145,11 +145,11 @@ module spectrum
   logical :: completed_work = .true.
   logical :: all_done = .false.
   logical :: upper_filter_active = .false.,lower_filter_active = .false.
-  logical :: array_job_do = .false.,cross_sections_do = .false.
+  logical :: array_job_do = .false.,cross_sections_do = .false.,pressure_array_job_do = .false.
   !
   type(VoigtKampffCollection),save :: fast_voigt
-  
-  
+  real(rk),allocatable :: Pressure_list(:)
+  integer(ik) :: Npressure_list = 0
   !
   contains
   !
@@ -162,9 +162,11 @@ module spectrum
     logical :: eof,if_halfwidth_defined = .false., if_species_defined = .false., if_QN_defined = .false.
     character(len=cl) :: w
     character(len=wl) :: vl
-    integer(ik)   :: i,ifilter,iE,iS,ierror,igrid,i_t
+    integer(ik)   :: i,ifilter,iE,iS,ierror,igrid,i_t,info
     type(HitranErrorT),pointer :: HITRAN
     real(rk) :: f_t
+    integer(ik),parameter :: Npressure_list_max = 100
+    real(rk) :: Pressure_list_(Npressure_list_max)
     ! -----------------------------------------------------------
     !
     write(out,"('Read the input')")
@@ -504,6 +506,38 @@ module spectrum
              stop 'input - illigal last line in ARRAY'
              !
           endif
+          !
+        case ("PRESSURE-LIST")
+          !
+          pressure_array_job_do = .true. 
+          !
+          call read_line(eof) ; if (eof) exit
+          call readu(w)
+          !
+          i_t = 0 
+          !
+          do while (trim(w)/="".and.trim(w)/="END".and.i_t<Npressure_list_max)
+            !
+            i_t = i_t + 1
+            !
+            read(w,*) Pressure_list_(i_t)
+            !
+            call read_line(eof) ; if (eof) exit
+            call readu(w)
+            !
+          enddo
+          !
+          if (i_t==Npressure_list_max) then 
+             write(out,"(a,i8)") 'input-error PRESSURE-LIST: the list is too long, increase Npressure_list_max in Duo'
+             stop 'input-error PRESSURE-LIST: the list is too long'
+          endif
+          !
+          Npressure_list = i_t
+          !
+          allocate(Pressure_list(Npressure_list),stat=info)
+          call ArrayStart('Pressure_list',info,size(Pressure_list),kind(Pressure_list))
+          !
+          Pressure_list(1:Npressure_list) = Pressure_list_(1:Npressure_list)
           !
         case ("QN","QUNTUM-NUMBERS","NON-LTE")
           !
@@ -1532,13 +1566,13 @@ module spectrum
    !
    real(rk)    :: hitran_Tref = 296_rk
    integer(ik) :: info,ipoint,ipoint_,nlevels,i,itemp,enunit,tunit,sunit,wunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf
-   integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems,iline,intunit,inu,nrows
+   integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems,iline,intunit,inu,nrows,iP,cross_unit
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air,beta_ref
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef,m0,k0,Ki
    real(rk)    :: acoef_,int_cutoff,ndensity,abscoef_ref,dpwcoef0,abscoef_
    integer(ik) :: Jmax,Jp,Jpp,Ncutoff,Nspecies_,Nvib_states,ivib1,ivib2,ivib,JmaxAll,imin,gtot_,KmaxAll,Kmax,kpp,npoints0
    real(rk)    :: gamma_,n_,gamma_s,ener_vib,ener_rot,J_,pf_1,pf_2,t_1,t_2,unc_i,unc_f,time_,hwhm_gauss,gtot_rk
-   character(len=cl) :: ioname,intname
+   character(len=cl) :: ioname,intname,cross_io_name
    character(len=wl) :: filename
    !
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
@@ -1567,10 +1601,11 @@ module spectrum
    !
    integer(ik) :: imol,iostat_,isotope,alloc_p
    real(rk)    :: gf,gi,mem_t,temp_gamma_n,cutoff_
-   character(55) ch_q,ch_broad
+   character(len=55) ch_q,ch_broad
    character(len=cl)   :: my_fmt100K,my_fmt0
-   character(len=cl)   :: fmt_T_array
-   real(real32) :: nan
+   character(len=cl)  :: fmt_T_array
+   character(len=20)  :: fmt_pressure 
+   real(real32) :: nan    
    logical :: upper_state_selected,lower_state_selected,pf_use_from_file = .true.
    !
    !
@@ -4626,7 +4661,7 @@ module spectrum
        !
        if (use_resolving_power) then 
           !
-          ! we can now forswap the resolving_power grid and the normal grid
+          ! we can now swap the resolving_power grid and the normal grid
           npoints0 = npoints
           npoints  = npoints_
           !
@@ -4659,59 +4694,101 @@ module spectrum
           call ArrayStart('crosssections_T',info,size(crosssections_T),kind(crosssections_T))
           crosssections_T = 0
           !
-          !$omp parallel do private(itemp,temp0,halfwidth0,i,abscoef,tranfreq,hwhm_gauss) shared(crosssections_T) schedule(dynamic)
-          do itemp = 1,n_T_points
-             !
-             temp0 = temperature_array(itemp)
-             !
-             halfwidth0 = halfwidth
-             !
-             if (Nspecies>0) then 
+          write(cross_io_name, '(a)') 'T-dependent cross sections'
+          call IOstart(trim(cross_io_name),cross_unit)
+          !
+          do iP = 1,Npressure_list
+            !
+            pressure = Pressure_list(iP)
+            !
+            !$omp parallel do private(itemp,temp0,halfwidth0,i,abscoef,tranfreq,hwhm_gauss) shared(crosssections_T) schedule(dynamic)
+            do itemp = 1,n_T_points
                !
-               halfwidth0 = 0 
-               do i=1,Nspecies
-                 halfwidth0 =  halfwidth0 + species(i)%ratio*species(i)%gamma*(species(i)%T0/temp0)**species(i)%N*pressure/species(i)%P0
+               temp0 = temperature_array(itemp)
+               !
+               halfwidth0 = halfwidth
+               !
+               if (Nspecies>0) then 
+                 !
+                 halfwidth0 = 0 
+                 do i=1,Nspecies
+                   halfwidth0 =  halfwidth0 + species(i)%ratio*species(i)%gamma*(species(i)%T0/temp0)**species(i)%N*pressure/species(i)%P0
+                 enddo
+                 !
+               endif
+               !
+               do i = 1,npoints0
+                 !
+                 abscoef = intensity_T(i,itemp)
+                 tranfreq = frequency_grid_(i)
+                 hwhm_gauss=dpwcoef0*tranfreq*sqrt(temp0)
+                 !
+                 if (abscoef<abscoef_thresh) cycle
+                 !
+                 call do_Voigt(tranfreq,abscoef,freq,halfwidth0,hwhm_gauss,cutoff,freql,crosssections_T(:,itemp))
+                 !
                enddo
                !
-             endif
-             !
-             do i = 1,npoints0
-               !
-               abscoef = intensity_T(i,itemp)
-               tranfreq = frequency_grid_(i)
-               hwhm_gauss=dpwcoef0*tranfreq*sqrt(temp0)
-               !
-               if (abscoef<abscoef_thresh) cycle
-               !
-               call do_Voigt(tranfreq,abscoef,freq,halfwidth0,hwhm_gauss,cutoff,freql,crosssections_T(:,itemp))
-               !
-             enddo
-             !
+            enddo
+            !$omp end parallel do
+            !
+            write(fmt_pressure,'(es16.8E3)') pressure
+            !
+            write(filename,'(a,a,a,a)') trim(output),"__",trim(adjustl(fmt_pressure)),".xsec"
+            !
+            open(unit=cross_unit,file=filename,action='write',status='replace')
+            !
+            write(fmt_T_array,'(a,i0,a)')  '((1x,es16.8E3),1x,',n_T_points,'(1x,es16.8E3))'
+            !
+            do i=1,npoints
+               write(cross_unit,fmt_T_array) freq(i),crosssections_T(i,1:n_T_points)
+            enddo
+            !
+            close(cross_unit,status='keep')
+            !
           enddo
-          !$omp end parallel do
+          !
+          call IOstop(trim(cross_io_name))
           !
        else
           !
           allocate(line_intensity(npoints),stat=info)
           call ArrayStart('line_intensity',info,size(line_intensity),kind(line_intensity))
           !
-          line_intensity = intens
+          write(cross_io_name, '(a)') 'Single-T cross sections'
+          call IOstart(trim(cross_io_name),cross_unit)
           !
-          intens = 0
-          !
-          !$omp parallel do private(i,abscoef,tranfreq,hwhm_gauss) shared(intens) schedule(dynamic)
-          do i = 1,npoints0
+          do iP = 1,Npressure_list
             !
-            abscoef = line_intensity(i)
-            tranfreq = frequency_grid_(i)
-            hwhm_gauss=dpwcoef*tranfreq
+            pressure = Pressure_list(iP)
             !
-            if (abscoef<abscoef_thresh) cycle
+            line_intensity = 0
             !
-            call do_Voigt(tranfreq,abscoef,freq,halfwidth,hwhm_gauss,cutoff,freql,intens)
+            !$omp parallel do private(i,abscoef,tranfreq,hwhm_gauss) shared(intens) schedule(dynamic)
+            do i = 1,npoints0
+              !
+              abscoef = intens(i)
+              tranfreq = frequency_grid_(i)
+              hwhm_gauss=dpwcoef*tranfreq
+              !
+              if (abscoef<abscoef_thresh) cycle
+              !
+              call do_Voigt(tranfreq,abscoef,freq,halfwidth,hwhm_gauss,cutoff,freql,line_intensity)
+              !
+            enddo
+            !$omp end parallel do
+            !
+            write(fmt_pressure,'(es16.8E3)') pressure
+            !
+            write(filename,'(a,a,a,a)') trim(output),"__",trim(adjustl(fmt_pressure)),".xsec"
+            !
+            open(unit=cross_unit,file=filename,action='write',status='replace')
+            !
+            write(cross_unit,'(2(1x,es16.8E3))') (freq(ipoint),line_intensity(ipoint),ipoint=1,npoints)
+            !
+            close(cross_unit,status='keep')
             !
           enddo
-          !$omp end parallel do
           !
           deallocate(line_intensity)
           call ArrayStop('line_intensity')
@@ -4874,6 +4951,11 @@ module spectrum
      !
      close(tunit,status='keep')
      !
+   elseif(pressure_array_job_do) then
+     !
+     ! do nothing 
+     continue 
+     !
    elseif (cross_sections_do) then
      !
      write(ioname, '(a)') 'Cross sections or intensities'
@@ -4907,11 +4989,9 @@ module spectrum
        !
        ! Intensity_T output
        if (array_job_do) then
-         !
          write(fmt_T_array,'(a,i0,a)')  '((1x,es16.8E3),1x,',n_T_points,'(1x,es16.8E3))'
          !
          do i=1,npoints
-            !write(tunit,'(2(1x,es16.8E3))') freq(i),intensity_T(i,1)
             write(tunit,fmt_T_array) freq(i),crosssections_T(i,1:n_T_points)
          enddo
          !
@@ -5177,6 +5257,11 @@ module spectrum
       if (allocated(crosssections_T)) then 
          deallocate(crosssections_T)
          call ArrayStop('crosssections_T')
+      endif 
+      !
+      if (allocated(Pressure_list)) then 
+         deallocate(Pressure_list)
+         call ArrayStop('Pressure_list')
       endif 
       !   
    end subroutine clean_up_memory_allocations
