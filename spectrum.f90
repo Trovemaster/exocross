@@ -25,10 +25,11 @@ module spectrum
   real(rk)      :: S_crit = 1e-29      ! cm/molecule, HITRAN cut-off paramater
   real(rk)      :: nu_crit = 2000.0d0  ! cm-1, HITRAN cut-off paramater
   real(rk)      :: resolving_power  = 1e6,resolving_f ! using resolving_power to set up grid
+  real(rk)      :: grid_spacing  = 0.1  ! frequency bin size 
   character(len=cl) :: cutoff_intensity_model = "NONE"
   integer(ik)   :: nquad = 20      ! Number of quadrature points
   integer(hik)  :: N_to_RAM = -1000 ! Lines to keep in RAM
-  integer(ik)   :: npoints_=1001
+  integer(ik)   :: npoints_=0
   !
   character(len=cl) :: specttype="ABSORPTION",proftype="DOPPL"
   character(len=wl) :: enrfilename="NONE",intfilename(nfiles_max),output="output"
@@ -140,6 +141,7 @@ module spectrum
   logical :: lineprofile_do = .false., use_width_cutoff = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
+  logical :: use_nu_spacing = .false.  ! use spacing to create the nu grid 
   logical :: ready_for_work = .false.
   logical :: accepted_work = .false.
   logical :: completed_work = .true.
@@ -148,7 +150,8 @@ module spectrum
   logical :: array_job_do = .false.,cross_sections_do = .false.,pressure_array_job_do = .false.
   !
   type(VoigtKampffCollection),save :: fast_voigt
-  real(rk),allocatable :: Pressure_list(:)
+  integer(ik),parameter :: Npressure_list_max = 100
+  real(rk)   :: Pressure_list(Npressure_list_max)
   integer(ik) :: Npressure_list = 0
   !
   contains
@@ -165,8 +168,6 @@ module spectrum
     integer(ik)   :: i,ifilter,iE,iS,ierror,igrid,i_t,info
     type(HitranErrorT),pointer :: HITRAN
     real(rk) :: f_t
-    integer(ik),parameter :: Npressure_list_max = 100
-    real(rk) :: Pressure_list_(Npressure_list_max)
     ! -----------------------------------------------------------
     !
     write(out,"('Read the input')")
@@ -280,6 +281,12 @@ module spectrum
           !
           use_resolving_power = .true.
           !
+        case ("SPACING")
+          !
+          use_nu_spacing = .true.
+          !
+          call readf(grid_spacing)
+          !
         case ("WINDOW","FREQUENCY","FREQUENCIES","WAVENUMBERS","RANGE")
           !
           call readf(freql)
@@ -322,7 +329,26 @@ module spectrum
           ! must be an odd number
           !
           if (mod(npoints,2)==0) npoints = npoints + 1
-          npoints_ = npoints
+          !
+        case ("REMAP","MAP","RE-MAP")
+          !
+          call readu(w)
+          !
+          select case(w)
+            !
+          case("NPOINTS")
+            !
+            call readi(npoints_)
+            !
+            ! must be an odd number
+            !
+            if (mod(npoints_,2)==0) npoints_ = npoints_ + 1
+            !
+          case default
+            !
+            call report ("Unrecognized unit name in units of RANGE "//trim(w),.true.)
+            !
+          end select
           !
         case ("ABSORPTION","EMISSION","GF")
           !
@@ -339,7 +365,6 @@ module spectrum
             units = 'ERG/MOLECULE/S'
             !
           end select 
-          
           !
           ! change default units to user-defined
           !
@@ -520,7 +545,7 @@ module spectrum
             !
             i_t = i_t + 1
             !
-            read(w,*) Pressure_list_(i_t)
+            read(w,*) Pressure_list(i_t)
             !
             call read_line(eof) ; if (eof) exit
             call readu(w)
@@ -533,11 +558,6 @@ module spectrum
           endif
           !
           Npressure_list = i_t
-          !
-          allocate(Pressure_list(Npressure_list),stat=info)
-          call ArrayStart('Pressure_list',info,size(Pressure_list),kind(Pressure_list))
-          !
-          Pressure_list(1:Npressure_list) = Pressure_list_(1:Npressure_list)
           !
         case ("QN","QUNTUM-NUMBERS","NON-LTE")
           !
@@ -1453,22 +1473,36 @@ module spectrum
         stop 'Error: resolving power (option R) cannot be used with multiple grids'
       endif
       !
-      npoints_ = npoints
-      !
       npoints = nint(real((log(freqr)-log(freql))/resolving_f,rk))+1
       !
-      !if (npoints_>npoints) then
-        write(out,"('For the resolving power of ',f15.1,' and range of',2f12.2)") resolving_power,freql,freqr
-        write(out,"('Npoints is',i18)") npoints
-        !write(out,"('Consider increasing npoints > ',i15)") npoints
-        write(out,"('npoints(max) = ln(nu2/nu1)/ln(1+1/R)+1')")
-        !stop "Too small number of points for resolving_power and range given!"
-      !endif
+      write(out,"('For the resolving power of ',f15.1,' and range of',2f12.2)") resolving_power,freql,freqr
+      write(out,"('Npoints is',i18)") npoints
+      !write(out,"('Consider increasing npoints > ',i15)") npoints
+      write(out,"('npoints(max) = ln(nu2/nu1)/ln(1+1/R)+1')")
       !
       if (freql<small_) then
         write(out,"('use_resolving_power cannot be used for range starting at zero',2f11.3)") freql,freqr
         stop "Illegal use_resolving_power with zero nu1"
       endif
+      !
+    endif
+    !
+    if (Npressure_list==0) then 
+      Npressure_list = 1
+      Pressure_list(1)  = pressure
+    endif
+    !
+    if (use_nu_spacing) then
+      !
+      if (Ngrids>0) then
+        write(out,"('Error: Spacing is currently not working with multiple grids')")
+        stop 'Error:Spacing cannot be used with multiple grids'
+      endif
+      !
+      npoints=nint((freqr-freql)/grid_spacing)
+      !
+      write(out,"('Uniform grid spacing',f12.5)") grid_spacing
+      write(out,"('Npoints is set to',i18)") npoints
       !
     endif
     !
@@ -4657,31 +4691,32 @@ module spectrum
           write(out,"(/4x,a)") 'Computing cross sections from super-lines...'
        endif
        !
-       ! redefine frequency grid for resolving power 
+       ! remap frequency grid to a new value
        !
-       if (use_resolving_power) then 
-          !
-          ! we can now swap the resolving_power grid and the normal grid
-          npoints0 = npoints
-          npoints  = npoints_
-          !
-          allocate(frequency_grid_(npoints0),stat=info)
-          call ArrayStart('frequency_grid_',info,size(frequency_grid_),kind(frequency_grid_))
-          !
-          frequency_grid_ = freq
-          !
-          deallocate(freq)
-          call ArrayStop('frequency')
-          !
-          allocate(freq(npoints),stat=info)
-          call ArrayStart('frequency',info,size(freq),kind(freq))
-          !
-          dfreq=(freqr-freql)/real(npoints-1,rk)
-          !
-          forall(ipoint=1:npoints) freq(ipoint)=freql+real(ipoint-1,rk)*dfreq
-          !
-          use_resolving_power = .false.
-          !
+       npoints0 = npoints
+       !
+       allocate(frequency_grid_(npoints0),stat=info)
+       call ArrayStart('frequency_grid_',info,size(frequency_grid_),kind(frequency_grid_))
+       !
+       frequency_grid_ = freq
+       !
+       if (npoints_ /= 0 ) then 
+         !
+         ! we now remap grid to the new equidistant grid becasue of the re-map option in the input
+         npoints  = npoints_
+         !
+         deallocate(freq)
+         call ArrayStop('frequency')
+         !
+         allocate(freq(npoints),stat=info)
+         call ArrayStart('frequency',info,size(freq),kind(freq))
+         !
+         dfreq=(freqr-freql)/real(npoints-1,rk)
+         !
+         forall(ipoint=1:npoints) freq(ipoint)=freql+real(ipoint-1,rk)*dfreq
+         !
+         if (use_resolving_power) use_resolving_power = .false.
+         !
        endif
        !
        if (array_job_do) then 
@@ -5257,11 +5292,6 @@ module spectrum
       if (allocated(crosssections_T)) then 
          deallocate(crosssections_T)
          call ArrayStop('crosssections_T')
-      endif 
-      !
-      if (allocated(Pressure_list)) then 
-         deallocate(Pressure_list)
-         call ArrayStop('Pressure_list')
       endif 
       !   
    end subroutine clean_up_memory_allocations
