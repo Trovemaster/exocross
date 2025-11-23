@@ -2518,7 +2518,7 @@ module spectrum
    !
    ! prepare the quadratures (Gauss-Hermite)
    !
-   if (trim(proftype(1:5))=='VOI-Q') then
+   if (trim(proftype(1:5))=='VOI-Q'.or.trim(proftype(1:5))=='VOI-S') then
      write(out,"(/'Number of quadrature poitns (Gauss-Hermite) = ',i7/)") nquad
      !
      allocate(weight(nquad),abciss(nquad),bnormq(nquad),stat=info)
@@ -4453,7 +4453,7 @@ module spectrum
         case ('VOI-Q') ! VOIGT-QUADRATURES
             !
             !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp) schedule(dynamic)
+            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth,hwhm_gauss) shared(intens_omp) schedule(dynamic)
             do iomp = 1,N_omp_procs
               !
               do iswap = iomp,nswap,N_omp_procs
@@ -4461,8 +4461,9 @@ module spectrum
                 abscoef = abscoef_ram(iswap)
                 tranfreq = nu_ram(iswap)
                 halfwidth = gamma_ram(iswap)
+                hwhm_gauss=dpwcoef*tranfreq
                 !
-                call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth,cutoff,freql,dpwcoef,intens_omp(:,iomp))
+                call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth,cutoff,freql,hwhm_gauss,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -4761,6 +4762,8 @@ module spectrum
                  if (abscoef<abscoef_thresh) cycle
                  !
                  call do_Voigt(tranfreq,abscoef,freq,halfwidth0,hwhm_gauss,cutoff,freql,crosssections_T(:,itemp))
+                 !
+                 !call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth0,cutoff,freql,hwhm_gauss,crosssections_T(:,itemp))
                  !
                enddo
                !
@@ -5847,18 +5850,17 @@ module spectrum
   end subroutine  do_pse_L
 
 
-  subroutine do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth,cutoff,freql,dpwcoef,intens)
+  subroutine do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth,cutoff,freql,halfwidth0,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,cutoff,freql,dpwcoef
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,cutoff,freql,halfwidth0
      real(rk),intent(in) :: freq(npoints),abciss(nquad),weight(nquad)
      real(rk),intent(inout) :: intens(npoints)
-     real(rk) :: alpha,ln2,halfwidth0,gamma,xp,dnu_half
+     real(rk) :: alpha,ln2,gamma,xp,dnu_half
      real(rk) :: ln22,y,dx2,x0,sigma,xi,x1,x2,l1,l2,bnormq(1:nquad),Lorentz(nquad),dxp,voigt_,cutoff_
      integer(ik) :: ib,ie,ipoint,iquad
      !
-     halfwidth0=dpwcoef*tranfreq
      if (halfwidth0<100.0_rk*small_) return
      !
      cutoff_ = cutoff
