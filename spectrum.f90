@@ -31,7 +31,7 @@ module spectrum
   integer(hik)  :: N_to_RAM = -1000 ! Lines to keep in RAM
   integer(ik)   :: npoints_=0
   !
-  character(len=cl) :: specttype="ABSORPTION",proftype="DOPPL"
+  character(len=cl) :: specttype="ABSORPTION",proftype="DOPPL", profile_calc_type = 'SAMPLING'
   character(len=wl) :: enrfilename="NONE",intfilename(nfiles_max),output="output"
   character(len=wl) :: pffilename="NONE"
   integer(ik)   :: intJvalue(nfiles_max)
@@ -1068,7 +1068,7 @@ module spectrum
        case('GAUSSIAN','GAUSS','DOPPL','DOPPLER','RECT','BOX','BIN','STICKS','STICK','GAUS0','DOPP0',&
             'LOREN','LORENTZIAN','LORENTZ','MAX','VOIGT','PSEUDO','PSE-ROCCO','PSE-LIU','VOI-QUAD','PHOENIX',&
             'LIFETIME','LIFETIMES','VOI-FAST','VOI-FNORM','VOI-916','T-LIFETIME','TRANS','VALD','ELORENTZ',&
-            'ELORENTZIAN','LORENTZ0','LORENTZIAN0','VOI-UNC','VOIGT-UNC','VOIGT-SUPER')
+            'ELORENTZIAN','LORENTZ0','LORENTZIAN0','VOI-UNC','VOIGT-UNC','VOIGT-SUPER','VOIGT-SUPER-QUAD')
           !
           if (pressure<small_.and.(w(1:3)=='VOI'.or.w(1:3)=='PSE')) then
              !
@@ -1084,6 +1084,10 @@ module spectrum
           !
           if (trim(w)=='VOIGT-UNC') w = 'VOI-U'
           if (trim(w)=='VOIGT-SUPER') w = 'VOI-S'
+          if (trim(w)=='VOIGT-SUPER-QUAD') then 
+            w = 'VOI-S'
+            profile_calc_type = 'BINNING'
+          endif
           !
           if (trim(w)=='PHOENIX') phoenix_do = .true.
           !
@@ -1094,7 +1098,7 @@ module spectrum
           if (proftype(1:5)=='VOI-U')  error_broadening_do = .true.
           !
           if (trim(w(1:5))=="LOREN") icutoff = 500
-          if (trim(w(1:))=="VOI") icutoff = 500
+          if (trim(w(1:3))=="VOI") icutoff = 500
           if (trim(w(1:3))=="PSE") icutoff = 500
           !cutoff = 25.0_rk
           !
@@ -1130,21 +1134,26 @@ module spectrum
               case("BINNING")
                 !
                 if (proftype(1:5)=="LOREN")    proftype = 'LORE0'
-                if (proftype(1:5)=="VOIGT")    proftype = 'VOI-QUAD'
+                if (proftype(1:5)=="VOIGT")    proftype = 'VOI-Q'
+                profile_calc_type = "BINNING"
                 !
               case("SUPER")
                 !
                 if (proftype(1:5)=="LOREN")    proftype = 'LOR-S'
                 if (proftype(1:5)=="VOIGT")    proftype = 'VOI-S'
+                profile_calc_type = "SUPER"
                 !
               case("SAMPLING")
                 !
                 if (proftype(1:3)=="DOP")  proftype = 'DOPP0'
-                if (proftype(1:3)=="GAU") proftype = 'GAUS0'
+                if (proftype(1:3)=="GAU")  proftype = 'GAUS0'
+                !
+                profile_calc_type = "SAMPLING"
                 !
               case ("NORM","NORMALIZED","AVERAGED")
                 !
-                if (proftype(1:3)=="VOI") proftype = 'VOI-QUAD'
+                if (proftype(1:3)=="VOI") proftype = 'VOI-Q'
+                profile_calc_type = "BINNING"
                 !
               case default
                 !
@@ -1466,6 +1475,11 @@ module spectrum
       if (trim(proftype) /= 'BIN-R' .and. trim(proftype) /= 'VOIGT') then 
         write(out,"(/'Warning: The RESOLVING option has not been tested for ',a,', only for BIN and VOIGT')") trim(proftype)
         !stop "The RESOLVING option can be used with BIN only"
+      endif
+      !
+      if (trim(proftype) == 'VOI-Q' ) then 
+        write(out,"(/'Error: The RESOLVING option cannot be used with  ',a,', only for BIN and VOIGT')") trim(proftype)
+        stop "The RESOLVING option cannot be used with Voigt-quand"
       endif
       !
       if (Ngrids>0) then
@@ -2518,7 +2532,7 @@ module spectrum
    !
    ! prepare the quadratures (Gauss-Hermite)
    !
-   if (trim(proftype(1:5))=='VOI-Q'.or.trim(proftype(1:5))=='VOI-S') then
+   if (trim(proftype(1:5))=='VOI-Q'.or.( trim(proftype(1:5))=='VOI-S').and.profile_calc_type == "BINNING") then
      write(out,"(/'Number of quadrature poitns (Gauss-Hermite) = ',i7/)") nquad
      !
      allocate(weight(nquad),abciss(nquad),bnormq(nquad),stat=info)
@@ -4753,19 +4767,37 @@ module spectrum
                  !
                endif
                !
-               do i = 1,npoints0
-                 !
-                 abscoef = intensity_T(i,itemp)
-                 tranfreq = frequency_grid_(i)
-                 hwhm_gauss=dpwcoef0*tranfreq*sqrt(temp0)
-                 !
-                 if (abscoef<abscoef_thresh) cycle
-                 !
-                 call do_Voigt(tranfreq,abscoef,freq,halfwidth0,hwhm_gauss,cutoff,freql,crosssections_T(:,itemp))
-                 !
-                 !call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth0,cutoff,freql,hwhm_gauss,crosssections_T(:,itemp))
-                 !
-               enddo
+               select case (profile_calc_type)
+                  !
+               case ("SAMPLING")
+                  !
+                  do i = 1,npoints0
+                    !
+                    abscoef = intensity_T(i,itemp)
+                    tranfreq = frequency_grid_(i)
+                    hwhm_gauss=dpwcoef0*tranfreq*sqrt(temp0)
+                    !
+                    if (abscoef<abscoef_thresh) cycle
+                    !
+                    call do_Voigt(tranfreq,abscoef,freq,halfwidth0,hwhm_gauss,cutoff,freql,crosssections_T(:,itemp))
+                    !
+                  enddo
+                  !
+               case ("BINNING")
+                  !
+                  do i = 1,npoints0
+                    !
+                    abscoef = intensity_T(i,itemp)
+                    tranfreq = frequency_grid_(i)
+                    hwhm_gauss=dpwcoef0*tranfreq*sqrt(temp0)
+                    !
+                    if (abscoef<abscoef_thresh) cycle
+                    !
+                    call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth0,cutoff,freql,hwhm_gauss,crosssections_T(:,itemp))
+                    !
+                  enddo
+                  !
+               end select
                !
             enddo
             !$omp end parallel do
@@ -4802,19 +4834,42 @@ module spectrum
             !
             line_intensity = 0
             !
-            !$omp parallel do private(i,abscoef,tranfreq,hwhm_gauss) shared(intens) schedule(dynamic)
-            do i = 1,npoints0
-              !
-              abscoef = intens(i)
-              tranfreq = frequency_grid_(i)
-              hwhm_gauss=dpwcoef*tranfreq
-              !
-              if (abscoef<abscoef_thresh) cycle
-              !
-              call do_Voigt(tranfreq,abscoef,freq,halfwidth,hwhm_gauss,cutoff,freql,line_intensity)
-              !
-            enddo
-            !$omp end parallel do
+            select case (profile_calc_type)
+               !
+            case ("SAMPLING")
+               !
+               !$omp parallel do private(i,abscoef,tranfreq,hwhm_gauss) shared(intens) schedule(dynamic)
+               do i = 1,npoints0
+                 !
+                 abscoef = intens(i)
+                 tranfreq = frequency_grid_(i)
+                 hwhm_gauss=dpwcoef*tranfreq
+                 !
+                 if (abscoef<abscoef_thresh) cycle
+                 !
+                 call do_Voigt(tranfreq,abscoef,freq,halfwidth,hwhm_gauss,cutoff,freql,line_intensity)
+                 !
+               enddo
+               !$omp end parallel do
+               !
+            case ("BINNING")
+               !
+               !$omp parallel do private(i,abscoef,tranfreq,hwhm_gauss) shared(intens) schedule(dynamic)
+               do i = 1,npoints0
+                 !
+                 abscoef = intens(i)
+                 tranfreq = frequency_grid_(i)
+                 hwhm_gauss=dpwcoef*tranfreq
+                 !
+                 if (abscoef<abscoef_thresh) cycle
+                 !
+                 !call do_Voigt(tranfreq,abscoef,freq,halfwidth,hwhm_gauss,cutoff,freql,line_intensity)
+                 call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth0,cutoff,freql,hwhm_gauss,line_intensity)
+                 !
+               enddo
+               !$omp end parallel do
+               !
+            end select
             !
             write(fmt_pressure,'(es16.8E3)') pressure
             !

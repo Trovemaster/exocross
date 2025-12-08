@@ -107,7 +107,8 @@ For very large linel lists, it is more efficient (but less accurate) to (i) comp
 
 
 It is possible to use the resolving-power grid for super-lines and then mapped it onto an equidistant map of grid of ``Npoints``, for example
-
+::
+    
     Temperature 2000
     Range 2000 2100
 
@@ -119,7 +120,7 @@ It is possible to use the resolving-power grid for super-lines and then mapped i
     absorption
     voigt-super
     .....
-
+    
 
 Here, the super-lines are computed on the :math:`R=100000` grid and then transformed to :math:`N_{\rm points} = 10001` grid.
 
