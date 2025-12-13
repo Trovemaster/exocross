@@ -4888,6 +4888,43 @@ module spectrum
           !
        endif
        !
+   case ('VOIGT')
+       !
+       ! remap frequency grid to a new value
+       !
+       npoints0 = npoints
+       !
+       if (array_job_do) then 
+          !
+          if (verbose>=4) then 
+             write(out,"(4x,a)") '...for a set of temperatures (array job)'
+          endif
+          !
+          allocate(crosssections_T(npoints,n_T_points),stat=info)
+          call ArrayStart('crosssections_T',info,size(crosssections_T),kind(crosssections_T))
+          crosssections_T = 0
+          !
+          write(cross_io_name, '(a)') 'T-dependent cross sections'
+          call IOstart(trim(cross_io_name),cross_unit)
+          !
+          !$omp parallel do private(itemp) shared(crosssections_T) schedule(dynamic)
+          do itemp = 1,n_T_points
+             crosssections_T(:,itemp) = intensity_T(:,itemp)
+          enddo
+          !$omp end parallel do
+          !
+       else
+          !
+          allocate(line_intensity(npoints),stat=info)
+          call ArrayStart('line_intensity',info,size(line_intensity),kind(line_intensity))
+          !
+          write(cross_io_name, '(a)') 'Single-T cross sections'
+          call IOstart(trim(cross_io_name),cross_unit)
+          !
+          line_intensity = intens
+          !
+       endif
+       !
    end select
    !
    call TimerStop('Post-processing: sum single-core')
