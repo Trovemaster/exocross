@@ -1984,11 +1984,15 @@ module spectrum
         allocate(temperature_array(n_T_points),stat=info)
         call ArrayStart('temperature_array',info,size(temperature_array),kind(temperature_array))
         !
+        if (verbose>=3) write(out,"(/'Processing:',i5,' temperatures in ',f11.4,' K steps')") n_T_points,dtemp
+        !
         do itemp = 1,n_T_points
           !
           temp0 = real(itemp-1,rk)*dtemp+T_min
           !
           temperature_array(itemp) = temp0
+          !
+          if (verbose>=4) write(out,"(5x,f11.4,' K')") temp0
           !
         enddo
         !
