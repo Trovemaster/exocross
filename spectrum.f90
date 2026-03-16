@@ -24,7 +24,7 @@ module spectrum
   real(rk)      :: enermax = 1e7, abscoef_thresh = 1.0d-50, abundance = 1.0d0, gf_factor = 1.0d0
   real(rk)      :: S_crit = 1e-29      ! cm/molecule, HITRAN cut-off paramater
   real(rk)      :: nu_crit = 2000.0d0  ! cm-1, HITRAN cut-off paramater
-  real(rk)      :: resolving_power  = 1e6,resolving_f ! using resolving_power to set up grid
+  real(rk)      :: resolving_power  = 1e6,resolving_power_2  = 0,resolving_f,resolving_f2 ! using resolving_power to set up grid
   real(rk)      :: grid_spacing  = 0.1  ! frequency bin size 
   character(len=cl) :: cutoff_intensity_model = "NONE"
   integer(ik)   :: nquad = 20      ! Number of quadrature points
@@ -343,6 +343,12 @@ module spectrum
             ! must be an odd number
             !
             if (mod(npoints_,2)==0) npoints_ = npoints_ + 1
+            !
+          case("R")
+            !
+            call readf(resolving_power_2)
+            !
+            resolving_f2 = log((resolving_power_2+1.0)/resolving_power_2)
             !
           case default
             !
@@ -4735,6 +4741,28 @@ module spectrum
          forall(ipoint=1:npoints) freq(ipoint)=freql+real(ipoint-1,rk)*dfreq
          !
          if (use_resolving_power) use_resolving_power = .false.
+         !
+       elseif(resolving_power_2>0) then
+         !
+         resolving_f = resolving_f2
+         resolving_power = resolving_power_2
+         !
+         npoints = nint(real((log(freqr)-log(freql))/resolving_f,rk))+1
+         !
+         deallocate(freq)
+         call ArrayStop('frequency')
+         !
+         allocate(freq(npoints),stat=info)
+         call ArrayStart('frequency',info,size(freq),kind(freq))
+         !
+         ! redefine the freq grid on the remapped grid
+         do ipoint =  1,npoints
+           !
+           tranfreq0 = real(ipoint-1,rk)*resolving_f+log(freql)
+           !
+           tranfreq0 = exp(tranfreq0)
+           freq(ipoint) = tranfreq0
+         enddo
          !
        endif
        !
