@@ -16,7 +16,7 @@ module spectrum
   integer(hik),parameter  :: max_transitions_to_ram = 1000000000
   integer(ik) :: N_omp_procs=1
   !
-  integer(ik)   :: GNS=1,n_T_points=1001,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,icutoff = 10,iso=1,imolecule =-1
+  integer(ik)   :: GNS=1,npoints=1001,nchar=1,nfiles=1,ipartf=0,verbose=2,icutoff = 10,iso=1,imolecule =-1
   real(rk)      :: temp=298.0,partfunc=-1.0,partfunc_ref=-1.0,freql=-small_,freqr= 200000.0,thresh=1.0d-70
   real(rk)      :: voigt_gamma = 0.05, voigt_n = 0.44, cutoff = 25.0, pressure = 1.0_rk,halfwidth=1e-2,meanmass=1.0,T_max=10000.0
   real(rk)      :: T_min = 0.0d0
@@ -147,12 +147,13 @@ module spectrum
   logical :: completed_work = .true.
   logical :: all_done = .false.
   logical :: upper_filter_active = .false.,lower_filter_active = .false.
-  logical :: array_job_do = .false.,cross_sections_do = .false.,pressure_array_job_do = .false.
+  logical :: cross_sections_do = .false.,pressure_array_job_do = .false.
+  logical :: temperature_array_job_do = .false.
   !
   type(VoigtKampffCollection),save :: fast_voigt
-  integer(ik),parameter :: Npressure_list_max = 100
-  real(rk)   :: Pressure_list(Npressure_list_max)
-  integer(ik) :: Npressure_list = 0
+  integer(ik),parameter :: Npressure_list_max = 100,Ntemperature_list_max = 100
+  real(rk)   :: Pressure_list(Npressure_list_max),Temperature_list(Ntemperature_list_max)
+  integer(ik) :: Npressure_list = 0,n_T_points = 0
   !
   contains
   !
@@ -167,7 +168,7 @@ module spectrum
     character(len=wl) :: vl
     integer(ik)   :: i,ifilter,iE,iS,ierror,igrid,i_t,info
     type(HitranErrorT),pointer :: HITRAN
-    real(rk) :: f_t
+    real(rk) :: f_t,dtemp,temp0
     ! -----------------------------------------------------------
     !
     write(out,"('Read the input')")
@@ -493,9 +494,9 @@ module spectrum
              !
           endif
           !
-        case ("ARRAY")
+        case ("TEMPERATURE-ARRAY","ARRAY")
           !
-          array_job_do = .true.
+          temperature_array_job_do = .true.
           !
           call read_line(eof) ; if (eof) exit
           call readu(w)
@@ -531,12 +532,52 @@ module spectrum
           !
           if (T_min>=T_max) stop "Illegal Min>Max Temperature"
           !
+          if (n_T_points>Ntemperature_list_max) then 
+             write(out,"(a,i8)") 'input-error N of temp-s is too high, increase Ntemperature_list_max in Duo'
+             stop 'input-error N of temp-s: the list is too long'
+          endif
+          !
           if (trim(w)/="".and.trim(w)/="END") then
-             !
              write (out,"('input: wrong last line in ARRAY =',a)") trim(w)
              stop 'input - illigal last line in ARRAY'
-             !
           endif
+          !
+          dtemp=(T_max-T_min)/real((n_T_points-1),rk)
+          !
+          do i = 1,n_T_points
+            !
+            temp0 = real(i-1,rk)*dtemp+T_min
+            !
+            Temperature_list(i) = temp0
+            !
+          enddo          
+          !
+        case ("TEMPERATURE-LIST")
+          !
+          temperature_array_job_do = .true. 
+          !
+          call read_line(eof) ; if (eof) exit
+          call readu(w)
+          !
+          i_t = 0 
+          !
+          do while (trim(w)/="".and.trim(w)/="END".and.i_t<Ntemperature_list_max)
+            !
+            i_t = i_t + 1
+            !
+            read(w,*) Temperature_list(i_t)
+            !
+            call read_line(eof) ; if (eof) exit
+            call readu(w)
+            !
+          enddo
+          !
+          if (i_t>Ntemperature_list_max) then 
+             write(out,"(a,i8)") 'input-error TEMPERATURE-LIST: the list is too long, increase Ntemperature_list_max in Duo'
+             stop 'input-error TEMPERATURE-LIST: the list is too long'
+          endif
+          !
+          n_T_points = i_t
           !
         case ("PRESSURE-LIST")
           !
@@ -1375,7 +1416,7 @@ module spectrum
     !
     ! limit array_job_do for the currently implemented case of Voigt and absorption 
     !
-    if (array_job_do) then
+    if (temperature_array_job_do) then
        if (trim(specttype)/='ABSORPTION'.or.(trim(proftype)/='VOIGT'.and.trim(proftype)/='VOI-S')) then
          write (out,"('input: ARRAY can currently work only with VOIGT in ABSORPTION')")
          stop 'input - illigal use of ARRAY: only VOIGT in ABSORPTION'
@@ -1512,6 +1553,11 @@ module spectrum
       Pressure_list(1)  = pressure
     endif
     !
+    if (n_T_points==0) then 
+      n_T_points = 1
+      Temperature_list(1)  = temp
+    endif
+    !
     if (use_nu_spacing) then
       !
       if (Ngrids>0) then
@@ -1640,7 +1686,7 @@ module spectrum
    integer(ik),allocatable :: ileveli_RAM(:),ilevelf_RAM(:),gamma_idx_RAM(:)
    integer(ik) :: nswap_,nswap,iswap,iswap_,iomp,ichunk
    real(rk),allocatable :: energies_vib(:),dens_vib(:),gamma_radiative(:),population(:)
-   real(rk),allocatable :: line_intensity(:),intensity_T(:,:),temperature_array(:),gamma_array_ram(:,:)
+   real(rk),allocatable :: line_intensity(:),intensity_T(:,:),gamma_array_ram(:,:)
    real(rk),allocatable :: crosssections_T(:,:),frequency_grid_(:)
    integer(ik),allocatable :: ivib_state(:),ivib_state_pf(:)
    !
@@ -1976,7 +2022,7 @@ module spectrum
       ! In case of specttype = partfunc the partition function will be computed for a series of temperatures.
       ! n_T_points stands for the number of temperature steps, and the frequency limits as temperature limits
       !
-      if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL'.or.array_job_do) then
+      if (proftype(1:4)=='PART'.or.proftype(1:4)=='COOL'.or.temperature_array_job_do) then
         !
         if (trim(enrfilename)=="none") then
            !
@@ -1985,22 +2031,22 @@ module spectrum
            !
         endif
         !
-        dtemp=(T_max-T_min)/real((n_T_points-1),rk)
+        !dtemp=(T_max-T_min)/real((n_T_points-1),rk)
         !
-        allocate(temperature_array(n_T_points),stat=info)
-        call ArrayStart('temperature_array',info,size(temperature_array),kind(temperature_array))
+        !allocate(temperature_array(n_T_points),stat=info)
+        !call ArrayStart('temperature_array',info,size(temperature_array),kind(temperature_array))
         !
-        if (verbose>=3) write(out,"(/'Processing:',i5,' temperatures in ',f11.4,' K steps')") n_T_points,dtemp
+        !if (verbose>=3) write(out,"(/'Processing:',i5,' temperatures in ',f11.4,' K steps')") n_T_points,dtemp
         !
-        do itemp = 1,n_T_points
-          !
-          temp0 = real(itemp-1,rk)*dtemp+T_min
-          !
-          temperature_array(itemp) = temp0
-          !
-          if (verbose>=4) write(out,"(5x,f11.4,' K')") temp0
-          !
-        enddo
+        !do itemp = 1,n_T_points
+        !  !
+        !  temp0 = real(itemp-1,rk)*dtemp+T_min
+        !  !
+        !  temperature_array(itemp) = temp0
+        !  !
+        !  if (verbose>=4) write(out,"(5x,f11.4,' K')") temp0
+        !  !
+        !enddo
         !
         if (proftype(1:4)=='PART') then
           !
@@ -2363,13 +2409,13 @@ module spectrum
                !
              endif
              !
-             if (proftype(1:4)=='COOL'.or.array_job_do) then
+             if (proftype(1:4)=='COOL'.or.temperature_array_job_do) then
                !
                do itemp = 1,n_T_points
                  !
                  if (energy>enermax) cycle
                  !
-                 temp0 = temperature_array(itemp)
+                 temp0 = Temperature_list(itemp)
                  !
                  beta0 = c2/temp0
                  !
@@ -2471,12 +2517,12 @@ module spectrum
      call IOstart(trim(ioname),pfunit)
      open(unit=pfunit,file=trim(pffilename),action='read',status='old')
      !
-     if (array_job_do) then 
+     if (temperature_array_job_do) then 
         ! multiple T search 
         ! 
         do_pf_file_read: do itemp = 1,n_T_points
           !
-          temp0 = temperature_array(itemp)
+          temp0 = Temperature_list(itemp)
           !
           pf_2 = 1.0_rk
           if (trim(enrfilename)/="NONE") pf_2 = gtot(1)
@@ -3156,7 +3202,7 @@ module spectrum
    endif
    !
    if (cross_sections_do) then 
-     if (array_job_do) then
+     if (temperature_array_job_do) then
        !
        ! In case of ARRAY cross sections are computed for a series of temperatures.
        ! n_T_points stands for the number of temperature steps.
@@ -3207,7 +3253,7 @@ module spectrum
    !
    if (lineprofile_do) then
 
-     if (array_job_do) then
+     if (temperature_array_job_do) then
         !
         allocate(gamma_array_ram(n_T_points,N_to_RAM),stat=info)
         call ArrayStart('gamma_array_ram',info,size(gamma_array_ram),kind(gamma_array_ram))
@@ -3433,12 +3479,12 @@ module spectrum
            !
            nswap = iswap_
            !
-           intband = intband + sum(abscoef_RAM(1:nswap))
-           !
            if (nswap<1) then
               if (verbose>=5) write(out,"('... Finish swap')")
               exit loop_tran
            endif
+           !
+           intband = intband + sum(abscoef_RAM(1:nswap))
            !
         elseif (spectra_do) then
            !
@@ -3497,12 +3543,12 @@ module spectrum
            !
            nswap = iswap_
            !
-           intband = intband + sum(abscoef_RAM(1:nswap))
-           !
            if (nswap<1) then
               if (verbose>=5) write(out,"('... Finish swap')")
               exit loop_tran
            endif
+           !
+           intband = intband + sum(abscoef_RAM(1:nswap))
            !
         elseif (super_Einstein_do) then ! super_energies_do
            !
@@ -3562,12 +3608,12 @@ module spectrum
            !
            nswap = iswap_
            !
-           intband = intband + sum(abscoef_RAM(1:nswap))
-           !
            if (nswap<1) then
               if (verbose>=5) write(out,"('... Finish swap')")
               exit loop_tran
            endif
+           !
+           intband = intband + sum(abscoef_RAM(1:nswap))
            !
         else ! ExoMol format of the line-by-line trans-file
            !
@@ -3578,7 +3624,14 @@ module spectrum
            do iswap = 1,N_to_RAM
              !
              read(tunit,*,end=121) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
+             !
              !read(tunit,'(i12,1x,i12,1x,es11.4)',end=121) indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
+             !
+             !print*,indexf_RAM(iswap),indexi_RAM(iswap),acoef_RAM(iswap)
+             !
+             !if (indexf_RAM(iswap)==81.and.indexi_RAM(iswap)==146) then
+             !   continue
+             !endif
              !
              cycle
              !
@@ -3623,7 +3676,7 @@ module spectrum
            ileveli_ram = -1
            abscoef_ram = 0
            !
-           if (array_job_do) then
+           if (temperature_array_job_do) then
               !
               !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,&
               !$omp& tranfreq,tranfreq0,abscoef,jf,ji,Ki,itemp,temp0)&
@@ -3681,7 +3734,7 @@ module spectrum
                    !
                    do itemp = 1,n_T_points
                      !
-                     temp0 = temperature_array(itemp)
+                     temp0 = Temperature_list(itemp)
                      !
                      gamma_array_ram(itemp,iswap) = get_Voigt_gamma_val(Nspecies,Ji,Jf,Ki,temp0)
                      !
@@ -3974,7 +4027,7 @@ module spectrum
                 !
                 if (lineprofile_do) then
                   !
-                  if (array_job_do) then 
+                  if (temperature_array_job_do) then 
                     !
                     gamma_array_ram(:,iswap_) = gamma_array_ram(:,iswap)
                     !
@@ -3999,6 +4052,11 @@ module spectrum
              !
            enddo
            nswap = iswap_-1
+           !
+           if (nswap<1) then
+              if (verbose>=5) write(out,"('... Skip swap')")
+              cycle loop_tran
+           endif
            !
            intband = intband + sum(abscoef_ram(1:nswap))
            !
@@ -4042,7 +4100,7 @@ module spectrum
             !
         case ('VOIGT')
             !
-            if (array_job_do) then 
+            if (temperature_array_job_do) then 
                !
                !$omp parallel private(line_intensity,alloc_p) shared(intens_T_omp)
                !
@@ -4066,7 +4124,7 @@ module spectrum
                    !
                    do itemp = 1,n_T_points
                      !
-                     temp0 = temperature_array(itemp)
+                     temp0 = Temperature_list(itemp)
                      !
                      beta0 = c2/temp0
                      !
@@ -4077,7 +4135,7 @@ module spectrum
                    if (all(line_intensity(:)<abscoef_thresh)) cycle
                    !
                    call do_Voigt_array(npoints,n_T_points,tranfreq,freq,gamma_array_ram(:,iswap),hwhm_gauss,&
-                        temperature_array,cutoff,freql,line_intensity,intens_T_omp(:,:,iomp))
+                        Temperature_list,cutoff,freql,line_intensity,intens_T_omp(:,:,iomp))
                    !
                  enddo
                  !
@@ -4135,9 +4193,10 @@ module spectrum
             !
         case ('VOI-S')
             !
-            if (array_job_do) then 
+            if (temperature_array_job_do) then 
               !
-              !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ileveli,energyi,itemp,temp0,beta0,abscoef_) schedule(dynamic)
+              !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ileveli,energyi,ipoint,itemp,temp0,beta0,abscoef_) &
+              !$omp& shared(intens_T_omp)  schedule(dynamic)
               do iomp = 1,N_omp_procs
                 !
                 do iswap = iomp,nswap,N_omp_procs
@@ -4151,7 +4210,7 @@ module spectrum
                   !
                   do itemp = 1,n_T_points
                     !
-                    temp0 = temperature_array(itemp)
+                    temp0 = Temperature_list(itemp)
                     !
                     beta0 = c2/temp0
                     !
@@ -4168,7 +4227,7 @@ module spectrum
               !
             else
               !
-              !$omp parallel do private(iomp,iswap,abscoef,tranfreq) schedule(dynamic)
+              !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint) schedule(dynamic)
               do iomp = 1,N_omp_procs
                 !
                 do iswap = iomp,nswap,N_omp_procs
@@ -4673,7 +4732,7 @@ module spectrum
         write(out,"(4x,a)") 'Combine intensities from different cores'
      endif
      !
-     if (array_job_do) then 
+     if (temperature_array_job_do) then 
         !
         do i=1,N_omp_procs
            intensity_T(:,:) = intensity_T(:,:) + intens_T_omp(:,:,i)
@@ -4766,7 +4825,7 @@ module spectrum
          !
        endif
        !
-       if (array_job_do) then 
+       if (temperature_array_job_do) then 
           !
           if (verbose>=4) then 
              write(out,"(4x,a)") '...for a set of temperatures (array job)'
@@ -4781,12 +4840,16 @@ module spectrum
           !
           do iP = 1,Npressure_list
             !
+            if (verbose>=3) then 
+               write(out,"(4x,a,g15.8)") 'P = ',Pressure_list(iP)
+            endif
+            !
             pressure = Pressure_list(iP)
             !
             !$omp parallel do private(itemp,temp0,halfwidth0,i,abscoef,tranfreq,hwhm_gauss) shared(crosssections_T) schedule(dynamic)
             do itemp = 1,n_T_points
                !
-               temp0 = temperature_array(itemp)
+               temp0 = Temperature_list(itemp)
                !
                halfwidth0 = halfwidth
                !
@@ -4926,7 +4989,7 @@ module spectrum
        !
        npoints0 = npoints
        !
-       if (array_job_do) then 
+       if (temperature_array_job_do) then 
           !
           if (verbose>=4) then 
              write(out,"(4x,a)") '...for a set of temperatures (array job)'
@@ -5150,7 +5213,7 @@ module spectrum
      else
        !
        ! Intensity_T output
-       if (array_job_do) then
+       if (temperature_array_job_do) then
          write(fmt_T_array,'(a,i0,a)')  '((1x,es16.8E3),1x,',n_T_points,'(1x,es16.8E3))'
          !
          do i=1,npoints
@@ -5169,15 +5232,15 @@ module spectrum
      if (any( trim(proftype(1:3))==(/'BIN','MAX'/)) ) dfreq = 1.0d0
      !
      if (verbose>=2) then 
-       if (array_job_do) then
+       if (temperature_array_job_do) then
          write(fmt_T_array,'(a,i0,a)') '(',n_T_points,'(1x,f16.3))'
          write(out,'(/"Total intensities (T in K):")')
-         write(out,fmt_T_array) temperature_array(1:n_T_points)
+         write(out,fmt_T_array) Temperature_list(1:n_T_points)
          write(fmt_T_array,'(a,i0,a)') '(',n_T_points,'(1x,es16.8E3))'
          do ipoint_=1,n_T_points
-           temperature_array(ipoint_) = sum(intensity_T(:,ipoint_))*dfreq
+           Temperature_list(ipoint_) = sum(intensity_T(:,ipoint_))*dfreq
          enddo
-         write(out,fmt_T_array) temperature_array(1:n_T_points)
+         write(out,fmt_T_array) Temperature_list(1:n_T_points)
        else
          print('(/"Total intensity  (sum):",es16.8," (int):",es16.8)'), intband,sum(intens)*dfreq
        endif
@@ -5406,10 +5469,10 @@ module spectrum
          call ArrayStop('intensity_T')
       endif
       !
-      if (allocated(temperature_array)) then 
-         deallocate(temperature_array)
-         call ArrayStop('temperature_array')
-      endif
+      !if (allocated(temperature_array)) then 
+      !   deallocate(temperature_array)
+      !   call ArrayStop('temperature_array')
+      !endif
       !
       if (allocated(gamma_array_ram)) then 
          deallocate(gamma_array_ram)
