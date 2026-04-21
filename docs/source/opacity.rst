@@ -1,11 +1,11 @@
 Opacities
 =========
 
-Here we list features and constructs designed specifically to facilitate opacity produciton: computation of cross sections on a large grid of temperatures and pressures. 
+Here we list features and constructs designed specifically to facilitate opacity produciton: computation of cross sections on a large grid of temperatures and pressures.
 
 
 The method is described in:
-K. L. Chubb, M. Rocchetto, S. N. Yurchenko, M. Min, I. Waldmann, J. K. Barstow, P. Molliére, A. F. Al-Refaie, M. Phillips, and J. Tennyson. "The ExoMolOP Database: Cross-sections and k-tables for Molecules of Interest in High-Temperature Exoplanet Atmospheres". A&A, 646:A21, 2020. 
+K. L. Chubb, M. Rocchetto, S. N. Yurchenko, M. Min, I. Waldmann, J. K. Barstow, P. Molliére, A. F. Al-Refaie, M. Phillips, and J. Tennyson. "The ExoMolOP Database: Cross-sections and k-tables for Molecules of Interest in High-Temperature Exoplanet Atmospheres". A&A, 646:A21, 2020.
 
 `See the paper here`_.
 
@@ -15,7 +15,7 @@ K. L. Chubb, M. Rocchetto, S. N. Yurchenko, M. Min, I. Waldmann, J. K. Barstow, 
 Computing cross sections on a grid of temperatures (array job)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-For opacity productions when cross sections are computed for a large set of temperatures, it can be more efficient to process cross sections for all temperatures simultaneously, similarly how the partition and cooling functions are computed. To this end, the following ``ARRAY`` block structure can be used. The saving is due to a reduced IO: the line list files need to be read only ones and used for all the temperatures.
+For opacity productions when cross sections are computed for a large set of temperatures, it can be more efficient to process cross sections for all temperatures simultaneously, similarly how the partition and cooling functions are computed. To this end, the following ``TEMPERATURE-ARRAY`` (``array``) block structure can be used. The saving is due to a reduced IO: the line list files need to be read only ones and used for all the temperatures.
 
 ::
 
@@ -23,7 +23,7 @@ For opacity productions when cross sections are computed for a large set of temp
 
      Npoints 5901
 
-     array
+     temperature-array
       n 10
       tmin 100
       tmax 1000
@@ -54,6 +54,8 @@ Here
 * ``Tmin``  is the minima temperature in K
 * ``Tmax``  is the maximal temperature in K
 
+
+
 All cross sections are printed out into a single ``output`` file as different columns following the frequency column, e.g.
 
 ::
@@ -64,6 +66,23 @@ All cross sections are printed out into a single ``output`` file as different co
      5.88800000E+003   2.12842862E-035  2.98897895E-030  1.56465959E-028  1.28410634E-027  4.90675516E-027  1.23246563E-026  2.40312414E-026
      5.88900000E+003   6.41335689E-035  9.31393311E-030  4.36473210E-028  2.97204673E-027  9.52430574E-027  2.08438541E-026  3.65880214E-026
      ....
+
+
+It is also possible to use a non-uniform ``temperature-list`` by explicitly specifying the temperatures to process similar to the ``pressure-list`` as follows 
+
+::
+
+     Range 0 5900
+
+     Npoints 5901
+
+     temperature-list
+      300
+      400
+      1000
+     end
+
+
 
 The main (standard) output will also contain values of the total absorption for each temperature.
 
@@ -108,7 +127,7 @@ For very large linel lists, it is more efficient (but less accurate) to (i) comp
 
 It is possible to use the resolving-power grid for super-lines and then mapped it onto an equidistant map of grid of ``Npoints``, for example
 ::
-    
+
     Temperature 2000
     Range 2000 2100
 
@@ -120,7 +139,7 @@ It is possible to use the resolving-power grid for super-lines and then mapped i
     absorption
     voigt-super
     .....
-    
+
 
 Here, the super-lines are computed on the :math:`R=100000` grid and then transformed to :math:`N_{\rm points} = 10001` grid.
 
