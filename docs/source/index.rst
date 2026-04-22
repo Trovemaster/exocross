@@ -23,6 +23,11 @@ Welcome to ExoCross's documentation!
    keywords
    license
 
+Recent news
+===========
+
+21.04.2026: Bulk productions of cross-secitons for grids of temperatures and pressures, see temperature-list and pressure-list constructs in :ref:`opacity`.
+
  
 Indices and tables
 ==================
