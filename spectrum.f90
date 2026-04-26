@@ -1417,9 +1417,9 @@ module spectrum
     ! limit array_job_do for the currently implemented case of Voigt and absorption 
     !
     if (temperature_array_job_do) then
-       if (trim(specttype)/='ABSORPTION'.or.(trim(proftype)/='VOIGT'.and.trim(proftype)/='VOI-S')) then
-         write (out,"('input: ARRAY can currently work only with VOIGT in ABSORPTION')")
-         stop 'input - illigal use of ARRAY: only VOIGT in ABSORPTION'
+       if (trim(specttype)/='ABSORPTION'.or.(trim(proftype)/='VOIGT'.and.trim(proftype)/='VOI-S'.and.proftype(1:5)/='GAUSS')) then
+         write (out,"('input: ARRAY can currently work only with VOIGT or GAUSS in ABSORPTION')")
+         stop 'input - illigal use of ARRAY: only VOIGT OR GAUSS in ABSORPTION'
        endif
        !
        if (filter) then 
@@ -4326,21 +4326,59 @@ module spectrum
             !
         case ('GAUSS')
             !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
-            do iomp = 1,N_omp_procs
+            if (temperature_array_job_do) then 
               !
-              do iswap = iomp,nswap,N_omp_procs
+              stop 'Gauss with temperature_array_job_do has not been implemented yet'
+              !
+              !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ileveli,energyi,ipoint,itemp,temp0,beta0,abscoef_) &
+              !$omp& shared(intens_T_omp)  schedule(dynamic)
+              do iomp = 1,N_omp_procs
                 !
-                abscoef = abscoef_ram(iswap)
-                tranfreq = nu_ram(iswap)
-                halfwidth = gamma_ram(iswap)
-                !
-                call do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,intens_omp(:,iomp))
+                do iswap = iomp,nswap,N_omp_procs
+                  !
+                  abscoef = abscoef_ram(iswap)
+                  tranfreq = nu_ram(iswap)
+                  ileveli = ileveli_ram(iswap)
+                  energyi = energies(ileveli)
+                  !
+                  call get_grid_ipoint(tranfreq,freq,ipoint)
+                  !
+                  do itemp = 1,n_T_points
+                    !
+                    temp0 = Temperature_list(itemp)
+                    !
+                    beta0 = c2/temp0
+                    !
+                    abscoef_ = abscoef*exp(-beta0*energyi)*(1.0_rk-exp(-beta0*tranfreq))/pf(0,itemp)
+                    !
+                    intens_T_omp(ipoint,itemp,iomp) = intens_T_omp(ipoint,itemp,iomp)+abscoef_
+                    !
+                  enddo
+                  !
+                enddo
                 !
               enddo
+              !$omp end parallel do
               !
-            enddo
-            !$omp end parallel do
+            else
+              !
+              !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+              do iomp = 1,N_omp_procs
+                !
+                do iswap = iomp,nswap,N_omp_procs
+                  !
+                  abscoef = abscoef_ram(iswap)
+                  tranfreq = nu_ram(iswap)
+                  halfwidth = gamma_ram(iswap)
+                  !
+                  call do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,intens_omp(:,iomp))
+                  !
+                enddo
+                !
+              enddo
+              !$omp end parallel do
+              !
+            endif
             !
         case ('LOREN')
             !
