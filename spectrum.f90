@@ -3456,7 +3456,9 @@ module spectrum
              !
              ! estimate the line shape parameter
              !
-             gamma_ram(iswap_) = halfwidth
+             if (lineprofile_do.and..not.species(1)%if_defined) then 
+                gamma_ram(iswap_) = halfwidth
+             endif
              !
              if (proftype(1:3)=='VOI'.or.proftype(1:3)=='LOR') then
              !if (lineprofile_do.and..not.species(1)%if_defined) then
