@@ -1434,6 +1434,17 @@ module spectrum
        !
     endif
     !
+    ! check that pressure is not given where it cannot be used
+    if (pressure_array_job_do) then
+      !    
+      if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','MAX','PSE','COO','ELO'/)) ) then
+         !
+         write (out,"('input: pressure-list is not expected for the type',a)") trim(proftype)
+         stop 'input - illegal use of pressure-list for the profile given'
+      endif
+      !
+    endif 
+    !
     ! these keywords indicate that we compute cross sectons:
     if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE','COO','ELO'/)) ) then
       cross_sections_do = .true.
@@ -4327,39 +4338,50 @@ module spectrum
         case ('GAUSS')
             !
             if (temperature_array_job_do) then 
-              !
-              stop 'Gauss with temperature_array_job_do has not been implemented yet'
-              !
-              !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ileveli,energyi,ipoint,itemp,temp0,beta0,abscoef_) &
-              !$omp& shared(intens_T_omp)  schedule(dynamic)
-              do iomp = 1,N_omp_procs
-                !
-                do iswap = iomp,nswap,N_omp_procs
-                  !
-                  abscoef = abscoef_ram(iswap)
-                  tranfreq = nu_ram(iswap)
-                  ileveli = ileveli_ram(iswap)
-                  energyi = energies(ileveli)
-                  !
-                  call get_grid_ipoint(tranfreq,freq,ipoint)
-                  !
-                  do itemp = 1,n_T_points
-                    !
-                    temp0 = Temperature_list(itemp)
-                    !
-                    beta0 = c2/temp0
-                    !
-                    abscoef_ = abscoef*exp(-beta0*energyi)*(1.0_rk-exp(-beta0*tranfreq))/pf(0,itemp)
-                    !
-                    intens_T_omp(ipoint,itemp,iomp) = intens_T_omp(ipoint,itemp,iomp)+abscoef_
-                    !
-                  enddo
-                  !
-                enddo
-                !
-              enddo
-              !$omp end parallel do
-              !
+               !
+               !$omp parallel private(line_intensity,alloc_p) shared(intens_T_omp)
+               !
+               allocate(line_intensity(n_T_points),stat=alloc_p)
+               if (alloc_p/=0) then
+                   write (out,"(' VOIGT array: ',i9,' trying to allocate line_intensity')") alloc_p
+                   stop 'line_intensity - out of memory'
+               end if
+               !
+               !$omp do private(iomp,iswap,abscoef,tranfreq,halfwidth,hwhm_gauss,ileveli,energyi,itemp,temp0,beta0) &
+               !$omp&  schedule(dynamic)
+               do iomp = 1,N_omp_procs
+                 !
+                 do iswap = iomp,nswap,N_omp_procs
+                   !
+                   abscoef = abscoef_ram(iswap)
+                   tranfreq = nu_ram(iswap)
+                   halfwidth = gamma_ram(iswap)
+                   ileveli = ileveli_ram(iswap)
+                   energyi = energies(ileveli)
+                   !
+                   do itemp = 1,n_T_points
+                     !
+                     temp0 = Temperature_list(itemp)
+                     !
+                     beta0 = c2/temp0
+                     !
+                     line_intensity(itemp) = abscoef*exp(-beta0*energyi)*(1.0_rk-exp(-beta0*tranfreq))/pf(0,itemp)
+                     !
+                   enddo
+                   !
+                   if (all(line_intensity(:)<abscoef_thresh)) cycle
+                   !
+                   call do_gauss_binning_array(npoints,n_T_points,tranfreq,freq,dfreq,&
+                        halfwidth,Temperature_list,cutoff,freql,line_intensity,intens_T_omp(:,:,iomp))
+                   !
+                 enddo
+                 !
+               enddo
+               !$omp enddo
+               !
+               deallocate(line_intensity)    
+               !$omp end parallel            
+               !
             else
               !
               !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
@@ -5021,7 +5043,7 @@ module spectrum
           !
        endif
        !
-   case ('VOIGT')
+   case ('VOIGT','GAUSS')
        !
        ! remap frequency grid to a new value
        !
@@ -5748,6 +5770,58 @@ module spectrum
 
   end subroutine do_gauss_binning
   !
+  !
+  subroutine do_gauss_binning_array(npoints,n_T_points,tranfreq,freq,&
+                      dfreq,halfwidth,temperature_array,cutoff,freql,line_intensity,intensity)
+     !
+     implicit none
+     !
+     integer(ik),intent(in) :: npoints,n_T_points
+     !
+     real(rk),intent(in) :: tranfreq,halfwidth,cutoff,freql,dfreq
+     real(rk),intent(in) :: freq(npoints),line_intensity(n_T_points),temperature_array(n_T_points)
+     real(rk),intent(inout) :: intensity(npoints,n_T_points)
+     real(rk) :: T,halfwidth_doppler,halfwidth_gauss
+     real(rk) :: dfreq_,de,xp,xm,ln2,x0,cutoff_
+     integer(ik) :: ib,ie,ipoint,itemp
+      !
+      halfwidth_gauss = halfwidth
+      !
+      ln2=log(2.0_rk)
+      !
+      x0 = sqrt(ln2)/halfwidth*dfreq*0.5_rk
+      !
+      cutoff_ = cutoff
+      if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth_gauss
+      !
+      do itemp = 1,n_T_points
+        !
+        T  = temperature_array(itemp)
+        !
+        call get_ipoint_ranges(tranfreq,freq,cutoff_,ib,ie)
+        !
+        !halfwidth_doppler=halfwidth_gauss*sqrt(T)
+        !
+        if (halfwidth_gauss<100.0_rk*small_) return
+        !
+        if (ie<=ib) return
+        !
+        do ipoint = ib, ie
+           !
+           dfreq_=freq(ipoint)-tranfreq
+           !
+           xp = sqrt(ln2)/halfwidth*(dfreq_)+x0
+           xm = sqrt(ln2)/halfwidth*(dfreq_)-x0
+           !
+           de = erf(xp)-erf(xm)
+           !
+           intensity(ipoint,itemp)=intensity(ipoint,itemp)+line_intensity(itemp)*0.5_rk/dfreq*de
+           !
+        enddo
+        !
+      enddo
+      !
+  end subroutine do_gauss_binning_array
   !
   subroutine do_lorentz_binning(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,intens)
      !
@@ -6947,6 +7021,17 @@ module spectrum
      integer(ik) :: ispecies,Jpp,Jp,Kpp
      !
      halfwidth = 0
+     !
+     if (trim(species(1)%model)=='BOX') then
+         !
+         Jpp = nint(Ji)
+         Jp  = nint(Jf)
+         Kpp = nint(Ki)
+         !
+         f = species(1)%gammaQN(Jpp,Jp-Jpp,Kpp)
+         return
+         !
+     endif
      !
      do ispecies =1,Nspecies
        !
