@@ -138,7 +138,7 @@ module spectrum
              interpolated = .false.,population_do = .false.,nonLTE_do = .false.,&
              error_broadening_do = .false.,use_uncertainty = .false.
   logical :: do_nu_error_based_on_unc = .false.
-  logical :: lineprofile_do = .false., use_width_cutoff = .false.
+  logical :: lineprofile_do = .false., use_width_cutoff = .false., temper_lineprofile_do = .false.
   logical :: microns = .false.
   logical :: use_resolving_power = .false.  ! using resolving for creating the grid
   logical :: use_nu_spacing = .false.  ! use spacing to create the nu grid 
@@ -1417,8 +1417,10 @@ module spectrum
     ! limit array_job_do for the currently implemented case of Voigt and absorption 
     !
     if (temperature_array_job_do) then
-       if (trim(specttype)/='ABSORPTION'.or.(trim(proftype)/='VOIGT'.and.trim(proftype)/='VOI-S'.and.proftype(1:5)/='GAUSS')) then
-         write (out,"('input: ARRAY can currently work only with VOIGT or GAUSS in ABSORPTION')")
+       !
+       if (trim(specttype)/='ABSORPTION'.or.(trim(proftype)/='VOIGT'.and.trim(proftype)/='VOI-S'.and.&
+           proftype(1:5)/='GAUSS'.and.proftype(1:5)/='GAUS0'.and.proftype(1:5)/='DOPPL')) then
+         write (out,"('input: ARRAY can currently work only with VOIGT, GAUSS or GAUS0 in ABSORPTION')")
          stop 'input - illigal use of ARRAY: only VOIGT OR GAUSS in ABSORPTION'
        endif
        !
@@ -1432,6 +1434,13 @@ module spectrum
          !stop 'input - illigal use of ARRAY with pffile'
        endif
        !
+    endif
+    !
+    if (temperature_array_job_do) then
+        ! use this flag for temperature dependent line profiles Voi and Lor
+        !
+        if (proftype(1:3)=='VOI'.or.proftype(1:3)=='LOR') temper_lineprofile_do = .true.
+        !
     endif
     !
     ! check that pressure is not given where it cannot be used
@@ -1718,7 +1727,7 @@ module spectrum
    character(len=20)  :: fmt_pressure 
    real(real32) :: nan    
    logical :: upper_state_selected,lower_state_selected,pf_use_from_file = .true.
-   !
+   logical :: doppler_flag = .false.
    !
    ln2=log(2.0_rk)
    ln22 = ln2*2.0_rk
@@ -3037,6 +3046,8 @@ module spectrum
           !
        endif
        !
+       if (proftype(1:3)=='DOP')  doppler_flag = .true.
+       !
    case ('RECT','BOX','MAX','BIN')
        !
        if (verbose>=2) then
@@ -3263,8 +3274,8 @@ module spectrum
    call ArrayStart('swap:ilevelf_RAM',info,size(ilevelf_RAM),kind(ilevelf_RAM))
    !
    if (lineprofile_do) then
-
-     if (temperature_array_job_do) then
+     !
+     if (temper_lineprofile_do) then
         !
         allocate(gamma_array_ram(n_T_points,N_to_RAM),stat=info)
         call ArrayStart('gamma_array_ram',info,size(gamma_array_ram),kind(gamma_array_ram))
@@ -3745,13 +3756,21 @@ module spectrum
                    ji = jrot(ileveli)
                    Ki = krot(ilevelf)
                    !
-                   do itemp = 1,n_T_points
-                     !
-                     temp0 = Temperature_list(itemp)
-                     !
-                     gamma_array_ram(itemp,iswap) = get_Voigt_gamma_val(Nspecies,Ji,Jf,Ki,temp0)
-                     !
-                   enddo
+                   if (temper_lineprofile_do) then 
+                      !
+                      do itemp = 1,n_T_points
+                        !
+                        temp0 = Temperature_list(itemp)
+                        !
+                        gamma_array_ram(itemp,iswap) = get_Voigt_gamma_val(Nspecies,Ji,Jf,Ki,temp0)
+                        !
+                      enddo
+                      !
+                   else
+                      !
+                      gamma_ram(iswap) = get_Voigt_gamma_val(Nspecies,Ji,Jf,Ki,temp0)
+                      !
+                   endif
                    !
                 endif
                 !
@@ -4283,40 +4302,139 @@ module spectrum
             !
         case ('GAUS0')
             !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
-            do iomp = 1,N_omp_procs
-              !
-              do iswap = iomp,nswap,N_omp_procs
-                !
-                abscoef = abscoef_ram(iswap)
-                tranfreq = nu_ram(iswap)
-                halfwidth = gamma_ram(iswap)
-                !
-                call do_gauss_sampling(tranfreq,abscoef,dfreq,freq,halfwidth,freql,intens_omp(:,iomp))
-                !
-              enddo
-              !
-            enddo
-            !$omp end parallel do
+            if (temperature_array_job_do) then 
+               !
+               !$omp parallel private(line_intensity,alloc_p) shared(intens_T_omp)
+               !
+               allocate(line_intensity(n_T_points),stat=alloc_p)
+               if (alloc_p/=0) then
+                   write (out,"(' VOIGT array: ',i9,' trying to allocate line_intensity')") alloc_p
+                   stop 'line_intensity - out of memory'
+               end if
+               !
+               !$omp do private(iomp,iswap,abscoef,tranfreq,halfwidth,ileveli,energyi,itemp,temp0,beta0) &
+               !$omp&  schedule(dynamic)
+               do iomp = 1,N_omp_procs
+                 !
+                 do iswap = iomp,nswap,N_omp_procs
+                   !
+                   abscoef = abscoef_ram(iswap)
+                   tranfreq = nu_ram(iswap)
+                   ileveli = ileveli_ram(iswap)
+                   energyi = energies(ileveli)
+                   !
+                   do itemp = 1,n_T_points
+                     !
+                     temp0 = Temperature_list(itemp)
+                     !
+                     beta0 = c2/temp0
+                     !
+                     line_intensity(itemp) = abscoef*exp(-beta0*energyi)*(1.0_rk-exp(-beta0*tranfreq))/pf(0,itemp)
+                     !
+                   enddo
+                   !
+                   halfwidth = gamma_ram(iswap) 
+                   !
+                   if (all(line_intensity(:)<abscoef_thresh)) cycle
+                   !
+                   call do_gauss_sampling_array(npoints,n_T_points,tranfreq,freq,dfreq,&
+                        halfwidth,Temperature_list,cutoff,freql,line_intensity,intens_T_omp(:,:,iomp))
+                   !
+                 enddo
+                 !
+               enddo
+               !$omp enddo
+               !
+               deallocate(line_intensity)    
+               !$omp end parallel            
+               !
+            else            
+               !
+               !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+               do iomp = 1,N_omp_procs
+                 !
+                 do iswap = iomp,nswap,N_omp_procs
+                   !
+                   abscoef = abscoef_ram(iswap)
+                   tranfreq = nu_ram(iswap)
+                   halfwidth = gamma_ram(iswap)
+                   !
+                   call do_gauss_sampling(tranfreq,abscoef,dfreq,freq,halfwidth,freql,intens_omp(:,iomp))
+                   !
+                 enddo
+                 !
+               enddo
+               !$omp end parallel do
+               !
+            endif
             !
         case ('DOPPL')
             !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth0) shared(intens_omp) schedule(dynamic)
-            do iomp = 1,N_omp_procs
-              !
-              do iswap = iomp,nswap,N_omp_procs
-                !
-                abscoef = abscoef_ram(iswap)
-                tranfreq = nu_ram(iswap)
-                halfwidth0=dpwcoef*tranfreq
-                if (halfwidth0<100.0_rk*small_) cycle
-                !
-                call do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth0,cutoff,freql,intens_omp(:,iomp))
-                !
-              enddo
-              !
-            enddo
-            !$omp end parallel do
+            if (temperature_array_job_do) then
+               !
+               !$omp parallel private(line_intensity,alloc_p) shared(intens_T_omp)
+               !
+               allocate(line_intensity(n_T_points),stat=alloc_p)
+               if (alloc_p/=0) then
+                   write (out,"(' VOIGT array: ',i9,' trying to allocate line_intensity')") alloc_p
+                   stop 'line_intensity - out of memory'
+               end if
+               !
+               !$omp do private(iomp,iswap,abscoef,tranfreq,ileveli,energyi,halfwidth,itemp,temp0,beta0) &
+               !$omp&  schedule(dynamic)
+               do iomp = 1,N_omp_procs
+                 !
+                 do iswap = iomp,nswap,N_omp_procs
+                   !
+                   abscoef = abscoef_ram(iswap)
+                   tranfreq = nu_ram(iswap)
+                   ileveli = ileveli_ram(iswap)
+                   energyi = energies(ileveli)
+                   halfwidth=dpwcoef0*tranfreq
+                   !
+                   do itemp = 1,n_T_points
+                     !
+                     temp0 = Temperature_list(itemp)
+                     !
+                     beta0 = c2/temp0
+                     !
+                     line_intensity(itemp) = abscoef*exp(-beta0*energyi)*(1.0_rk-exp(-beta0*tranfreq))/pf(0,itemp)
+                     !
+                   enddo
+                   !
+                   if (all(line_intensity(:)<abscoef_thresh)) cycle
+                   !
+                   call do_gauss_binning_array(npoints,n_T_points,tranfreq,freq,dfreq,&
+                        halfwidth,Temperature_list,cutoff,freql,line_intensity,doppler_flag,intens_T_omp(:,:,iomp))
+                   !
+                 enddo
+                 !
+               enddo
+               !$omp enddo
+               !
+               deallocate(line_intensity)    
+               !$omp end parallel            
+               !
+            else
+               !
+               !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth0) shared(intens_omp) schedule(dynamic)
+               do iomp = 1,N_omp_procs
+                 !
+                 do iswap = iomp,nswap,N_omp_procs
+                   !
+                   abscoef = abscoef_ram(iswap)
+                   tranfreq = nu_ram(iswap)
+                   halfwidth0=dpwcoef*tranfreq
+                   if (halfwidth0<100.0_rk*small_) cycle
+                   !
+                   call do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth0,cutoff,freql,intens_omp(:,iomp))
+                   !
+                 enddo
+                 !
+               enddo
+               !$omp end parallel do
+               !
+            endif
             !
         case ('DOPP0')
             !
@@ -4349,7 +4467,7 @@ module spectrum
                    stop 'line_intensity - out of memory'
                end if
                !
-               !$omp do private(iomp,iswap,abscoef,tranfreq,halfwidth,hwhm_gauss,ileveli,energyi,itemp,temp0,beta0) &
+               !$omp do private(iomp,iswap,abscoef,tranfreq,halfwidth,ileveli,energyi,itemp,temp0,beta0) &
                !$omp&  schedule(dynamic)
                do iomp = 1,N_omp_procs
                  !
@@ -4357,7 +4475,6 @@ module spectrum
                    !
                    abscoef = abscoef_ram(iswap)
                    tranfreq = nu_ram(iswap)
-                   halfwidth = gamma_ram(iswap)
                    ileveli = ileveli_ram(iswap)
                    energyi = energies(ileveli)
                    !
@@ -4373,8 +4490,10 @@ module spectrum
                    !
                    if (all(line_intensity(:)<abscoef_thresh)) cycle
                    !
+                   halfwidth = gamma_ram(iswap)
+                   !
                    call do_gauss_binning_array(npoints,n_T_points,tranfreq,freq,dfreq,&
-                        halfwidth,Temperature_list,cutoff,freql,line_intensity,intens_T_omp(:,:,iomp))
+                        halfwidth,Temperature_list,cutoff,freql,line_intensity,doppler_flag,intens_T_omp(:,:,iomp))
                    !
                  enddo
                  !
@@ -5045,7 +5164,7 @@ module spectrum
           !
        endif
        !
-   case ('VOIGT','GAUSS')
+   case ('VOIGT','GAUSS','GAUS0','DOPPL')
        !
        ! remap frequency grid to a new value
        !
@@ -5276,6 +5395,12 @@ module spectrum
        !
        ! Intensity_T output
        if (temperature_array_job_do) then
+         !
+         if (.not.allocated(crosssections_T)) then
+             write(out,"('crosssections_T was not allocated - check profile type')")
+             stop 'crosssections_T was not allocated - check profile type'
+         endif
+         !
          write(fmt_T_array,'(a,i0,a)')  '((1x,es16.8E3),1x,',n_T_points,'(1x,es16.8E3))'
          !
          do i=1,npoints
@@ -5625,6 +5750,54 @@ module spectrum
   end subroutine do_gauss_sampling
   !
   !
+  subroutine do_gauss_sampling_array(npoints,n_T_points,tranfreq,freq,&
+                      dfreq,halfwidth,temperature_array,cutoff,freql,line_intensity,intensity)
+     !
+     implicit none
+     !
+     integer(ik),intent(in) :: npoints,n_T_points
+     !
+     real(rk),intent(in) :: tranfreq,halfwidth,cutoff,freql,dfreq
+     real(rk),intent(in) :: freq(npoints),line_intensity(n_T_points),temperature_array(n_T_points)
+     real(rk),intent(inout) :: intensity(npoints,n_T_points)
+     real(rk) :: T,halfwidth_doppler,halfwidth_gauss
+     real(rk) :: dfreq_,de,ln2,cutoff_,alpha
+     integer(ik) :: ib,ie,ipoint,itemp
+      !
+      halfwidth_gauss = halfwidth
+      !
+      ln2=log(2.0_rk)
+      !
+      cutoff_ = cutoff
+      if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth_gauss
+      !
+      alpha = -ln2/halfwidth**2
+      !
+      do itemp = 1,n_T_points
+        !
+        T  = temperature_array(itemp)
+        !
+        call get_ipoint_ranges(tranfreq,freq,cutoff_,ib,ie)
+        !
+        if (halfwidth_gauss<100.0_rk*small_) return
+        !
+        if (ie<=ib) return
+        !
+        do ipoint = ib, ie
+           !
+           dfreq_=freq(ipoint)-tranfreq
+           !
+           de = exp(alpha*dfreq_**2)
+           !
+           intensity(ipoint,itemp)=intensity(ipoint,itemp)+line_intensity(itemp)*de
+           !
+        enddo
+        !
+      enddo
+      !
+  end subroutine do_gauss_sampling_array
+  
+  !
   ! Obtain left and right grid points around the current frequency
   subroutine get_ipoint_ranges(tranfreq,freq,cutoff,ib,ie)
      !
@@ -5774,7 +5947,7 @@ module spectrum
   !
   !
   subroutine do_gauss_binning_array(npoints,n_T_points,tranfreq,freq,&
-                      dfreq,halfwidth,temperature_array,cutoff,freql,line_intensity,intensity)
+                      dfreq,halfwidth,temperature_array,cutoff,freql,line_intensity,doppler,intensity)
      !
      implicit none
      !
@@ -5782,6 +5955,7 @@ module spectrum
      !
      real(rk),intent(in) :: tranfreq,halfwidth,cutoff,freql,dfreq
      real(rk),intent(in) :: freq(npoints),line_intensity(n_T_points),temperature_array(n_T_points)
+     logical,intent(in) :: doppler
      real(rk),intent(inout) :: intensity(npoints,n_T_points)
      real(rk) :: T,halfwidth_doppler,halfwidth_gauss
      real(rk) :: dfreq_,de,xp,xm,ln2,x0,cutoff_
@@ -5802,7 +5976,7 @@ module spectrum
         !
         call get_ipoint_ranges(tranfreq,freq,cutoff_,ib,ie)
         !
-        !halfwidth_doppler=halfwidth_gauss*sqrt(T)
+        if (doppler) halfwidth_gauss=halfwidth*sqrt(T)
         !
         if (halfwidth_gauss<100.0_rk*small_) return
         !
