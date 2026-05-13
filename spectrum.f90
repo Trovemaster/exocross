@@ -4059,7 +4059,7 @@ module spectrum
                 !
                 if (lineprofile_do) then
                   !
-                  if (temperature_array_job_do) then 
+                  if (temper_lineprofile_do) then 
                     !
                     gamma_array_ram(:,iswap_) = gamma_array_ram(:,iswap)
                     !
