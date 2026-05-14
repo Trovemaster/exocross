@@ -35,8 +35,8 @@ Example:
 
 
 Alternatively, the temperature grid can be  given as  ``TEMPERATURE-LIST``, see the corresponding documentation. The structure of the input in this case is as follows: 
-
-
+::
+    
     partfunc
       list
     end
