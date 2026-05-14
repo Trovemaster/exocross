@@ -4,7 +4,7 @@ Partition functions
 Generation of partition funcitons
 ---------------------------------
 
-A partition functions can be computed on a grid of temperatures using the  block ``partfunc``, which specifies the temperature grid via ``Tmax`` (maximal temperature) and ``N`` (the number of the temperatures). 
+A partition functions can be computed on a grid of temperatures using the  block ``partfunc``, which specifies the temperature grid via ``Tmax`` (maximal temperature) and ``N`` (the number of the temperatures).
 
 
 Example:
@@ -34,6 +34,22 @@ Example:
     States    ScH_adj_16665.states
 
 
+Alternatively, the temperature grid can be  given as  ``TEMPERATURE-LIST``, see the corresponding documentation. The structure of the input in this case is as follows: 
+
+
+    partfunc
+      list
+    end
+    
+    temperature-list
+     200
+     296
+     300
+     1000
+    end
+    
+where the keyword ``list`` is used to indicate the temperature will be read from  a ``temperature-list``.
+
 
 Specific heat
 ^^^^^^^^^^^^^
@@ -62,15 +78,15 @@ Providing partition external function functions
 An single partition function value can be defined using the keyword ``pf``:
 ::
 
-    pf 3817.0 
+    pf 3817.0
 
 
 Alternatively, a file containing a partition function on a grid of temperatures (assuming the standard format, :math:`T\,\,\,\,\,Q(T)`) can be provided using the keyword ``pffile``, e.g.
 ::
 
     pffile  28Si-16O__SiOUVenIR.pf
-    
-.. note: If the temperature(s) requested is outside (larger than) the temperature range in the partition function file, the value will be computed using the energies provided in the .states file. 
+
+.. note: If the temperature(s) requested is outside (larger than) the temperature range in the partition function file, the value will be computed using the energies provided in the .states file.
 
 
 
