@@ -2413,11 +2413,15 @@ module spectrum
              !
              if (proftype(1:4)=='PART') then
                !
+               dtemp=(T_max-T_min)/real((n_T_points-1),rk)
+               !
                do itemp = 1,n_T_points
                  !
                  if (energy>enermax) cycle
                  !
                  temp0 = real(itemp,rk)*dtemp+T_min
+                 !
+                 !temp0 = Temperature_list(itemp)
                  !
                  beta0 = c2/temp0
                  !
@@ -4467,7 +4471,7 @@ module spectrum
                    stop 'line_intensity - out of memory'
                end if
                !
-               !$omp do private(iomp,iswap,abscoef,tranfreq,halfwidth,ileveli,energyi,itemp,temp0,beta0) &
+               !$omp do private(iomp,iswap,abscoef,tranfreq,ileveli,energyi,itemp,temp0,beta0,halfwidth) &
                !$omp&  schedule(dynamic)
                do iomp = 1,N_omp_procs
                  !
