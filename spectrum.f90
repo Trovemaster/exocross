@@ -469,6 +469,7 @@ module spectrum
             case ("NTEMPS","NPOINTS","NSTEPS","NUMBER-OF-TEMPERATURES","N")
               !
               call readi(n_T_points)
+              npoints = n_T_points
               !
             case ("MOMENT")
               !
@@ -5362,7 +5363,7 @@ module spectrum
      intens = 0
      !
      !$omp parallel do private(itemp,temp0,ilevelf,energy,beta0) shared(intens) schedule(dynamic)
-     do itemp = 1,npoints
+     do itemp = 1,n_T_points
        !
        temp0 = Temperature_list(itemp)
        !
@@ -5387,7 +5388,6 @@ module spectrum
      !
      do itemp = 1,n_T_points
        !
-       !temp0 = real(itemp,rk)*dtemp
        temp0 = Temperature_list(itemp)
        !
        write(tunit,"(1x,f12.3,1x,es20.8)") temp0,intens(itemp)
