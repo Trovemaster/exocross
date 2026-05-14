@@ -152,8 +152,9 @@ module spectrum
   !
   type(VoigtKampffCollection),save :: fast_voigt
   integer(ik),parameter :: Npressure_list_max = 100,Ntemperature_list_max = 100
-  real(rk)   :: Pressure_list(Npressure_list_max),Temperature_list(Ntemperature_list_max)
+  real(rk)   :: Pressure_list(Npressure_list_max),Temperature_list_input(Ntemperature_list_max)
   integer(ik) :: Npressure_list = 0,n_T_points = 0
+  real(rk),allocatable,save   :: Temperature_list(:)
   !
   contains
   !
@@ -169,6 +170,7 @@ module spectrum
     integer(ik)   :: i,ifilter,iE,iS,ierror,igrid,i_t,info
     type(HitranErrorT),pointer :: HITRAN
     real(rk) :: f_t,dtemp,temp0
+    logical :: use_temperature_list = .false.
     ! -----------------------------------------------------------
     !
     write(out,"('Read the input')")
@@ -476,6 +478,10 @@ module spectrum
               !
               ipartf = 3
               !
+            case ("LIST")
+              !
+              use_temperature_list = .true.
+              !
             case default
               !
               call report ("Unrecognized unit name "//trim(w),.true.)
@@ -492,6 +498,32 @@ module spectrum
              write (out,"('input: wrong last line in PARTFUNC/COOLING =',a)") trim(w)
              stop 'input - illigal last line in PARTFUNC'
              !
+          endif
+          !
+          if (allocated(Temperature_list).and..not.use_temperature_list) then
+            use_temperature_list = .true. 
+            write(out,"('Warning-Input: conflicting T-LIST definition but no LIST option in partfunc. We use T-list')")
+          endif
+          !
+          if (.not.use_temperature_list) then
+            !
+            allocate(Temperature_list(n_T_points),stat=info)
+            call ArrayStart('Temperature_list',info,size(Temperature_list),kind(Temperature_list))
+            !
+            dtemp=(T_max-T_min)/real((n_T_points-1),rk)
+            !
+            do i = 1,n_T_points
+              !
+              temp0 = real(i-1,rk)*dtemp+T_min
+              !
+              Temperature_list(i) = temp0
+              !
+            enddo
+            !
+          else
+            if (n_T_points>0) then 
+              write(out,"('Warning-Input: conflicting LIST and N in partfunc. We assume the list will be provided an ignore N')")
+            endif
           endif
           !
         case ("TEMPERATURE-ARRAY","ARRAY")
@@ -532,15 +564,8 @@ module spectrum
           !
           if (T_min>=T_max) stop "Illegal Min>Max Temperature"
           !
-          if (n_T_points>Ntemperature_list_max) then 
-             write(out,"(a,i8)") 'input-error N of temp-s is too high, increase Ntemperature_list_max in Duo'
-             stop 'input-error N of temp-s: the list is too long'
-          endif
-          !
-          if (trim(w)/="".and.trim(w)/="END") then
-             write (out,"('input: wrong last line in ARRAY =',a)") trim(w)
-             stop 'input - illigal last line in ARRAY'
-          endif
+          allocate(Temperature_list(n_T_points),stat=info)
+          call ArrayStart('Temperature_list',info,size(Temperature_list),kind(Temperature_list))
           !
           dtemp=(T_max-T_min)/real((n_T_points-1),rk)
           !
@@ -551,6 +576,13 @@ module spectrum
             Temperature_list(i) = temp0
             !
           enddo          
+          !
+          if (trim(w)/="".and.trim(w)/="END") then
+             write (out,"('input: wrong last line in ARRAY =',a)") trim(w)
+             stop 'input - illigal last line in ARRAY'
+          endif
+          !
+          use_temperature_list = .true.
           !
         case ("TEMPERATURE-LIST")
           !
@@ -565,7 +597,7 @@ module spectrum
             !
             i_t = i_t + 1
             !
-            read(w,*) Temperature_list(i_t)
+            read(w,*) Temperature_list_input(i_t)
             !
             call read_line(eof) ; if (eof) exit
             call readu(w)
@@ -578,6 +610,15 @@ module spectrum
           endif
           !
           n_T_points = i_t
+          !
+          allocate(Temperature_list(n_T_points),stat=info)
+          call ArrayStart('Temperature_list',info,size(Temperature_list),kind(Temperature_list))
+          !
+          do i = 1,n_T_points
+            Temperature_list(i) = Temperature_list_input(i)
+          enddo
+          !
+          use_temperature_list = .true.
           !
         case ("PRESSURE-LIST")
           !
@@ -1419,7 +1460,7 @@ module spectrum
     if (temperature_array_job_do) then
        !
        if (trim(specttype)/='ABSORPTION'.or.(trim(proftype)/='VOIGT'.and.trim(proftype)/='VOI-S'.and.&
-           proftype(1:5)/='GAUSS'.and.proftype(1:5)/='GAUS0'.and.proftype(1:5)/='DOPPL')) then
+           proftype(1:5)/='GAUSS'.and.proftype(1:5)/='GAUS0'.and.proftype(1:5)/='DOPPL'.and.proftype(1:5)/='PARTF')) then
          write (out,"('input: ARRAY can currently work only with VOIGT, GAUSS or GAUS0 in ABSORPTION')")
          stop 'input - illigal use of ARRAY: only VOIGT OR GAUSS in ABSORPTION'
        endif
@@ -1576,6 +1617,13 @@ module spectrum
     if (Npressure_list==0) then 
       Npressure_list = 1
       Pressure_list(1)  = pressure
+    endif
+    !
+    if (.not.allocated(Temperature_list)) then
+      n_T_points = 1
+      allocate(Temperature_list(n_T_points),stat=info)
+      call ArrayStart('Temperature_list',info,size(Temperature_list),kind(Temperature_list))
+      Temperature_list(1)  = temp
     endif
     !
     if (n_T_points==0) then 
@@ -2418,15 +2466,15 @@ module spectrum
              !
              if (proftype(1:4)=='PART') then
                !
-               dtemp=(T_max-T_min)/real((n_T_points-1),rk)
+               !dtemp=(T_max-T_min)/real((n_T_points-1),rk)
                !
                do itemp = 1,n_T_points
                  !
                  if (energy>enermax) cycle
                  !
-                 temp0 = real(itemp,rk)*dtemp+T_min
+                 !temp0 = real(itemp,rk)*dtemp+T_min
                  !
-                 !temp0 = Temperature_list(itemp)
+                 temp0 = Temperature_list(itemp)
                  !
                  beta0 = c2/temp0
                  !
@@ -2481,7 +2529,7 @@ module spectrum
         !
         do itemp = 1,n_T_points
           !
-          temp0 = real(itemp,rk)*dtemp
+          temp0 = Temperature_list(itemp)
           !
           write(tunit,"(f8.1,1x,f15.4)") temp0,pf(ipartf,itemp)
           !
@@ -5678,6 +5726,11 @@ module spectrum
       if (allocated(crosssections_T)) then 
          deallocate(crosssections_T)
          call ArrayStop('crosssections_T')
+      endif 
+      !
+      if (allocated(Temperature_list)) then 
+         deallocate(Temperature_list)
+         call ArrayStop('Temperature_list')
       endif 
       !   
    end subroutine clean_up_memory_allocations
