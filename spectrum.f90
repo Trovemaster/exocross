@@ -1430,8 +1430,13 @@ module spectrum
        endif
        !
        if (trim(pffilename)/='NONE') then 
-         write (out,"('input: ARRAY does currently work with pffile')")
+         write (out,"('input: ARRAY should work with pffile')")
          !stop 'input - illigal use of ARRAY with pffile'
+       endif
+       !
+       if (.not.partfunc_do) then 
+         write (out,"('input: a sinle pf value is given but will be ignored for T-list calc.; pf will be recomputed ')")
+         partfunc_do = .true.
        endif
        !
     endif
