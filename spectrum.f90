@@ -2104,23 +2104,6 @@ module spectrum
            !
         endif
         !
-        !dtemp=(T_max-T_min)/real((n_T_points-1),rk)
-        !
-        !allocate(temperature_array(n_T_points),stat=info)
-        !call ArrayStart('temperature_array',info,size(temperature_array),kind(temperature_array))
-        !
-        !if (verbose>=3) write(out,"(/'Processing:',i5,' temperatures in ',f11.4,' K steps')") n_T_points,dtemp
-        !
-        !do itemp = 1,n_T_points
-        !  !
-        !  temp0 = real(itemp-1,rk)*dtemp+T_min
-        !  !
-        !  temperature_array(itemp) = temp0
-        !  !
-        !  if (verbose>=4) write(out,"(5x,f11.4,' K')") temp0
-        !  !
-        !enddo
-        !
         if (proftype(1:4)=='PART') then
           !
           if (ipartf<0.or.ipartf>3) stop "illegal partfunc component, can be only 0,1,2,3"
@@ -2555,7 +2538,7 @@ module spectrum
         if (verbose>=0) then
           print('(a)'),"Partition function"
           do itemp = 1,n_T_points
-            temp0 = real(itemp,rk)*dtemp
+            temp0 = Temperature_list(itemp)
             print('(f12.2,1x,es20.8)'),temp0,pf(0,itemp)
           enddo
         endif
@@ -2566,9 +2549,7 @@ module spectrum
         open(unit=tunit,file=trim(output)//".pf",action='write',status='replace')
         !
         do itemp = 1,n_T_points
-          !
-          temp0 = real(itemp,rk)*dtemp
-          !
+          temp0 = Temperature_list(itemp)
           write(tunit,"(f8.1,1x,f15.4)") temp0,pf(0,itemp)
           !
         enddo
@@ -5383,7 +5364,7 @@ module spectrum
      !$omp parallel do private(itemp,temp0,ilevelf,energy,beta0) shared(intens) schedule(dynamic)
      do itemp = 1,npoints
        !
-       temp0 = real(itemp,rk)*dtemp
+       temp0 = Temperature_list(itemp)
        !
        do ilevelf = 1,nlevels
          !
@@ -5406,7 +5387,8 @@ module spectrum
      !
      do itemp = 1,n_T_points
        !
-       temp0 = real(itemp,rk)*dtemp
+       !temp0 = real(itemp,rk)*dtemp
+       temp0 = Temperature_list(itemp)
        !
        write(tunit,"(1x,f12.3,1x,es20.8)") temp0,intens(itemp)
        !
