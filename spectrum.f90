@@ -511,6 +511,9 @@ module spectrum
             allocate(Temperature_list(n_T_points),stat=info)
             call ArrayStart('Temperature_list',info,size(Temperature_list),kind(Temperature_list))
             !
+            ! for colling or partition function the temperature cannot be 0
+            if (T_min<small_) T_min = 1.0_rk
+            !
             dtemp=(T_max-T_min)/real((n_T_points-1),rk)
             !
             do i = 1,n_T_points
@@ -5367,7 +5370,7 @@ module spectrum
        !
        temp0 = Temperature_list(itemp)
        !
-       do ilevelf = 1,nlevels
+       do ilevelf = 1,nrows
          !
          energy = energies(ilevelf)
          !
