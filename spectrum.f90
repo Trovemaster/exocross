@@ -449,6 +449,11 @@ module spectrum
           !
           proftype = trim(w)
           !
+          if (trim(w)=='COOLING') then 
+             specttype = 'EMISSION'
+             units = 'ERG/MOLECULE/S'
+          endif
+          !
           call read_line(eof) ; if (eof) exit
           call readu(w)
           !
@@ -483,6 +488,27 @@ module spectrum
               !
               use_temperature_list = .true.
               !
+            case ("UNITS")
+              !
+              call readu(units)
+              !
+              select case (trim(units))
+                !
+              case ('WATT/STR/MOLECULE','WATT','WATTS')
+                !
+                units = 'WATT'
+                !
+              case ('PHOTONS/S','PHOTON/S')
+                !
+                units = 'PHOTONS'
+                !
+              case default
+                !
+                write(out,"('Input error: unrecognized units ',a,' for ',a)") trim(units),trim(specttype)
+                stop 'Input error: unrecognized spectral units'
+                !
+              end select
+              !
             case default
               !
               call report ("Unrecognized unit name "//trim(w),.true.)
@@ -511,7 +537,7 @@ module spectrum
             allocate(Temperature_list(n_T_points),stat=info)
             call ArrayStart('Temperature_list',info,size(Temperature_list),kind(Temperature_list))
             !
-            ! for colling or partition function the temperature cannot be 0
+            ! for cooling or partition function the temperature cannot be 0
             if (T_min<small_) T_min = 1.0_rk
             !
             dtemp=(T_max-T_min)/real((n_T_points-1),rk)
@@ -2453,13 +2479,9 @@ module spectrum
              !
              if (proftype(1:4)=='PART') then
                !
-               !dtemp=(T_max-T_min)/real((n_T_points-1),rk)
-               !
                do itemp = 1,n_T_points
                  !
                  if (energy>enermax) cycle
-                 !
-                 !temp0 = real(itemp,rk)*dtemp+T_min
                  !
                  temp0 = Temperature_list(itemp)
                  !
@@ -2471,9 +2493,7 @@ module spectrum
                  !
                enddo
                !
-             endif
-             !
-             if (proftype(1:4)=='COOL'.or.temperature_array_job_do) then
+             elseif (proftype(1:4)=='COOL'.or.temperature_array_job_do) then
                !
                do itemp = 1,n_T_points
                  !
