@@ -4374,7 +4374,7 @@ module spectrum
                    stop 'line_intensity - out of memory'
                end if
                !
-               !$omp do private(iomp,iswap,abscoef,tranfreq,halfwidth,ileveli,energyi,itemp,temp0,beta0) &
+               !$omp do private(iomp,iswap,abscoef,tranfreq,ileveli,energyi,itemp,temp0,beta0,halfwidth) &
                !$omp&  schedule(dynamic)
                do iomp = 1,N_omp_procs
                  !
@@ -4412,7 +4412,7 @@ module spectrum
                !
             else            
                !
-               !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+               !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp) schedule(dynamic)
                do iomp = 1,N_omp_procs
                  !
                  do iswap = iomp,nswap,N_omp_procs
@@ -4567,7 +4567,7 @@ module spectrum
                !
             else
               !
-              !$omp parallel do private(iomp,iswap,abscoef,tranfreq) shared(intens_omp) schedule(dynamic)
+              !$omp parallel do private(iomp,iswap,abscoef,tranfreq,halfwidth) shared(intens_omp) schedule(dynamic)
               do iomp = 1,N_omp_procs
                 !
                 do iswap = iomp,nswap,N_omp_procs
