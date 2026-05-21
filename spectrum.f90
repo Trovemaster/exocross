@@ -3828,9 +3828,20 @@ module spectrum
                         !
                       enddo
                       !
+                      if (predissociation_do) then
+                        ! 
+                        gamma_array_ram(:,iswap) = gamma_radiative(ilevelf)*gamma_array_ram(:,iswap)/&
+                                                       (gamma_radiative(ilevelf)+gamma_array_ram(:,iswap))
+                      endif
+                      !
                    else
                       !
                       gamma_ram(iswap) = get_Voigt_gamma_val(Nspecies,Ji,Jf,Ki,temp0)
+                      !
+                      if (predissociation_do) then 
+                        gamma_ram(iswap) = gamma_radiative(ilevelf)*gamma_ram(iswap)/&
+                                           (gamma_radiative(ilevelf)+gamma_ram(iswap))
+                      endif
                       !
                    endif
                    !
@@ -4077,7 +4088,8 @@ module spectrum
                    !
                    if (predissociation_do) then 
                      !
-                     gamma_ram(iswap) = max(gamma_radiative(ilevelf),gamma_ram(iswap))
+                     gamma_ram(iswap) = gamma_radiative(ilevelf)*gamma_ram(iswap)/(gamma_radiative(ilevelf)+gamma_ram(iswap))
+                     !max(gamma_radiative(ilevelf),gamma_ram(iswap))
                      !
                    endif
                    !
