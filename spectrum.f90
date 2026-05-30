@@ -148,7 +148,7 @@ module spectrum
   logical :: all_done = .false.
   logical :: upper_filter_active = .false.,lower_filter_active = .false.
   logical :: cross_sections_do = .false.,pressure_array_job_do = .false.
-  logical :: temperature_array_job_do = .false.
+  logical :: temperature_array_job_do = .false., super_lines_do  = .false.
   !
   type(VoigtKampffCollection),save :: fast_voigt
   integer(ik),parameter :: Npressure_list_max = 100,Ntemperature_list_max = 100
@@ -538,13 +538,14 @@ module spectrum
             call ArrayStart('Temperature_list',info,size(Temperature_list),kind(Temperature_list))
             !
             ! for cooling or partition function the temperature cannot be 0
-            if (T_min<small_) T_min = 1.0_rk
             !
-            dtemp=(T_max-T_min)/real((n_T_points-1),rk)
+            !if (T_min<small_) T_min = small_
+            !
+            dtemp=(T_max-T_min)/real((n_T_points),rk)
             !
             do i = 1,n_T_points
               !
-              temp0 = real(i-1,rk)*dtemp+T_min
+              temp0 = real(i,rk)*dtemp+T_min
               !
               Temperature_list(i) = temp0
               !
@@ -1259,7 +1260,8 @@ module spectrum
                 !
                 if (proftype(1:5)=="LOREN")    proftype = 'LOR-S'
                 if (proftype(1:5)=="VOIGT")    proftype = 'VOI-S'
-                profile_calc_type = "SUPER"
+                !profile_calc_type = "SUPER"
+                super_lines_do = .true.
                 !
               case("SAMPLING")
                 !
@@ -1757,6 +1759,22 @@ module spectrum
       !
     endif
     !
+    ! Anothe exception
+    !
+    if (if_species_defined.and.super_lines_do) then 
+      !
+      do i=1,Nspecies
+        !
+        if (trim(species(i)%model)=='BOX') then 
+            write(out,"('Input-error: BOX cannot be used with super-lines')")
+            call report ("Illegal usage BOX: cannot be used with super-lines"//trim(w),.true.)
+        endif
+        !
+      enddo
+    endif
+    !
+    ! End of Read 
+    !
   end subroutine ReadInput
   !
   subroutine intensity
@@ -1811,6 +1829,7 @@ module spectrum
    real(real32) :: nan    
    logical :: upper_state_selected,lower_state_selected,pf_use_from_file = .true.
    logical :: doppler_flag = .false.
+   character(len=cl) :: proftype_secondary=""
    !
    ln2=log(2.0_rk)
    ln22 = ln2*2.0_rk
@@ -3108,6 +3127,12 @@ module spectrum
           !
        endif
        !
+       if (super_lines_do) then
+          write(out,"(10x,'Use super-lines as intermediate step')")
+          proftype_secondary = proftype
+          proftype = 'BIN'
+       endif
+       !
        if (proftype(1:3)=='DOP')  doppler_flag = .true.
        !
    case ('RECT','BOX','MAX','BIN')
@@ -4274,28 +4299,58 @@ module spectrum
             !
         case ('BIN')
             !
-            !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint) shared(intens_omp) schedule(dynamic)
-            do iomp = 1,N_omp_procs
+            if (temperature_array_job_do) then 
               !
-              do iswap = iomp,nswap,N_omp_procs
+              !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ileveli,energyi,ipoint,itemp,temp0,beta0,abscoef_) &
+              !$omp& shared(intens_T_omp)  schedule(dynamic)
+              do iomp = 1,N_omp_procs
                 !
-                abscoef = abscoef_ram(iswap)
-                tranfreq = nu_ram(iswap)
-                !
-                !int_cutoff =  apply_HITRAN_cutoff(tranfreq)
-                !
-                !if (abscoef<int_cutoff) cycle
-                !
-                call get_grid_ipoint(tranfreq,freq,ipoint)
-                !
-                !ipoint =  max(nint( ( tranfreq-freql)/dfreq )+1,1)
-                !
-                intens_omp(ipoint,iomp) = intens_omp(ipoint,iomp)+abscoef
+                do iswap = iomp,nswap,N_omp_procs
+                  !
+                  abscoef = abscoef_ram(iswap)
+                  tranfreq = nu_ram(iswap)
+                  ileveli = ileveli_ram(iswap)
+                  energyi = energies(ileveli)
+                  !
+                  call get_grid_ipoint(tranfreq,freq,ipoint)
+                  !
+                  do itemp = 1,n_T_points
+                    !
+                    temp0 = Temperature_list(itemp)
+                    !
+                    beta0 = c2/temp0
+                    !
+                    abscoef_ = abscoef*exp(-beta0*energyi)*(1.0_rk-exp(-beta0*tranfreq))/pf(0,itemp)
+                    !
+                    intens_T_omp(ipoint,itemp,iomp) = intens_T_omp(ipoint,itemp,iomp)+abscoef_
+                    !
+                  enddo
+                  !
+                enddo
                 !
               enddo
+              !$omp end parallel do
               !
-            enddo
-            !$omp end parallel do
+            else
+              !
+              !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint) schedule(dynamic)
+              do iomp = 1,N_omp_procs
+                !
+                do iswap = iomp,nswap,N_omp_procs
+                  !
+                  abscoef = abscoef_ram(iswap)
+                  tranfreq = nu_ram(iswap)
+                  !
+                  call get_grid_ipoint(tranfreq,freq,ipoint)
+                  !
+                  intens_omp(ipoint,iomp) = intens_omp(ipoint,iomp)+abscoef
+                  !
+                enddo
+                !
+              enddo
+              !$omp end parallel do
+              !
+            endif            
             !
         case ('VOI-S')
             !
@@ -4979,6 +5034,11 @@ module spectrum
    !
    call TimerStart('Post-processing: sum single-core')
    !
+   ! for intermediate super-lines: return to the original line profile definition 
+   if (super_lines_do) then
+      proftype = proftype_secondary
+   endif
+   !
    !Do all the summation at the end
    !
    if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','PSE','COO'/)) ) then
@@ -5020,11 +5080,13 @@ module spectrum
      enddo  
    endif
    !
-   ! combining super-lines with one profiles
+   ! Post-processing and combining cross sections for different temperatures and/or applying profiles to superlines 
    !
    select case (trim(proftype(1:5)))
        !
    case ('VOI-S')
+       !
+       ! combining super-lines with one profiles
        !
        if (verbose>=4) then 
           write(out,"(/4x,a)") 'Computing cross sections from super-lines...'
@@ -5238,7 +5300,239 @@ module spectrum
           !
        endif
        !
-   case ('VOIGT','GAUSS','GAUS0','DOPPL')
+   case ('GAUSS','GAUS0','DOPPL','DOPP0')
+       !
+       if (super_lines_do) then 
+          !
+          if (temperature_array_job_do) then 
+             !
+             if (verbose>=4) then 
+                write(out,"(4x,a)") '...for a set of temperatures (array job)'
+             endif
+             !
+             allocate(crosssections_T(npoints,n_T_points),stat=info)
+             call ArrayStart('crosssections_T',info,size(crosssections_T),kind(crosssections_T))
+             crosssections_T = 0
+             !
+             !$omp parallel do private(itemp,temp0,halfwidth0,i,abscoef,tranfreq,hwhm_gauss) shared(crosssections_T) schedule(dynamic)
+             do itemp = 1,n_T_points
+                !
+                temp0 = Temperature_list(itemp)
+                !
+                halfwidth0 = halfwidth
+                !
+                if (Nspecies>0) then 
+                  !
+                  halfwidth0 = 0 
+                  do i=1,Nspecies
+                    halfwidth0 =  halfwidth0 + species(i)%ratio*species(i)%gamma*(species(i)%T0/temp0)**species(i)%N*pressure/species(i)%P0
+                  enddo
+                  !
+                endif
+                !
+                select case (trim(proftype(1:5)))
+                   !
+                case ('DOPPL')
+                   !
+                   do i = 1,npoints
+                     !
+                     abscoef = intensity_T(i,itemp)
+                     tranfreq = freq(i)
+                     hwhm_gauss=dpwcoef0*tranfreq*sqrt(temp0)
+                     !
+                     if (abscoef<abscoef_thresh) cycle
+                     !
+                     if (hwhm_gauss<100.0_rk*small_) cycle
+                     !
+                     call do_gauss_binning(tranfreq,abscoef,dfreq,freq,hwhm_gauss,cutoff,freql,crosssections_T(:,itemp))
+                     !
+                   enddo
+                   !
+                case ('DOPP0')
+                   !
+                   do i = 1,npoints
+                     !
+                     abscoef = intensity_T(i,itemp)
+                     tranfreq = freq(i)
+                     hwhm_gauss=dpwcoef0*tranfreq*sqrt(temp0)
+                     !
+                     if (abscoef<abscoef_thresh) cycle
+                     !
+                     if (hwhm_gauss<100.0_rk*small_) cycle
+                     !
+                     call do_gauss_sampling(tranfreq,abscoef,dfreq,freq,hwhm_gauss,freql,crosssections_T(:,itemp))
+                     !
+                   enddo
+                   !
+                case ('GAUSS')
+                   !
+                   do i = 1,npoints
+                     !
+                     abscoef = intensity_T(i,itemp)
+                     tranfreq = freq(i)
+                     hwhm_gauss=halfwidth0
+                     !
+                     if (abscoef<abscoef_thresh) cycle
+                     !
+                     if (hwhm_gauss<100.0_rk*small_) cycle
+                     !
+                     call do_gauss_binning(tranfreq,abscoef,dfreq,freq,hwhm_gauss,cutoff,freql,crosssections_T(:,itemp))
+                     !
+                   enddo
+                   !
+                case ('GAUS0')
+                   !
+                   do i = 1,npoints
+                     !
+                     abscoef = intensity_T(i,itemp)
+                     tranfreq = freq(i)
+                     hwhm_gauss=halfwidth0
+                     !
+                     if (abscoef<abscoef_thresh) cycle
+                     !
+                     if (hwhm_gauss<100.0_rk*small_) cycle
+                     !
+                     call do_gauss_sampling(tranfreq,abscoef,dfreq,freq,hwhm_gauss,freql,crosssections_T(:,itemp))
+                     !
+                   enddo
+                   !
+                end select 
+                !
+             enddo
+             !$omp end parallel do
+             !
+          else
+             !
+             allocate(line_intensity(npoints),stat=info)
+             call ArrayStart('line_intensity',info,size(line_intensity),kind(line_intensity))
+             !
+             write(cross_io_name, '(a)') 'Single-T cross sections'
+             call IOstart(trim(cross_io_name),cross_unit)
+             !
+             halfwidth0 = halfwidth
+             !
+             if (Nspecies>0) then 
+               !
+               halfwidth0 = 0 
+               do i=1,Nspecies
+                 halfwidth0 =  halfwidth0 + species(i)%ratio*species(i)%gamma*(species(i)%T0/temp0)**species(i)%N*pressure/species(i)%P0
+               enddo
+               !
+             endif
+             !
+             select case (trim(proftype(1:5)))
+                !
+             case ('DOPPL')
+                !
+                do i = 1,npoints
+                  !
+                  abscoef = intens(i)
+                  tranfreq = freq(i)
+                  hwhm_gauss=dpwcoef*tranfreq
+                  !
+                  if (abscoef<abscoef_thresh) cycle
+                  !
+                  if (hwhm_gauss<100.0_rk*small_) cycle
+                  !
+                  call do_gauss_binning(tranfreq,abscoef,dfreq,freq,hwhm_gauss,cutoff,freql,line_intensity)
+                  !
+                enddo
+                !
+             case ('DOPP0')
+                !
+                do i = 1,npoints
+                  !
+                  abscoef = intens(i)
+                  tranfreq = freq(i)
+                  hwhm_gauss=dpwcoef*tranfreq
+                  !
+                  if (abscoef<abscoef_thresh) cycle
+                  !
+                  if (hwhm_gauss<100.0_rk*small_) cycle
+                  !
+                  call do_gauss_sampling(tranfreq,abscoef,dfreq,freq,hwhm_gauss,freql,line_intensity)
+                  !
+                enddo
+                !
+             case ('GAUSS')
+                !
+                do i = 1,npoints
+                  !
+                  abscoef = intens(i)
+                  tranfreq = freq(i)
+                  hwhm_gauss=halfwidth0
+                  !
+                  if (abscoef<abscoef_thresh) cycle
+                  !
+                  if (hwhm_gauss<100.0_rk*small_) cycle
+                  !
+                  call do_gauss_binning(tranfreq,abscoef,dfreq,freq,hwhm_gauss,cutoff,freql,line_intensity)
+                  !
+                enddo
+                !
+             case ('GAUS0')
+                !
+                do i = 1,npoints
+                  !
+                  abscoef = intens(i)
+                  tranfreq = freq(i)
+                  hwhm_gauss=halfwidth0
+                  !
+                  if (abscoef<abscoef_thresh) cycle
+                  !
+                  if (hwhm_gauss<100.0_rk*small_) cycle
+                  !
+                  call do_gauss_sampling(tranfreq,abscoef,dfreq,freq,hwhm_gauss,freql,line_intensity)
+                  !
+                enddo
+                !
+             end select               
+             !
+             deallocate(line_intensity)
+             call ArrayStop('line_intensity')
+             !
+          endif           
+          !
+       else
+          !
+          ! remap frequency grid to a new value
+          !
+          npoints0 = npoints
+          !
+          if (temperature_array_job_do) then 
+             !
+             if (verbose>=4) then 
+                write(out,"(4x,a)") '...for a set of temperatures (array job)'
+             endif
+             !
+             allocate(crosssections_T(npoints,n_T_points),stat=info)
+             call ArrayStart('crosssections_T',info,size(crosssections_T),kind(crosssections_T))
+             crosssections_T = 0
+             !
+             write(cross_io_name, '(a)') 'T-dependent cross sections'
+             call IOstart(trim(cross_io_name),cross_unit)
+             !
+             !$omp parallel do private(itemp) shared(crosssections_T) schedule(dynamic)
+             do itemp = 1,n_T_points
+                crosssections_T(:,itemp) = intensity_T(:,itemp)
+             enddo
+             !$omp end parallel do
+             !
+          else
+             !
+             allocate(line_intensity(npoints),stat=info)
+             call ArrayStart('line_intensity',info,size(line_intensity),kind(line_intensity))
+             !
+             write(cross_io_name, '(a)') 'Single-T cross sections'
+             call IOstart(trim(cross_io_name),cross_unit)
+             !
+             line_intensity = intens
+             !
+          endif
+          !
+       endif          
+       !
+   case ('VOIGT')
        !
        ! remap frequency grid to a new value
        !
