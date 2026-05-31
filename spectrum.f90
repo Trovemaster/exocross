@@ -149,6 +149,7 @@ module spectrum
   logical :: upper_filter_active = .false.,lower_filter_active = .false.
   logical :: cross_sections_do = .false.,pressure_array_job_do = .false.
   logical :: temperature_array_job_do = .false., super_lines_do  = .false.
+  logical :: super_lines_with_box_do  = .false.
   !
   type(VoigtKampffCollection),save :: fast_voigt
   integer(ik),parameter :: Npressure_list_max = 100,Ntemperature_list_max = 100
@@ -1514,10 +1515,23 @@ module spectrum
        !
     endif
     !
+    ! Another special case where we combine a super-line treatment with the particle-in-a-box model for the broadening
+    !
+    if (if_species_defined.and.super_lines_do) then 
+        ! 
+        if (trim(species(1)%model)=='BOX') then 
+            super_lines_with_box_do = .true.
+        endif
+    endif
+    !
     if (temperature_array_job_do) then
         ! use this flag for temperature dependent line profiles Voi and Lor
         !
         if (proftype(1:3)=='VOI'.or.proftype(1:3)=='LOR') temper_lineprofile_do = .true.
+        !
+        ! Another special case for this types of profile is gauss + particle in a box for the super-lines case
+        !
+        if (super_lines_with_box_do) temper_lineprofile_do = .true. 
         !
     endif
     !
@@ -1759,20 +1773,6 @@ module spectrum
       !
     endif
     !
-    ! Anothe exception
-    !
-    if (if_species_defined.and.super_lines_do) then 
-      !
-      do i=1,Nspecies
-        !
-        if (trim(species(i)%model)=='BOX') then 
-            write(out,"('Input-error: BOX cannot be used with super-lines')")
-            call report ("Illegal usage BOX: cannot be used with super-lines"//trim(w),.true.)
-        endif
-        !
-      enddo
-    endif
-    !
     ! End of Read 
     !
   end subroutine ReadInput
@@ -1810,6 +1810,7 @@ module spectrum
    real(rk),allocatable :: line_intensity(:),intensity_T(:,:),gamma_array_ram(:,:)
    real(rk),allocatable :: crosssections_T(:,:),frequency_grid_(:)
    integer(ik),allocatable :: ivib_state(:),ivib_state_pf(:)
+   real(rk),allocatable :: gamma_nu_omp(:,:),gamma_nu(:)
    !
    integer(ik),allocatable :: nchars_quanta(:)  ! max number of characters used for each quantum number
    !
@@ -3131,6 +3132,17 @@ module spectrum
           write(out,"(10x,'Use super-lines as intermediate step')")
           proftype_secondary = proftype
           proftype = 'BIN'
+          !
+          if (super_lines_with_box_do) then 
+              ! allocate frequency (nu) dependent gamma used for the particle in a box model
+              allocate(gamma_nu_omp(npoints,N_omp_procs),stat=info)
+              call ArrayStart('swap:gamma_nu_omp',info,1_ik,kind(gamma_nu_omp),size(gamma_nu_omp,kind=hik))
+              gamma_nu_omp = 0
+              allocate(gamma_nu(npoints),stat=info)
+              call ArrayStart('gamma_nu',info,1_ik,kind(gamma_nu_omp),size(gamma_nu,kind=hik))
+              gamma_nu = 0
+          endif
+          !
        endif
        !
        if (proftype(1:3)=='DOP')  doppler_flag = .true.
@@ -4302,7 +4314,7 @@ module spectrum
             if (temperature_array_job_do) then 
               !
               !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ileveli,energyi,ipoint,itemp,temp0,beta0,abscoef_) &
-              !$omp& shared(intens_T_omp)  schedule(dynamic)
+              !$omp& shared(intens_T_omp,gamma_nu_omp)  schedule(dynamic)
               do iomp = 1,N_omp_procs
                 !
                 do iswap = iomp,nswap,N_omp_procs
@@ -4326,6 +4338,14 @@ module spectrum
                     !
                   enddo
                   !
+                  if (super_lines_with_box_do) then
+                      !
+                      ! here we assume that the particle in a box model of gamma does not depend on T 
+                      ! we therefore take the 1st "temperature" point from the T-array
+                      gamma_nu_omp(ipoint,iomp) = max(gamma_array_ram(1,iswap),gamma_nu_omp(ipoint,iomp))
+                      !
+                  endif
+                  !
                 enddo
                 !
               enddo
@@ -4333,7 +4353,8 @@ module spectrum
               !
             else
               !
-              !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint) schedule(dynamic)
+              !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint)  &
+              !$omp& shared(intens_omp,gamma_nu_omp)  schedule(dynamic)
               do iomp = 1,N_omp_procs
                 !
                 do iswap = iomp,nswap,N_omp_procs
@@ -4344,6 +4365,10 @@ module spectrum
                   call get_grid_ipoint(tranfreq,freq,ipoint)
                   !
                   intens_omp(ipoint,iomp) = intens_omp(ipoint,iomp)+abscoef
+                  !
+                  if (super_lines_with_box_do) then
+                      gamma_nu_omp(ipoint,iomp) = max(gamma_ram(iswap),gamma_nu_omp(ipoint,iomp))
+                  endif
                   !
                 enddo
                 !
@@ -5064,6 +5089,14 @@ module spectrum
         enddo
      endif
      !
+     if (super_lines_with_box_do) then
+        do iomp = 1,N_omp_procs
+          do ipoint = 1,npoints
+             gamma_nu(ipoint) = max(gamma_nu_omp(ipoint,iomp),gamma_nu(ipoint))
+          enddo
+        enddo  
+     endif
+     !
    elseif (any( trim(proftype(1:3))==(/'ELO'/)) ) then
      !
      do i=1,N_omp_procs
@@ -5321,15 +5354,6 @@ module spectrum
                 !
                 halfwidth0 = halfwidth
                 !
-                if (Nspecies>0) then 
-                  !
-                  halfwidth0 = 0 
-                  do i=1,Nspecies
-                    halfwidth0 =  halfwidth0 + species(i)%ratio*species(i)%gamma*(species(i)%T0/temp0)**species(i)%N*pressure/species(i)%P0
-                  enddo
-                  !
-                endif
-                !
                 select case (trim(proftype(1:5)))
                    !
                 case ('DOPPL')
@@ -5371,6 +5395,7 @@ module spectrum
                      abscoef = intensity_T(i,itemp)
                      tranfreq = freq(i)
                      hwhm_gauss=halfwidth0
+                     if (super_lines_with_box_do) hwhm_gauss = gamma_nu(i)
                      !
                      if (abscoef<abscoef_thresh) cycle
                      !
@@ -5387,6 +5412,7 @@ module spectrum
                      abscoef = intensity_T(i,itemp)
                      tranfreq = freq(i)
                      hwhm_gauss=halfwidth0
+                     if (super_lines_with_box_do) hwhm_gauss = gamma_nu(i)
                      !
                      if (abscoef<abscoef_thresh) cycle
                      !
@@ -5410,15 +5436,6 @@ module spectrum
              call IOstart(trim(cross_io_name),cross_unit)
              !
              halfwidth0 = halfwidth
-             !
-             if (Nspecies>0) then 
-               !
-               halfwidth0 = 0 
-               do i=1,Nspecies
-                 halfwidth0 =  halfwidth0 + species(i)%ratio*species(i)%gamma*(species(i)%T0/temp0)**species(i)%N*pressure/species(i)%P0
-               enddo
-               !
-             endif
              !
              select case (trim(proftype(1:5)))
                 !
@@ -5461,6 +5478,7 @@ module spectrum
                   abscoef = intens(i)
                   tranfreq = freq(i)
                   hwhm_gauss=halfwidth0
+                  if (super_lines_with_box_do) hwhm_gauss = gamma_nu(i)
                   !
                   if (abscoef<abscoef_thresh) cycle
                   !
@@ -5477,6 +5495,7 @@ module spectrum
                   abscoef = intens(i)
                   tranfreq = freq(i)
                   hwhm_gauss=halfwidth0
+                  if (super_lines_with_box_do) hwhm_gauss = gamma_nu(i)
                   !
                   if (abscoef<abscoef_thresh) cycle
                   !
@@ -6017,6 +6036,16 @@ module spectrum
       if (allocated(intens_omp)) then 
          deallocate(intens_omp)
          call ArrayStop('swap:intens_omp')
+      endif
+      !
+      if (allocated(gamma_nu_omp)) then 
+         deallocate(gamma_nu_omp)
+         call ArrayStop('swap:gamma_nu_omp')
+      endif
+      !
+      if (allocated(gamma_nu)) then 
+         deallocate(gamma_nu)
+         call ArrayStop('gamma_nu')
       endif
       !
       if (allocated(intensity_T)) then 
