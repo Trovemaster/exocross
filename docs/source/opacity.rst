@@ -70,7 +70,7 @@ All cross sections are printed out into a single ``output`` file as different co
      ....
 
 
-It is also possible to use a non-uniform ``temperature-list`` by explicitly specifying the temperatures to process similar to the ``pressure-list`` as follows 
+It is also possible to use a non-uniform ``temperature-list`` by explicitly specifying the temperatures to process similar to the ``pressure-list`` as follows
 
 ::
 
@@ -96,7 +96,7 @@ The partition function will be recomputed based on the .states file provided.
 Two-step production of cross sections  using super-lines
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-For very large linel lists, it is more efficient (but less accurate) to (i) compute temperature-dependent super-lines and then use them to produce  temperature/pressure-dependent cross-sections. This can be done using the line profile ``Voigt-super``. Everything else is as for the normal case of the ``Voigt`` profile. This procedure can only use single line-broadening parameters. By defaults, the cross sections are computed on the same grid as the super-lines, i.e. the grid spacings are the same. Here is a basic example:
+For very large line lists, it is more efficient (but less accurate) to (i) compute temperature-dependent super-lines and then use them to produce  temperature/pressure-dependent cross-sections. This can be done using the line profile ``Voigt-super``. Everything else is as for the normal case of the ``Voigt`` profile. This procedure can only use single line-broadening parameters. By defaults, the cross sections are computed on the same grid as the super-lines, i.e. the grid spacings are the same. Here is a basic example:
 
 ::
 
@@ -186,6 +186,77 @@ The ``Voigt-super`` can be combined with the ``Array`` structure to be processed
     States 12C-14N__MoLLIST.states
     Transitions 12C-14N__MoLLIST.trans
 
+
+Using the super-lines two-step procedure with the Gaussian type profiles
+------------------------------------------------------------------------
+
+
+The super-lines intermediate step can be used with the Gaussian-type (``Gaussian``, ``Gauss0``, ``Doppler``, ``Doppl0`` ).  This is when the lines are first binned into super-lines at step 1 on a dense grid (can be both equidistant or non-equidistant) which are then dressed with the corresponding line profiles. The latter cannot be quantum number dependent, only wavenumber-dependent. This option can be activated by simply adding the keyword ``super`` to the associated profile keyword, e.g.:
+
+
+:: 
+
+    Range 0 20000
+    
+    Npoints 20000
+    
+    temperature-list
+    300
+    400
+    500
+    end
+    
+    absorption
+    
+    gaussian
+    
+    output 16O2__SWYT
+    
+    States 16O2__SWYT.states
+    
+    transitions
+     16O2__SWYT__E2.trans
+     16O2__SWYT__M1.trans
+    end
+    
+
+Using the Gaussian profile with the particle-in-the-box broadening
+------------------------------------------------------------------
+
+The the particle-in-the-box broadening model is used to provide a non-uniform line broadening for the photoabsorption and photodissociation calculations as part of the continuum spectra. In these calculations, the continuum is computed as quasi-continuum, discretised lines and the redisrtibuted using a large-width Gaussian. The broadening depends on the "vibrational" quantum number (specified in the block ``QN``) and technically cannot be used with super-lines. Instead, ExoCross map this dependence on the wavenumber grid by taking the maximal value of the line broadening at each wavenumber grid point. 
+
+Here is an example of the input file where the Gaussian line profile, particle-in-a-box broadening model and the super-lines procedure are combined:
+
+::
+    
+    temperature-list
+    200
+    300
+    end
+
+    Range 0.0 83334
+
+    npoints 333336
+
+    absorption
+    gaussian  super
+
+    QN
+    K 8
+    end
+
+    cutoff 500 (line wing cutoff in cm-1)
+
+    output SO_gaussian_super_box
+
+    species
+      particle gamma 1.0 mass 10.6613025642667 Lbox 4.7 model box
+    end
+
+
+    States SO_SOLIS-plus.states
+    Transitions SO_SOLIS-plus.trans
+    
 
 
 Computing cross sections on a list of pressures
