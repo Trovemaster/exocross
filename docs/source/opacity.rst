@@ -90,7 +90,7 @@ The main (standard) output will also contain values of the total absorption for 
 
 The partition function will be recomputed based on the .states file provided.
 
-.. warning:: This feature works currently only for the basic case of ``Absorption`` and ``Voigt`` with no ``Filters``, ``non-LTE`` etc.
+.. warning:: This feature works currently only for the basic case of ``Absorption`` and ``Voigt``, ``Gauss``, ``Doppler``, with no ``Filters``, ``non-LTE`` etc.
 
 
 Two-step production of cross sections  using super-lines
@@ -194,41 +194,41 @@ Using the super-lines two-step procedure with the Gaussian type profiles
 The super-lines intermediate step can be used with the Gaussian-type (``Gaussian``, ``Gauss0``, ``Doppler``, ``Doppl0`` ).  This is when the lines are first binned into super-lines at step 1 on a dense grid (can be both equidistant or non-equidistant) which are then dressed with the corresponding line profiles. The latter cannot be quantum number dependent, only wavenumber-dependent. This option can be activated by simply adding the keyword ``super`` to the associated profile keyword, e.g.:
 
 
-:: 
+::
 
     Range 0 20000
-    
+
     Npoints 20000
-    
+
     temperature-list
     300
     400
     500
     end
-    
+
     absorption
-    
+
     gaussian
-    
+
     output 16O2__SWYT
-    
+
     States 16O2__SWYT.states
-    
+
     transitions
      16O2__SWYT__E2.trans
      16O2__SWYT__M1.trans
     end
-    
+
 
 Using the Gaussian profile with the particle-in-the-box broadening
 ------------------------------------------------------------------
 
-The the particle-in-the-box broadening model is used to provide a non-uniform line broadening for the photoabsorption and photodissociation calculations as part of the continuum spectra. In these calculations, the continuum is computed as quasi-continuum, discretised lines and the redisrtibuted using a large-width Gaussian. The broadening depends on the "vibrational" quantum number (specified in the block ``QN``) and technically cannot be used with super-lines. Instead, ExoCross map this dependence on the wavenumber grid by taking the maximal value of the line broadening at each wavenumber grid point. 
+The the particle-in-the-box broadening model is used to provide a non-uniform line broadening for the photoabsorption and photodissociation calculations as part of the continuum spectra. In these calculations, the continuum is computed as quasi-continuum, discretised lines and the redisrtibuted using a large-width Gaussian. The broadening depends on the "vibrational" quantum number (specified in the block ``QN``) and technically cannot be used with super-lines. Instead, ExoCross map this dependence on the wavenumber grid by taking the maximal value of the line broadening at each wavenumber grid point.
 
 Here is an example of the input file where the Gaussian line profile, particle-in-a-box broadening model and the super-lines procedure are combined:
 
 ::
-    
+
     temperature-list
     200
     300
@@ -256,7 +256,7 @@ Here is an example of the input file where the Gaussian line profile, particle-i
 
     States SO_SOLIS-plus.states
     Transitions SO_SOLIS-plus.trans
-    
+
 
 
 Computing cross sections on a list of pressures
