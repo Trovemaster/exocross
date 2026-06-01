@@ -223,7 +223,20 @@ The super-lines intermediate step can be used with the Gaussian-type (``Gaussian
 Using the Gaussian profile with the particle-in-the-box broadening
 ------------------------------------------------------------------
 
-The the particle-in-the-box broadening model is used to provide a non-uniform line broadening for the photoabsorption and photodissociation calculations as part of the continuum spectra. In these calculations, the continuum is computed as quasi-continuum, discretised lines and the redisrtibuted using a large-width Gaussian. The broadening depends on the "vibrational" quantum number (specified in the block ``QN``) and technically cannot be used with super-lines. Instead, ExoCross map this dependence on the wavenumber grid by taking the maximal value of the line broadening at each wavenumber grid point.
+The the particle-in-the-box broadening model is used to provide a non-uniform line broadening for the photoabsorption and photodissociation calculations as part of the continuum spectra. In these calculations, the continuum is computed as quasi-continuum, discretised lines and the redisrtibuted using a large-width Gaussian. The broadening depends on the "vibrational" quantum number :math:`v` (specified in the block ``QN``) and technically cannot be used with super-lines. Instead, ExoCross maps the :math:`v`  dependence on the wavenumber grid by taking the intensity weighted average of the line broadening parameter at each wavenumber grid point and each temperature:
+
+.. math::
+              \gamma(\tilde\nu_k,T) = \sum_{i,f, \nu_k \pm \Delta \nu_/2} \frac{\gamma(v_{f}) I_{i,f}(T,\tilde\nu_{i,f}) }{\Delta I_{k}(T)},
+
+
+where :math:`\tilde\nu_k` is the wavenumber grid (centre of the super-line) point, :math:`i,f` are the indices of the lower, upper states, respectively for all transitions :math:`\nu_{i,f}` that fall into the bin :math:`\tilde\nu_k \pm \frac{\Delta \nu}{2}`, :math:`I_{i,f}` is the associated line intensity, :math:`\Delta \nu}` is the bin size, :math:`\Delta I_{k}(Т)` is the total line intensity within the bin centred around :amth:`\tilde:\nu_k`, i.e. around the centre of the super-line. That is, the averaged value of the line broadening is based on the weight 
+
+.. math:: 
+
+            W_{i,f} = \frac{I_{i,f}(T,\tilde\nu_{i,f})}{\Delta I_{k}(T)}.
+
+The line parameters :math:`\gamma(\tilde\nu_k,T)` are then used as broadenings for the corresponding super-lines centered at grid points :math:`\tilde\nu_k`. 
+
 
 Here is an example of the input file where the Gaussian line profile, particle-in-a-box broadening model and the super-lines procedure are combined:
 
