@@ -1810,7 +1810,7 @@ module spectrum
    real(rk),allocatable :: line_intensity(:),intensity_T(:,:),gamma_array_ram(:,:)
    real(rk),allocatable :: crosssections_T(:,:),frequency_grid_(:)
    integer(ik),allocatable :: ivib_state(:),ivib_state_pf(:)
-   real(rk),allocatable :: gamma_nu_omp(:,:),gamma_nu(:)
+   real(rk),allocatable :: gamma_nu_omp(:,:),gamma_nu(:),gamma_nu_T_omp(:,:,:),gamma_nu_T(:,:)
    !
    integer(ik),allocatable :: nchars_quanta(:)  ! max number of characters used for each quantum number
    !
@@ -3135,12 +3135,26 @@ module spectrum
           !
           if (super_lines_with_box_do) then 
               ! allocate frequency (nu) dependent gamma used for the particle in a box model
-              allocate(gamma_nu_omp(npoints,N_omp_procs),stat=info)
-              call ArrayStart('swap:gamma_nu_omp',info,1_ik,kind(gamma_nu_omp),size(gamma_nu_omp,kind=hik))
-              gamma_nu_omp = 0
-              allocate(gamma_nu(npoints),stat=info)
-              call ArrayStart('gamma_nu',info,1_ik,kind(gamma_nu_omp),size(gamma_nu,kind=hik))
-              gamma_nu = 0
+              !
+              if (temperature_array_job_do) then 
+                 !
+                 allocate(gamma_nu_T_omp(npoints,n_T_points,N_omp_procs),stat=info)
+                 call ArrayStart('swap:gamma_nu_T_omp',info,1_ik,kind(gamma_nu_T_omp),size(gamma_nu_T_omp,kind=hik))
+                 gamma_nu_T_omp = 0
+                 allocate(gamma_nu_T(npoints,n_T_points),stat=info)
+                 call ArrayStart('gamma_nu_T',info,1_ik,kind(gamma_nu_T),size(gamma_nu_T,kind=hik))
+                 gamma_nu_T = 0
+                 !
+              else
+                 !
+                 allocate(gamma_nu_omp(npoints,N_omp_procs),stat=info)
+                 call ArrayStart('swap:gamma_nu_omp',info,1_ik,kind(gamma_nu_omp),size(gamma_nu_omp,kind=hik))
+                 gamma_nu_omp = 0
+                 allocate(gamma_nu(npoints),stat=info)
+                 call ArrayStart('gamma_nu',info,1_ik,kind(gamma_nu),size(gamma_nu,kind=hik))
+                 gamma_nu = 0
+                 !
+              endif 
           endif
           !
        endif
@@ -4314,7 +4328,7 @@ module spectrum
             if (temperature_array_job_do) then 
               !
               !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ileveli,energyi,ipoint,itemp,temp0,beta0,abscoef_) &
-              !$omp& shared(intens_T_omp,gamma_nu_omp)  schedule(dynamic)
+              !$omp& shared(intens_T_omp,gamma_nu_T_omp)  schedule(dynamic)
               do iomp = 1,N_omp_procs
                 !
                 do iswap = iomp,nswap,N_omp_procs
@@ -4336,15 +4350,14 @@ module spectrum
                     !
                     intens_T_omp(ipoint,itemp,iomp) = intens_T_omp(ipoint,itemp,iomp)+abscoef_
                     !
+                    if (super_lines_with_box_do) then
+                        !
+                        ! we form an intensity weighted mean as sums_i I_i x gamma_i assuming we will divide by I_total later
+                        gamma_nu_T_omp(ipoint,itemp,iomp) = gamma_nu_T_omp(ipoint,itemp,iomp) +  &
+                                                            gamma_array_ram(itemp,iswap)*abscoef_
+                    endif
+                    !
                   enddo
-                  !
-                  if (super_lines_with_box_do) then
-                      !
-                      ! here we assume that the particle in a box model of gamma does not depend on T 
-                      ! we therefore take the 1st "temperature" point from the T-array
-                      gamma_nu_omp(ipoint,iomp) = max(gamma_array_ram(1,iswap),gamma_nu_omp(ipoint,iomp))
-                      !
-                  endif
                   !
                 enddo
                 !
@@ -4367,7 +4380,8 @@ module spectrum
                   intens_omp(ipoint,iomp) = intens_omp(ipoint,iomp)+abscoef
                   !
                   if (super_lines_with_box_do) then
-                      gamma_nu_omp(ipoint,iomp) = max(gamma_ram(iswap),gamma_nu_omp(ipoint,iomp))
+                      ! we form an intensity weighted mean as sums_i I_i x gamma_i assuming we will divide by I_total later
+                      gamma_nu_omp(ipoint,iomp) = gamma_nu_omp(ipoint,iomp)+gamma_ram(iswap)*abscoef
                   endif
                   !
                 enddo
@@ -5090,11 +5104,40 @@ module spectrum
      endif
      !
      if (super_lines_with_box_do) then
-        do iomp = 1,N_omp_procs
-          do ipoint = 1,npoints
-             gamma_nu(ipoint) = max(gamma_nu_omp(ipoint,iomp),gamma_nu(ipoint))
-          enddo
-        enddo  
+        !
+        if (temperature_array_job_do) then
+           !omp parallel do private(iomp,ipoint) shared(gamma_nu_T) schedule(dynamic) 
+           do iomp = 1,N_omp_procs
+             do ipoint = 1,npoints
+                gamma_nu_T(ipoint,:) = gamma_nu_T(ipoint,:)+ gamma_nu_T_omp(ipoint,:,iomp)
+             enddo
+           enddo
+           !omp end parallel do
+           !
+           ! normalising by dividing by the total intensity
+           do itemp = 1,n_T_points
+             do ipoint = 1,npoints
+                if(intensity_T(ipoint,itemp)>abscoef_thresh ) then 
+                   gamma_nu_T(ipoint,itemp) = gamma_nu_T(ipoint,itemp)/intensity_T(ipoint,itemp)
+                endif
+             enddo
+           enddo
+           !
+        else
+           do iomp = 1,N_omp_procs
+             do ipoint = 1,npoints
+                gamma_nu(ipoint) = gamma_nu(ipoint)+ gamma_nu_omp(ipoint,iomp)
+             enddo
+           enddo  
+           !
+           ! normalising by dividing by the total intensity
+           !
+           do ipoint = 1,npoints
+              if(intens(ipoint)>abscoef_thresh) then 
+                 gamma_nu(ipoint) = gamma_nu(ipoint)/intens(ipoint)
+              endif
+           enddo
+        endif
      endif
      !
    elseif (any( trim(proftype(1:3))==(/'ELO'/)) ) then
@@ -5395,7 +5438,7 @@ module spectrum
                      abscoef = intensity_T(i,itemp)
                      tranfreq = freq(i)
                      hwhm_gauss=halfwidth0
-                     if (super_lines_with_box_do) hwhm_gauss = gamma_nu(i)
+                     if (super_lines_with_box_do) hwhm_gauss = gamma_nu_T(i,itemp)
                      !
                      if (abscoef<abscoef_thresh) cycle
                      !
@@ -5412,7 +5455,7 @@ module spectrum
                      abscoef = intensity_T(i,itemp)
                      tranfreq = freq(i)
                      hwhm_gauss=halfwidth0
-                     if (super_lines_with_box_do) hwhm_gauss = gamma_nu(i)
+                     if (super_lines_with_box_do) hwhm_gauss = gamma_nu_T(i,itemp)
                      !
                      if (abscoef<abscoef_thresh) cycle
                      !
@@ -6046,6 +6089,16 @@ module spectrum
       if (allocated(gamma_nu)) then 
          deallocate(gamma_nu)
          call ArrayStop('gamma_nu')
+      endif
+      !
+      if (allocated(gamma_nu_T_omp)) then 
+         deallocate(gamma_nu_T_omp)
+         call ArrayStop('swap:gamma_nu_T_omp')
+      endif
+      !
+      if (allocated(gamma_nu_T)) then 
+         deallocate(gamma_nu_T)
+         call ArrayStop('gamma_nu_T')
       endif
       !
       if (allocated(intensity_T)) then 
