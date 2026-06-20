@@ -123,13 +123,13 @@ For the binned profile method, the cross sections at a given wavenumber point re
         
  where
 .. math::
-              \sigma_i = \int_{\tilde\nu_i-h}^{\tilde\nu_i+h} \sigma_{\rm Lor}(\tilde\nu) d\titlde\nu,
+              \sigma_i = \int_{\tilde\nu_i-h}^{\tilde\nu_i+h} \sigma_{\rm Lor}(\tilde\nu) d\tilde\nu,
                 
 .. math::
               \sigma_{\rm Lor}(\tilde\nu) = \frac{\gamma}{\pi}\frac{1}{(\tilde\nu-\tilde\nu_{if})^+\gamma^2},
                 
 .. math::
-              \bar\sigma = \int_{\tilde\nu_{if}-\delta\tilde\nu}^{\tilde\nu_{if}+\delta\tilde\nu} \sigma_{\rm Lor}(\tilde\nu) d\titlde\nu,
+              \bar\sigma = \int_{\tilde\nu_{if}-\delta\tilde\nu}^{\tilde\nu_{if}+\delta\tilde\nu} \sigma_{\rm Lor}(\tilde\nu) d\tilde\nu,
 
 :math:`\sigma_{\rm Lor}(\tilde\nu)` is the Lorentzian line profile, :math:`\tilde\nu_{if}` is the line centre,  :math:`\bar\sigma` is the average of the line profile over the integration interval, :math:`\delta\tilde\nu` is the line ``cutoff`` distance, :math:`\Delta \nu` is the grid spacing, :math:`\tilde\nu_i` is a wavenumber grid point.
 
