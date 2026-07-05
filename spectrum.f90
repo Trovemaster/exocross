@@ -5226,12 +5226,13 @@ module spectrum
           !
           allocate(crosssections_T(npoints,n_T_points),stat=info)
           call ArrayStart('crosssections_T',info,size(crosssections_T),kind(crosssections_T))
-          crosssections_T = 0
           !
           write(cross_io_name, '(a)') 'T-dependent cross sections'
           call IOstart(trim(cross_io_name),cross_unit)
           !
           do iP = 1,Npressure_list
+            !
+            crosssections_T = 0
             !
             if (verbose>=3) then 
                write(out,"(4x,a,g15.8)") 'P = ',Pressure_list(iP)
