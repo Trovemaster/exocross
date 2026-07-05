@@ -1,0 +1,20 @@
+Temperature 296 
+
+Range 0 10000 (cm-1)
+
+Npoints 10000 
+
+
+(This is an example of cross sections calcualtions for NaH at T=296K, Doppler profile) 
+
+absorption
+Doppler
+
+mass 24
+    
+States 23Na-1H__Rivlin.states
+Transitions  23Na-1H__Rivlin.trans
+
+pffile 23Na-1H__Rivlin.pf
+
+output NaH_T296K_Doppler_1cm-1
