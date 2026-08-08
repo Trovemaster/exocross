@@ -1,7 +1,7 @@
 Getting ExoCross 
 ================
 
-Downalod ExoCross from github_
+Download ExoCross from github_
 
 .. _github: https://github.com/Trovemaster/exocross
 
