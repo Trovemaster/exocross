@@ -37,7 +37,7 @@ FFLAGS2  =  #-vec-report3
 OBJ =  accuracy.o  timer.o input.o spectrum.o VoigtKampff.o  phoenix.o
 
 xcross.exe:	$(OBJ) crosssections.o 
-	$(FOR) -o xcross.exe $(OBJ) $(FFLAGS) crosssections.o $(LIB) -static
+	$(FOR) -o xcross.exe $(OBJ) $(FFLAGS) crosssections.o $(LIB) -L/usr/lib
 
 crosssections.o:	crosssections.f90 $(OBJ) 
 	$(FOR) -c crosssections.f90 $(FFLAGS)
