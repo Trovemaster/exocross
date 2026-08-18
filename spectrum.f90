@@ -150,6 +150,7 @@ module spectrum
   logical :: cross_sections_do = .false.,pressure_array_job_do = .false.
   logical :: temperature_array_job_do = .false., super_lines_do  = .false.
   logical :: super_lines_with_box_do  = .false.
+  logical :: super_lines_with_J_do  = .false.
   !
   type(VoigtKampffCollection),save :: fast_voigt
   integer(ik),parameter :: Npressure_list_max = 100,Ntemperature_list_max = 100
@@ -1208,6 +1209,7 @@ module spectrum
             w = 'VOI-S'
             profile_calc_type = 'BINNING'
           endif
+          if (trim(w)=='VOI-S') super_lines_do = .true.
           !
           if (trim(w)=='PHOENIX') phoenix_do = .true.
           !
@@ -1787,7 +1789,7 @@ module spectrum
    !
    real(rk)    :: hitran_Tref = 296_rk
    integer(ik) :: info,ipoint,ipoint_,nlevels,i,itemp,enunit,tunit,sunit,wunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf
-   integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems,iline,intunit,inu,nrows,iP,cross_unit
+   integer(ik) :: indexf_,indexi_,kitem,nlines,ifilter,k,igrid,maxitems,iline,intunit,inu,nrows,iP,cross_unit,k_
    real(rk)    :: beta,ln2,ln22,dtemp,dfreq,temp0,beta0,intband,dpwcoef,tranfreq,abscoef,halfwidth0,tranfreq0,delta_air,beta_ref
    real(rk)    :: cmcoef,emcoef,energy,energyf,energyi,jf,ji,acoef,j0rk,gfcoef,m0,k0,Ki
    real(rk)    :: acoef_,int_cutoff,ndensity,abscoef_ref,dpwcoef0,abscoef_
@@ -3008,14 +3010,24 @@ module spectrum
          !
          ! using the gamma(Jmax) value for all gamms for J>Jmax
          !
-         do k0 = 0,KmaxAll
+         do k_ = 0,KmaxAll
            !
-           forall(k=-2:2) species(i)%gammaQN(Jmax+1:,k,k0) = species(i)%gammaQN(Jmax,k,k0)
-           forall(k=-2:2) species(i)%nQN(Jmax+1:,k,k0) = species(i)%nQN(Jmax,k,k0)
+           forall(k=-2:2) species(i)%gammaQN(Jmax+1:,k,k_) = species(i)%gammaQN(Jmax,k,k_)
+           forall(k=-2:2) species(i)%nQN(Jmax+1:,k,k_) = species(i)%nQN(Jmax,k,k_)
            !
          enddo
          !
          close(bunit)
+         !
+         select case (trim(proftype(1:5)))
+           !
+         case ('VOI-S')
+           ! Special case of super-lines with Voigt where we check the J dependence in the gamma and n and 
+           ! for which we will define a wavenumber dependent gamma/n
+           !
+           if (Jmax>0) super_lines_with_J_do = .true.
+           !
+         end select 
          !
        elseif (stick_hitran.or.stick_oxford.or.phoenix_do) then
          !
@@ -3131,9 +3143,9 @@ module spectrum
        if (super_lines_do) then
           write(out,"(10x,'Use super-lines as intermediate step')")
           proftype_secondary = proftype
-          proftype = 'BIN'
+          if (trim(proftype(1:5))/='VOI-S') proftype = 'BIN'
           !
-          if (super_lines_with_box_do) then 
+          if (super_lines_with_box_do.or.super_lines_with_J_do) then 
               ! allocate frequency (nu) dependent gamma used for the particle in a box model
               !
               if (temperature_array_job_do) then 
@@ -4350,7 +4362,7 @@ module spectrum
                     !
                     intens_T_omp(ipoint,itemp,iomp) = intens_T_omp(ipoint,itemp,iomp)+abscoef_
                     !
-                    if (super_lines_with_box_do) then
+                    if (super_lines_with_box_do.or.super_lines_with_J_do) then
                         !
                         ! we form an intensity weighted mean as sums_i I_i x gamma_i assuming we will divide by I_total later
                         gamma_nu_T_omp(ipoint,itemp,iomp) = gamma_nu_T_omp(ipoint,itemp,iomp) +  &
@@ -4379,7 +4391,7 @@ module spectrum
                   !
                   intens_omp(ipoint,iomp) = intens_omp(ipoint,iomp)+abscoef
                   !
-                  if (super_lines_with_box_do) then
+                  if (super_lines_with_box_do.or.super_lines_with_J_do) then
                       ! we form an intensity weighted mean as sums_i I_i x gamma_i assuming we will divide by I_total later
                       gamma_nu_omp(ipoint,iomp) = gamma_nu_omp(ipoint,iomp)+gamma_ram(iswap)*abscoef
                   endif
@@ -4396,7 +4408,7 @@ module spectrum
             if (temperature_array_job_do) then 
               !
               !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ileveli,energyi,ipoint,itemp,temp0,beta0,abscoef_) &
-              !$omp& shared(intens_T_omp)  schedule(dynamic)
+              !$omp& shared(intens_T_omp,gamma_nu_T_omp)  schedule(dynamic)
               do iomp = 1,N_omp_procs
                 !
                 do iswap = iomp,nswap,N_omp_procs
@@ -4418,6 +4430,13 @@ module spectrum
                     !
                     intens_T_omp(ipoint,itemp,iomp) = intens_T_omp(ipoint,itemp,iomp)+abscoef_
                     !
+                    if (super_lines_with_J_do) then
+                        !
+                        ! we form an intensity weighted mean as sums_i I_i x gamma_i assuming we will divide by I_total later
+                        gamma_nu_T_omp(ipoint,itemp,iomp) = gamma_nu_T_omp(ipoint,itemp,iomp) +  &
+                                                            gamma_array_ram(itemp,iswap)*abscoef_
+                    endif
+                    !
                   enddo
                   !
                 enddo
@@ -4427,7 +4446,7 @@ module spectrum
               !
             else
               !
-              !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint) schedule(dynamic)
+              !$omp parallel do private(iomp,iswap,abscoef,tranfreq,ipoint) shared(intens_omp,gamma_nu_omp) schedule(dynamic)
               do iomp = 1,N_omp_procs
                 !
                 do iswap = iomp,nswap,N_omp_procs
@@ -4438,6 +4457,11 @@ module spectrum
                   call get_grid_ipoint(tranfreq,freq,ipoint)
                   !
                   intens_omp(ipoint,iomp) = intens_omp(ipoint,iomp)+abscoef
+                  !
+                  if (super_lines_with_J_do) then
+                      ! we form an intensity weighted mean as sums_i I_i x gamma_i assuming we will divide by I_total later
+                      gamma_nu_omp(ipoint,iomp) = gamma_nu_omp(ipoint,iomp)+gamma_ram(iswap)*abscoef
+                  endif
                   !
                 enddo
                 !
@@ -5103,7 +5127,7 @@ module spectrum
         enddo
      endif
      !
-     if (super_lines_with_box_do) then
+     if (super_lines_with_box_do.or.super_lines_with_J_do) then
         !
         if (temperature_array_job_do) then
            !omp parallel do private(iomp,ipoint) shared(gamma_nu_T) schedule(dynamic) 
@@ -5247,13 +5271,15 @@ module spectrum
                !
                halfwidth0 = halfwidth
                !
-               if (Nspecies>0) then 
-                 !
-                 halfwidth0 = 0 
-                 do i=1,Nspecies
-                   halfwidth0 =  halfwidth0 + species(i)%ratio*species(i)%gamma*(species(i)%T0/temp0)**species(i)%N*pressure/species(i)%P0
-                 enddo
-                 !
+               if (.not.super_lines_with_J_do) then
+                 if (Nspecies>0) then 
+                   !
+                   halfwidth0 = 0 
+                   do i=1,Nspecies
+                     halfwidth0 =  halfwidth0 + species(i)%ratio*species(i)%gamma*(species(i)%T0/temp0)**species(i)%N*pressure/species(i)%P0
+                   enddo
+                   !
+                 endif
                endif
                !
                select case (profile_calc_type)
@@ -5263,10 +5289,15 @@ module spectrum
                   do i = 1,npoints0
                     !
                     abscoef = intensity_T(i,itemp)
+                    !
+                    if (abscoef<abscoef_thresh) cycle
+                    !
                     tranfreq = frequency_grid_(i)
                     hwhm_gauss=dpwcoef0*tranfreq*sqrt(temp0)
                     !
-                    if (abscoef<abscoef_thresh) cycle
+                    if (super_lines_with_J_do) then
+                        halfwidth0 = gamma_nu_T(i,itemp)
+                    endif
                     !
                     call do_Voigt(tranfreq,abscoef,freq,halfwidth0,hwhm_gauss,cutoff,freql,crosssections_T(:,itemp))
                     !
@@ -5277,10 +5308,15 @@ module spectrum
                   do i = 1,npoints0
                     !
                     abscoef = intensity_T(i,itemp)
+                    !
+                    if (abscoef<abscoef_thresh) cycle
+                    !
                     tranfreq = frequency_grid_(i)
                     hwhm_gauss=dpwcoef0*tranfreq*sqrt(temp0)
                     !
-                    if (abscoef<abscoef_thresh) cycle
+                    if (super_lines_with_J_do) then
+                        halfwidth0 = gamma_nu_T(ipoint,i)
+                    endif
                     !
                     call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth0,cutoff,freql,hwhm_gauss,crosssections_T(:,itemp))
                     !
