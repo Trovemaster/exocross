@@ -1,0 +1,37 @@
+absorption
+voigt-super
+verbose 3
+mass 28
+
+temperature-list
+  300
+  500
+  1000
+  2000
+end
+
+pressure-list
+  1.00000000e-02
+  1.00000000e+00
+  1.00000000e+01
+end
+range 200 20000
+
+R 20000
+
+mem 24.0 gb
+
+NRAM 100000
+
+NPROCS 8
+species
+  0 gamma 0.0688 n 0.650  t0 296 ratio 0.86
+  1 gamma 0.0454 n 0.6 t0 296 ratio 0.14
+end
+
+output 12C-16O__Li2015_T-P_list_Voigt
+
+states 12C-16O__Li2015.states
+transitions
+  12C-16O__Li2015.trans
+end
