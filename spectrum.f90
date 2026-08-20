@@ -657,6 +657,9 @@ module spectrum
           !
           pressure_array_job_do = .true. 
           !
+          ! for this case, the global pressure parameter must be set to 1 
+          pressure = 1.0
+          !
           call read_line(eof) ; if (eof) exit
           call readu(w)
           !
@@ -1824,7 +1827,7 @@ module spectrum
    character(len=cl) :: w,print_fmt
    !
    integer(ik) :: imol,iostat_,isotope,alloc_p
-   real(rk)    :: gf,gi,mem_t,temp_gamma_n,cutoff_
+   real(rk)    :: gf,gi,mem_t,temp_gamma_n,cutoff_,pressure_
    character(len=55) ch_q,ch_broad
    character(len=cl)   :: my_fmt100K,my_fmt0
    character(len=cl)  :: fmt_T_array
@@ -3025,7 +3028,16 @@ module spectrum
            ! Special case of super-lines with Voigt where we check the J dependence in the gamma and n and 
            ! for which we will define a wavenumber dependent gamma/n
            !
-           if (Jmax>0) super_lines_with_J_do = .true.
+           if (Jmax>0) then 
+              super_lines_with_J_do = .true.
+              do k_=2,Nspecies
+                 if(species(k_)%P0 /= species(1)%P0 ) then
+                    write(out,"('super_lines_with_J_do: error, ref-pressure for Species ',i3,' is not the same as for 1',2f12.5)")& 
+                              k_,species(k_)%P0,species(1)%P0
+                    stop "super_lines_with_J_do: error, reference pressure for Species must be identical"
+                 endif
+              enddo
+           endif
            !
          end select 
          !
@@ -3893,8 +3905,7 @@ module spectrum
                       !
                       if (predissociation_do) then
                         ! 
-                        gamma_array_ram(:,iswap) = gamma_radiative(ilevelf)*gamma_array_ram(:,iswap)/&
-                                                       (gamma_radiative(ilevelf)+gamma_array_ram(:,iswap))
+                        gamma_array_ram(:,iswap) = gamma_radiative(ilevelf)+gamma_array_ram(:,iswap)
                       endif
                       !
                    else
@@ -3902,8 +3913,7 @@ module spectrum
                       gamma_ram(iswap) = get_Voigt_gamma_val(Nspecies,Ji,Jf,Ki,temp0)
                       !
                       if (predissociation_do) then 
-                        gamma_ram(iswap) = gamma_radiative(ilevelf)*gamma_ram(iswap)/&
-                                           (gamma_radiative(ilevelf)+gamma_ram(iswap))
+                        gamma_ram(iswap) = gamma_radiative(ilevelf)+gamma_ram(iswap)
                       endif
                       !
                    endif
@@ -5262,7 +5272,7 @@ module spectrum
                write(out,"(4x,a,g15.8)") 'P = ',Pressure_list(iP)
             endif
             !
-            pressure = Pressure_list(iP)
+            pressure_ = Pressure_list(iP)
             !
             !$omp parallel do private(itemp,temp0,halfwidth0,i,abscoef,tranfreq,hwhm_gauss) shared(crosssections_T) schedule(dynamic)
             do itemp = 1,n_T_points
@@ -5276,7 +5286,7 @@ module spectrum
                    !
                    halfwidth0 = 0 
                    do i=1,Nspecies
-                     halfwidth0 =  halfwidth0 + species(i)%ratio*species(i)%gamma*(species(i)%T0/temp0)**species(i)%N*pressure/species(i)%P0
+                     halfwidth0 =  halfwidth0 + species(i)%ratio*species(i)%gamma*(species(i)%T0/temp0)**species(i)%N*pressure_/species(i)%P0
                    enddo
                    !
                  endif
@@ -5296,7 +5306,7 @@ module spectrum
                     hwhm_gauss=dpwcoef0*tranfreq*sqrt(temp0)
                     !
                     if (super_lines_with_J_do) then
-                        halfwidth0 = gamma_nu_T(i,itemp)
+                        halfwidth0 = gamma_nu_T(i,itemp)*pressure_/species(1)%P0
                     endif
                     !
                     call do_Voigt(tranfreq,abscoef,freq,halfwidth0,hwhm_gauss,cutoff,freql,crosssections_T(:,itemp))
@@ -5315,7 +5325,7 @@ module spectrum
                     hwhm_gauss=dpwcoef0*tranfreq*sqrt(temp0)
                     !
                     if (super_lines_with_J_do) then
-                        halfwidth0 = gamma_nu_T(ipoint,i)
+                        halfwidth0 = gamma_nu_T(ipoint,i)*pressure_/species(i)%P0
                     endif
                     !
                     call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth0,cutoff,freql,hwhm_gauss,crosssections_T(:,itemp))
@@ -5327,7 +5337,7 @@ module spectrum
             enddo
             !$omp end parallel do
             !
-            write(fmt_pressure,'(es16.8E3)') pressure
+            write(fmt_pressure,'(es16.8E3)') pressure_
             !
             write(filename,'(a,a,a,a)') trim(output),"__",trim(adjustl(fmt_pressure)),".xsec"
             !
@@ -5355,7 +5365,7 @@ module spectrum
           !
           do iP = 1,Npressure_list
             !
-            pressure = Pressure_list(iP)
+            pressure_ = Pressure_list(iP)
             !
             line_intensity = 0
             !
@@ -5396,7 +5406,7 @@ module spectrum
                !
             end select
             !
-            write(fmt_pressure,'(es16.8E3)') pressure
+            write(fmt_pressure,'(es16.8E3)') pressure_
             !
             write(filename,'(a,a,a,a)') trim(output),"__",trim(adjustl(fmt_pressure)),".xsec"
             !
