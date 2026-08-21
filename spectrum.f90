@@ -1182,6 +1182,7 @@ module spectrum
           else
             !
             call readf(thresh)
+            abscoef_thresh = thresh
             !
           endif
           !
@@ -3899,7 +3900,7 @@ module spectrum
                         !
                         temp0 = Temperature_list(itemp)
                         !
-                        gamma_array_ram(itemp,iswap) = get_Voigt_gamma_val(Nspecies,Ji,Jf,Ki,temp0)
+                        gamma_array_ram(itemp,iswap) = get_Voigt_gamma_val(Nspecies,Jf,Ji,Ki,temp0)
                         !
                       enddo
                       !
@@ -3910,7 +3911,7 @@ module spectrum
                       !
                    else
                       !
-                      gamma_ram(iswap) = get_Voigt_gamma_val(Nspecies,Ji,Jf,Ki,temp0)
+                      gamma_ram(iswap) = get_Voigt_gamma_val(Nspecies,Jf,Ji,Ki,temp0)
                       !
                       if (predissociation_do) then 
                         gamma_ram(iswap) = gamma_radiative(ilevelf)+gamma_ram(iswap)
