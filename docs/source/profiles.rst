@@ -116,18 +116,18 @@ or
 
 
 
-For the binned profile method, the cross sections at a given wavenumber point represents an average over the wavenumber bin. The main feature of the binned Lorentzian is to preserve the total intensity. It is therefore normalised to 1 after the cutoff applied. 
+For the binned profile method, the cross sections at a given wavenumber point represents an average over the wavenumber bin. The main feature of the binned Lorentzian is to preserve the total intensity. It is therefore normalised to 1 after the cutoff applied.
 
 .. math::
-              \sigma_{\rm binned Lor}(\tilde\nu) = \sum_{i} \frac{\sigma_{i}}{\bar\sigma}, 
-        
+              \sigma_{\rm binned Lor}(\tilde\nu) = \sum_{i} \frac{\sigma_{i}}{\bar\sigma},
+
  where
 .. math::
               \sigma_i = \int_{\tilde\nu_i-h}^{\tilde\nu_i+h} \sigma_{\rm Lor}(\tilde\nu) d\tilde\nu,
-                
+
 .. math::
               \sigma_{\rm Lor}(\tilde\nu) = \frac{\gamma}{\pi}\frac{1}{(\tilde\nu-\tilde\nu_{if})^+\gamma^2},
-                
+
 .. math::
               \bar\sigma = \int_{\tilde\nu_{if}-\delta\tilde\nu}^{\tilde\nu_{if}+\delta\tilde\nu} \sigma_{\rm Lor}(\tilde\nu) d\tilde\nu,
 
@@ -196,6 +196,15 @@ Here the HWHM of the line is 0.5 cm\ :sub:`-1`. In order not to lose the density
 
 
 where :math:`\nu_{\rm last}` and :math:`\nu_{\rm first}` are the last and fist grid points within the box, i.e. :math:`L \le \nu_{\rm last}- \nu_{\rm first}`.
+
+
+The keyword ``Threshold`` can be used to specify the line intensity threshold to omit very weak lines from the line broadening calculations, which can help make the calculations faster. The default value of the line intensity is 1e-50 cm/molecule. 
+
+For example:
+::
+
+   Voigt
+   threshold 1e-40 
 
 
 

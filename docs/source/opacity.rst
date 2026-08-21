@@ -146,6 +146,22 @@ It is possible to use the resolving-power grid for super-lines and then mapped i
 Here, the super-lines are computed on the :math:`R=100000` grid and then transformed to :math:`N_{\rm points} = 10001` grid.
 
 
+
+In principle, for the super-lines approach, when intensities of individual lines are summed into an intensity of a super-line, the description of the quantum numbers (e.g. :math:`J`) is washed out. Because of that the line broadening cannot distinguish any dependence on the quantum numbers. It is however now possible to include the :math:`J`-dependence on average. For the ``a0`` line-broadening diet defined via a .broad file, the :math:`J`-dependent :math:`\gamma(T)` values are averaged by intensity-weighting them at each wavenumber grid point and each temperature (see also the particle-in-the-box model):
+
+.. math::
+              \gamma(\tilde\nu_k,T) = \sum_{i,f, \nu_k \pm \Delta \nu_/2} \frac{\gamma(v_{f}) I_{i,f}(T,\tilde\nu_{i,f}) }{\Delta I_{k}(T)},
+
+
+where :math:`\tilde\nu_k` is the wavenumber grid (centre of the super-line) point, :math:`i,f` are the indices of the lower, upper states, respectively for all transitions :math:`\nu_{i,f}` that fall into the bin :math:`\tilde\nu_k \pm \frac{\Delta \nu}{2}`, :math:`I_{i,f}` is the associated line intensity, :math:`\Delta \nu}` is the bin size, :math:`\Delta I_{k}(Т)` is the total line intensity within the bin centred around :amth:`\tilde:\nu_k`, i.e. around the centre of the super-line. That is, the averaged value of the line broadening is based on the weight
+
+.. math::
+
+            W_{i,f} = \frac{I_{i,f}(T,\tilde\nu_{i,f})}{\Delta I_{k}(T)}.
+
+The line parameters :math:`\gamma(\tilde\nu_k,T)` are then used as broadenings for the corresponding super-lines centered at grid points :math:`\tilde\nu_k`.
+
+
 .. warning:: This feature works only currently only for the basic case of ``Absorption`` and ``Voigt`` with no ``Filters``, ``non-LTE`` etc.
 
 
@@ -229,13 +245,13 @@ The the particle-in-the-box broadening model is used to provide a non-uniform li
               \gamma(\tilde\nu_k,T) = \sum_{i,f, \nu_k \pm \Delta \nu_/2} \frac{\gamma(v_{f}) I_{i,f}(T,\tilde\nu_{i,f}) }{\Delta I_{k}(T)},
 
 
-where :math:`\tilde\nu_k` is the wavenumber grid (centre of the super-line) point, :math:`i,f` are the indices of the lower, upper states, respectively for all transitions :math:`\nu_{i,f}` that fall into the bin :math:`\tilde\nu_k \pm \frac{\Delta \nu}{2}`, :math:`I_{i,f}` is the associated line intensity, :math:`\Delta \nu}` is the bin size, :math:`\Delta I_{k}(Т)` is the total line intensity within the bin centred around :amth:`\tilde:\nu_k`, i.e. around the centre of the super-line. That is, the averaged value of the line broadening is based on the weight 
+where :math:`\tilde\nu_k` is the wavenumber grid (centre of the super-line) point, :math:`i,f` are the indices of the lower, upper states, respectively for all transitions :math:`\nu_{i,f}` that fall into the bin :math:`\tilde\nu_k \pm \frac{\Delta \nu}{2}`, :math:`I_{i,f}` is the associated line intensity, :math:`\Delta \nu}` is the bin size, :math:`\Delta I_{k}(Т)` is the total line intensity within the bin centred around :amth:`\tilde:\nu_k`, i.e. around the centre of the super-line. That is, the averaged value of the line broadening is based on the weight
 
-.. math:: 
+.. math::
 
             W_{i,f} = \frac{I_{i,f}(T,\tilde\nu_{i,f})}{\Delta I_{k}(T)}.
 
-The line parameters :math:`\gamma(\tilde\nu_k,T)` are then used as broadenings for the corresponding super-lines centered at grid points :math:`\tilde\nu_k`. 
+The line parameters :math:`\gamma(\tilde\nu_k,T)` are then used as broadenings for the corresponding super-lines centered at grid points :math:`\tilde\nu_k`.
 
 
 Here is an example of the input file where the Gaussian line profile, particle-in-a-box broadening model and the super-lines procedure are combined:
