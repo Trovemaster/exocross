@@ -6428,10 +6428,8 @@ module spectrum
      cutoff_ = cutoff
      if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth
      !
-     call get_ipoint_ranges(tranfreq,freq,cutoff_,ib,ie)
-     !
-     !ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
-     !ie =  min(nint( ( tranfreq+cutoff_-freql)/dfreq )+1,npoints)
+     ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
+     ie =  min(nint( ( tranfreq+cutoff_-freql)/dfreq )+1,npoints)
      !
      !omp parallel do private(ipoint,dfreq_,xp,xm,de) shared(intens) schedule(dynamic)
      do ipoint=ib,ie
