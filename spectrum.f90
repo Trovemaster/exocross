@@ -4,6 +4,8 @@ module spectrum
   use timer
   use VoigtKampff
   use Phoenix
+  use grid_profiles
+  use symmetry
   !
   implicit none
   !
@@ -163,6 +165,7 @@ module spectrum
   subroutine ReadInput
     !
     use  input
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
     !
     implicit none
     !
@@ -173,6 +176,8 @@ module spectrum
     type(HitranErrorT),pointer :: HITRAN
     real(rk) :: f_t,dtemp,temp0
     logical :: use_temperature_list = .false.
+    logical :: symmetry_col_defined = .false., cutoff_defined = .false.
+    integer(ik) :: expected_nirreps = -1
     ! -----------------------------------------------------------
     !
     write(out,"('Read the input')")
@@ -200,6 +205,26 @@ module spectrum
         case ("GNS")
           !
           call readi(gns)
+          !
+        case ("SYMMETRY")
+          if (nitems /= 2) error stop 'SYMMETRY requires one group name'
+          call reada(w)
+          call SymmetryInitialize(w)
+          !
+        case ("NIRREPS")
+          if (expected_nirreps /= -1) error stop 'NIRREPS is already defined'
+          if (nitems == 3) then
+            call readu(w)
+            if (trim(w) /= '=') error stop 'Expected NIRREPS [=] integer'
+          elseif (nitems /= 2) then
+            error stop 'Expected NIRREPS [=] integer'
+          endif
+          call readi(expected_nirreps)
+          if (expected_nirreps < 1) error stop 'NIRREPS must be positive'
+          !
+        case ("PROFILES")
+          call read_grid_profiles()
+          proftype = 'GRID'
           !
         case ("TEMPERATURE","TEMP")
           !
@@ -716,10 +741,13 @@ module spectrum
               !
               call readi(QN%Kcol)
               !
-            case ("SYMMETRY","SYM","GAMMA")
+            case ("SYMMETRY","IRREP","SYM","GAMMA")
               !
               call readi(i_t)
               QN%SymCol = i_t-4
+              symmetry_col_defined = .true.
+              if (i_t < 5) error stop 'QN SYMMETRY/IRREP requires a column >= 5'
+              if (nitems /= 2) error stop 'QN SYMMETRY/IRREP takes only a column; GRID uses upper x lower'
               !
             case ("LIFETIME","LIFETIMES")
               !
@@ -1314,6 +1342,7 @@ module spectrum
           call readi(icutoff)
           !
        case ("OFFSET","LINE-CUTOFF","CUTOFF")
+          cutoff_defined = .true.
           !
           call readf(cutoff) 
           if (nitems>2) then
@@ -1494,13 +1523,50 @@ module spectrum
       !
     enddo
     !
+    if (expected_nirreps /= -1) then
+      if (sym%Nirreps == 0) error stop 'NIRREPS requires a SYMMETRY group'
+      if (expected_nirreps /= sym%Nirreps) error stop 'NIRREPS does not match the SYMMETRY group'
+    endif
+    ! A PROFILES block selects GRID regardless of the order of input blocks.
+    if (grid_profiles_do.or.trim(proftype)=='GRID') then
+      proftype = 'GRID'
+      if (.not.grid_profiles_do) error stop 'GRID requires PROFILES'
+      if (.not.symmetry_col_defined) error stop 'GRID requires QN SYMMETRY/IRREP column'
+      if (sym%Nirreps == 0) error stop 'GRID requires a SYMMETRY group'
+      if (hitran_do.or.spectra_do.or.super_energies_do.or.histogram.or.histogramJ.or.interpolated) &
+        error stop 'GRID requires ExoMol states and transitions with state labels'
+      if (trim(enrfilename)=='NONE') error stop 'GRID requires a STATES file'
+      if (super_lines_do.or.super_Einstein_do) error stop 'GRID does not support super-lines'
+      if (Nspecies>0.or.predissociation_do.or.error_broadening_do.or.error_cross_sections_do) &
+        error stop 'GRID cannot be combined with additional broadening models'
+      if (pressure_array_job_do) error stop 'GRID has no pressure dependence'
+      if (trim(cutoff_intensity_model)/='NONE') error stop 'GRID currently supports a constant intensity threshold'
+      if (use_width_cutoff) error stop 'GRID cutoff must be in cm-1, not HWHM'
+      if (.not.ieee_is_finite(cutoff)) error stop 'GRID cutoff must be finite'
+      if (use_resolving_power.or.Ngrids>0.or.microns.or.npoints_/=0.or.resolving_power_2>0) &
+        error stop 'GRID currently requires one uniform output grid in cm-1'
+      if (trim(specttype)/='ABSORPTION'.or.nonLTE_do.or.vibtemperature_do.or.population_do) &
+        error stop 'GRID currently supports LTE absorption'
+      if (npoints<2.or.freqr<=freql) error stop 'GRID requires an increasing output grid with >=2 points'
+      if (.not.ieee_is_finite(freql).or..not.ieee_is_finite(freqr)) error stop 'GRID range must be finite'
+      lineprofile_do = .false. ! This flag enables analytic gamma/broadener machinery.
+      temper_lineprofile_do = .false.
+      if (temperature_array_job_do) then
+        call configure_grid_profiles(Temperature_list)
+      else
+        call configure_grid_profiles([temp])
+      endif
+      if (.not.cutoff_defined) cutoff = -1.0_rk ! Set to full file support after loading.
+      if (if_halfwidth_defined) write(out,'(a)') 'GRID: HWHM is unused; the supplied profile defines its width'
+    endif
+    !
     ! limit array_job_do for the currently implemented case of Voigt and absorption 
     !
     if (temperature_array_job_do) then
        !
        if (trim(specttype)/='ABSORPTION'.or.(trim(proftype)/='VOIGT'.and.trim(proftype)/='VOI-S'.and.&
-           proftype(1:5)/='GAUSS'.and.proftype(1:5)/='GAUS0'.and.proftype(1:5)/='DOPPL'.and.proftype(1:5)/='PARTF')) then
-         write (out,"('input: ARRAY can currently work only with VOIGT, GAUSS or GAUS0 in ABSORPTION')")
+           proftype(1:5)/='GAUSS'.and.proftype(1:5)/='GAUS0'.and.proftype(1:5)/='DOPPL'.and.proftype(1:5)/='PARTF'.and.trim(proftype)/='GRID')) then
+         write (out,"('input: ARRAY can currently work only with VOIGT, GAUSS, GAUS0 or GRID in ABSORPTION')")
          stop 'input - illigal use of ARRAY: only VOIGT OR GAUSS in ABSORPTION'
        endif
        !
@@ -1553,7 +1619,7 @@ module spectrum
     endif 
     !
     ! these keywords indicate that we compute cross sectons:
-    if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE','COO','ELO'/)) ) then
+    if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','MAX','PSE','COO','ELO','GRI'/)) ) then
       cross_sections_do = .true.
     endif
     !
@@ -1805,6 +1871,8 @@ module spectrum
    real(rk),allocatable :: freq(:),intens(:),jrot(:),pf(:,:),energies(:),Asum(:),weight(:),abciss(:),bnormq(:)
    real(rk),allocatable :: Krot(:),gtot(:)
    integer(ik),allocatable :: indices(:),level_IDs(:)
+   integer(ik),allocatable :: state_irrep(:)
+   integer(ik) :: irrep_up,irrep_low,profile_state,iprofile_side
    character(len=20),allocatable :: quantum_numbers(:,:),quantum_numbers_vib(:,:)
    !
    real(rk),allocatable :: acoef_RAM(:),abscoef_ram(:),nu_ram(:),intens_omp(:,:),gamma_ram(:),sigma2_ram(:)
@@ -1941,6 +2009,9 @@ module spectrum
            call report ("In .states less than  than 4 columns, mixed up with .trans?"//trim(w),.true.)
          endif
          !
+         if (grid_profiles_do) then
+           if (nitems < QN%SymCol+4) error stop 'GRID: symmetry column missing in STATES row'
+         endif
          call readi(itemp)
          call readf(energy)
          !
@@ -2205,6 +2276,9 @@ module spectrum
          i = i + 1
          iline = iline + 1
          !
+         if (grid_profiles_do) then
+           if (nitems < QN%SymCol+4) error stop 'GRID: symmetry column missing in STATES row'
+         endif
          call readi(itemp)
          call readf(energy)
          !
@@ -2693,6 +2767,17 @@ module spectrum
    endif
    !
    if (verbose>=2.or.(partfunc_do.and.verbose>0)) print('(1x,a,1x,es16.8/)'),'! partition function value is',partfunc
+   ! Load tables once, after the partition function and before line broadening.
+   if (grid_profiles_do) then
+     call load_grid_profiles()
+     if (cutoff < 0) cutoff = grid_profile_extent()
+     if (QN%SymCol > ubound(quantum_numbers,1)) error stop 'GRID: symmetry column outside STATES data'
+     allocate(state_irrep(nrows),stat=info)
+     call ArrayStart('GRID:state_irrep',info,size(state_irrep),kind(state_irrep))
+     do i = 1,nrows
+       state_irrep(i) = irrep_index(quantum_numbers(QN%SymCol,i))
+     enddo
+   endif
    !
    ! prepare the quadratures (Gauss-Hermite)
    !
@@ -3138,6 +3223,9 @@ module spectrum
    call IOstart(trim(ioname),tunit)
    !
    select case (trim(proftype(1:5)))
+   case ('GRID')
+       write(out,'(a,i0,a,f12.4)') 'GRID: ',grid_profile_count(),' labels; cutoff (cm-1) = ',cutoff
+       write(out,'(a,i0)') 'GRID: band symmetry = upper x lower, using STATES column ',QN%SymCol+4
        !
    case ('GAUSS','DOPPL','LOREN','LORE0','GAUS0','DOPP0','VOIGT','PSEUD','PSE-R','PSE-L','VOI-Q','VOI-F','VOI-9','VOI-U','VOI-S')
        !
@@ -3877,7 +3965,11 @@ module spectrum
                   cycle loop_swap_array
                 endif
                 !
-                if (tranfreq0<freql.or.tranfreq0>freqr) cycle
+                if (grid_profiles_do) then
+                  if (tranfreq0+cutoff<freql.or.tranfreq0-cutoff>freqr) cycle
+                else
+                  if (tranfreq0<freql.or.tranfreq0>freqr) cycle
+                endif
                 !
                 abscoef=cmcoef*acoef*gtot(ilevelf)/tranfreq**2
                 !
@@ -3929,9 +4021,9 @@ module spectrum
               ! A single tempeture job 
               !
               !$omp  parallel do private(iswap,indexf,indexi,acoef,ilevelf,ileveli,energyf,energyi,ifilter,&
-              !$omp& ivib,ener_vib,ener_rot,jf,ji,Ki,tranfreq,tranfreq0,cutoff,abscoef,ndensity,int_cutoff,abscoef_ref,&
+              !$omp& ivib,ener_vib,ener_rot,jf,ji,Ki,tranfreq,tranfreq0,abscoef,ndensity,int_cutoff,abscoef_ref,&
               !$omp& temp_gamma_n,unc_f,unc_i)&
-              !$omp& schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,gamma_ram,sigma2_ram)
+              !$omp& firstprivate(cutoff) schedule(static) shared(ilevelf_ram,ileveli_ram,abscoef_ram,acoef_ram,nu_ram,gamma_ram,sigma2_ram)
               loop_swap : do iswap = 1,nswap_
                 !
                 indexf = indexf_RAM(iswap)
@@ -3978,7 +4070,11 @@ module spectrum
                   cycle loop_swap
                 endif
                 !
-                if (tranfreq0<freql.or.tranfreq0>freqr) cycle
+                if (grid_profiles_do) then
+                  if (tranfreq0+cutoff<freql.or.tranfreq0-cutoff>freqr) cycle
+                else
+                  if (tranfreq0<freql.or.tranfreq0>freqr) cycle
+                endif
                 !
                 if (filter) then
                   !
@@ -4246,9 +4342,55 @@ module spectrum
         !
         !   if transition frequency is out of selected range
         !
+        if (grid_profiles_do) then
+          do iswap = 1,nswap
+            do iprofile_side = 1,2
+              profile_state = ilevelf_ram(iswap)
+              if (iprofile_side == 2) profile_state = ileveli_ram(iswap)
+              if (state_irrep(profile_state) /= 0) cycle
+              write(out,'(a,i0,2a)') 'GRID: unknown irrep for state ',level_IDs(profile_state), &
+                ', label ',trim(quantum_numbers(QN%SymCol,profile_state))
+              error stop 'GRID: unknown state irrep'
+            enddo
+            call require_grid_pair_profiles(state_irrep(ilevelf_ram(iswap)),state_irrep(ileveli_ram(iswap)))
+          enddo
+        endif
         call TimerStart('Calc')
         !
         select case (trim(proftype(1:5)))
+        case ('GRID')
+          if (temperature_array_job_do) then
+            !$omp parallel do private(iomp,iswap,tranfreq,ileveli,energyi,itemp,beta0,abscoef_, &
+            !$omp& irrep_up,irrep_low) shared(intens_T_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              do iswap = iomp,nswap,N_omp_procs
+                tranfreq = nu_ram(iswap)
+                ileveli = ileveli_ram(iswap)
+                energyi = energies(ileveli)
+                irrep_up = state_irrep(ilevelf_ram(iswap))
+                irrep_low = state_irrep(ileveli)
+                do itemp = 1,n_T_points
+                  beta0 = c2/Temperature_list(itemp)
+                  abscoef_ = abscoef_ram(iswap)*exp(-beta0*energyi)* &
+                             (1.0_rk-exp(-beta0*tranfreq))/pf(0,itemp)
+                  if (abscoef_ < max(abscoef_thresh,thresh)) cycle
+                  call do_grid_sampling(tranfreq,abscoef_,freq,cutoff,itemp,irrep_up,irrep_low,intens_T_omp(:,itemp,iomp))
+                enddo
+              enddo
+            enddo
+            !$omp end parallel do
+          else
+            !$omp parallel do private(iomp,iswap,irrep_up,irrep_low) shared(intens_omp) schedule(dynamic)
+            do iomp = 1,N_omp_procs
+              do iswap = iomp,nswap,N_omp_procs
+                irrep_up = state_irrep(ilevelf_ram(iswap))
+                irrep_low = state_irrep(ileveli_ram(iswap))
+                if (abscoef_ram(iswap) < max(abscoef_thresh,thresh)) cycle
+                call do_grid_sampling(nu_ram(iswap),abscoef_ram(iswap),freq,cutoff,1,irrep_up,irrep_low,intens_omp(:,iomp))
+              enddo
+            enddo
+            !$omp end parallel do
+          endif
             !
         case ('STICK')
             !
@@ -5115,7 +5257,7 @@ module spectrum
    !
    !Do all the summation at the end
    !
-   if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','PSE','COO'/)) ) then
+   if (any( trim(proftype(1:3))==(/'DOP','GAU','REC','BIN','BOX','LOR','VOI','PSE','COO','GRI'/)) ) then
      !
      if (verbose>=4) then 
         write(out,"(4x,a)") 'Combine intensities from different cores'
@@ -5642,7 +5784,7 @@ module spectrum
           !
        endif          
        !
-   case ('VOIGT')
+   case ('VOIGT','GRID')
        !
        ! remap frequency grid to a new value
        !
@@ -5963,6 +6105,12 @@ module spectrum
    contains
    !
    subroutine clean_up_memory_allocations
+    if (allocated(state_irrep)) then
+      deallocate(state_irrep)
+      call ArrayStop('GRID:state_irrep')
+    endif
+    if (grid_profiles_do) call free_grid_profiles()
+    call SymmetryClear()
       ! 
       ! all arrays that have been allocated are now deallocated
       !
@@ -6428,8 +6576,10 @@ module spectrum
      cutoff_ = cutoff
      if ( use_width_cutoff ) cutoff_ = cutoff*halfwidth
      !
-     ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
-     ie =  min(nint( ( tranfreq+cutoff_-freql)/dfreq )+1,npoints)
+     call get_ipoint_ranges(tranfreq,freq,cutoff_,ib,ie)
+     !
+     !ib =  max(nint( ( tranfreq-cutoff_-freql)/dfreq )+1,1)
+     !ie =  min(nint( ( tranfreq+cutoff_-freql)/dfreq )+1,npoints)
      !
      !omp parallel do private(ipoint,dfreq_,xp,xm,de) shared(intens) schedule(dynamic)
      do ipoint=ib,ie

@@ -15,6 +15,7 @@ Welcome to ExoCross's documentation!
    superlines
    strong-weak
    profiles
+   grid_profiles
    opacity
    hitran
    spectra

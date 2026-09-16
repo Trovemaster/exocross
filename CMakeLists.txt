@@ -25,6 +25,8 @@ add_library(exocross
   accuracy.f90
   input.f90
   phoenix.f90
+  symmetry.f90
+  grid_profiles.f90
   spectrum.f90
   timer.f90
   VoigtKampff.f90

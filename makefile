@@ -34,7 +34,7 @@ FFLAGS2  =  #-vec-report3
 
 ###############################################################################
 
-OBJ =  accuracy.o  timer.o input.o spectrum.o VoigtKampff.o  phoenix.o
+OBJ =  accuracy.o  timer.o input.o symmetry.o grid_profiles.o spectrum.o VoigtKampff.o  phoenix.o
 
 xcross.exe:	$(OBJ) crosssections.o 
 	$(FOR) -o xcross.exe $(OBJ) $(FFLAGS) crosssections.o $(LIB) -static
@@ -42,7 +42,13 @@ xcross.exe:	$(OBJ) crosssections.o
 crosssections.o:	crosssections.f90 $(OBJ) 
 	$(FOR) -c crosssections.f90 $(FFLAGS)
 
-spectrum.o:	spectrum.f90 accuracy.o input.o  VoigtKampff.o phoenix.o
+symmetry.o: symmetry.f90 accuracy.o
+	$(FOR) -c symmetry.f90 $(FFLAGS)
+
+grid_profiles.o: grid_profiles.f90 accuracy.o input.o timer.o symmetry.o
+	$(FOR) -c grid_profiles.f90 $(FFLAGS)
+
+spectrum.o:	spectrum.f90 accuracy.o input.o symmetry.o grid_profiles.o VoigtKampff.o phoenix.o
 	$(FOR) -c spectrum.f90 $(FFLAGS)
 
 accuracy.o:  accuracy.f90
