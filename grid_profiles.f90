@@ -43,9 +43,10 @@ contains
 
   subroutine read_grid_profiles()
     type(profile_file_t) :: entry
+    type(profile_file_t), allocatable :: grown_files(:)
     character(len=wl) :: word
     logical :: eof
-    integer :: ios
+    integer :: ios,n
 
     if (allocated(files)) call grid_error('Only one PROFILES block is allowed')
     allocate(files(0))
@@ -69,7 +70,13 @@ contains
       entry%label = word
       call reada(entry%filename)
       if (len_trim(entry%filename) == 0) call grid_error('Empty profile filename')
-      files = [files,entry]
+      ! Append explicitly: do not depend on reallocation during assignment.
+      n = size(files)
+      allocate(grown_files(n+1),stat=ios)
+      if (ios /= 0) call grid_error('Cannot allocate PROFILES entries')
+      if (n > 0) grown_files(1:n) = files
+      grown_files(n+1) = entry
+      call move_alloc(grown_files,files)
     enddo
     if (size(files) == 0) call grid_error('PROFILES is empty')
     grid_profiles_do = .true.
