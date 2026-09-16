@@ -117,11 +117,11 @@ contains
         if (same_temperature(files(i)%temperature,temperatures(j))) it = j
       enddo
       if (it == 0) then
-        write(message,'(a,g0,a,a)') 'Unrequested temperature ',files(i)%temperature,' for ',trim(files(i)%label)
+        write(message,'(a,f15.6,a,a)') 'Unrequested temperature ',files(i)%temperature,' for ',trim(files(i)%label)
         call grid_error(message)
       endif
       if (file_index(it,is) /= 0) then
-        write(message,'(a,g0,1x,a)') 'Duplicate (temperature,label): ',temperatures(it),trim(labels(is))
+        write(message,'(a,f15.6,1x,a)') 'Duplicate (temperature,label): ',temperatures(it),trim(labels(is))
         call grid_error(message)
       endif
       file_index(it,is) = i
@@ -129,7 +129,7 @@ contains
     do is = 1,n_profile_sym
       do it = 1,n_profile_t
         if (file_index(it,is) /= 0) cycle
-        write(message,'(a,g0,1x,a)') 'Missing (temperature,label): ',temperatures(it),trim(labels(is))
+        write(message,'(a,f15.6,1x,a)') 'Missing (temperature,label): ',temperatures(it),trim(labels(is))
         call grid_error(message)
       enddo
     enddo
@@ -263,7 +263,7 @@ contains
         profile_inverse_step(it,is) = uniform_inverse_step(nu_profile(:,it,is))
         area = sum(0.5_rk*(f_profile(1:n-1,it,is)+f_profile(2:n,it,is))* &
                          (nu_profile(2:n,it,is)-nu_profile(1:n-1,it,is)))
-        write(out,'(a,g0,1x,a,1x,a,1x,es20.12)') 'GRID: ',files(j)%temperature,trim(labels(is)), &
+        write(out,'(a,f15.6,1x,a,1x,a,1x,es20.12)') 'GRID: ',files(j)%temperature,trim(labels(is)), &
           trim(filename)//' integral =',area
         if (.not.ieee_is_finite(area)) call grid_error('Non-finite integral in '//trim(filename))
         if (area <= 0.or.abs(area-1.0_rk) > normalization_tolerance) &

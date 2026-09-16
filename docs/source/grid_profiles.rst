@@ -60,7 +60,6 @@ requested temperature and every profile label, for example::
     PROFILES
       1000 A1 profile_H2S_A1_T1000K.prof
       2000 A1 profile_H2S_A1_T2000K.prof
-
       1000 B2 profile_H2S_B2_T1000K.prof
       2000 B2 profile_H2S_B2_T2000K.prof
     END

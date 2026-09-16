@@ -3,7 +3,6 @@ module spectrum
   use accuracy
   use timer
   use VoigtKampff
-  use Phoenix
   use grid_profiles
   use symmetry
   !
@@ -1243,7 +1242,11 @@ module spectrum
           endif
           if (trim(w)=='VOI-S') super_lines_do = .true.
           !
-          if (trim(w)=='PHOENIX') phoenix_do = .true.
+          if (trim(w)=='PHOENIX') then 
+             write(out,'("Input error Phoenix has been deprecated")')
+             stop "Input error Phoenix has been deprecated"
+             phoenix_do = .true.
+          endif
           !
           if (any( w(1:3)==(/'VOI','PSE','LOR','PHO','ELO','GAU','REC'/))) lineprofile_do = .true.
           !
@@ -3127,7 +3130,7 @@ module spectrum
            !
          end select 
          !
-       elseif (stick_hitran.or.stick_oxford.or.phoenix_do) then
+       elseif (stick_hitran.or.stick_oxford) then
          !
          Jmax = JmaxAll
          !
@@ -3414,17 +3417,6 @@ module spectrum
       enddo
    endif
    !
-   if ( trim(proftype)=='PHOENIX' ) then
-     !
-     if (verbose>=4) write(out,"('    iel          wv   ener     gf gamma1     n1 gamma2     n2')") 
-     !
-     if (trim(specttype)/="GF") then 
-       write(out,"('Change the spectral type to GF (oscillator strength) for Phoenix'/)")
-       specttype = "GF"
-     endif
-     !
-   endif
-   !
    if ( trim(proftype)=='VALD' ) then
      !
      if (trim(specttype)/="GF") then 
@@ -3627,11 +3619,6 @@ module spectrum
         elseif (hitran_do) then
            !
            ! HITRAN format
-           !
-           if(any(trim(proftype(1:5))==(/'PHOEN'/))) then
-             print('(a,2x,a)'),'Illegal proftype HITRAN',trim(proftype)
-             stop 'Illegal proftype for HITRAN'
-           endif
            !
            Nspecies_ = max(Nspecies,2)
            !
@@ -5012,20 +4999,6 @@ module spectrum
             call TimerStop('Calc')
             cycle loop_tran
             !
-        case ('PHOEN')
-            !
-            if (Nspecies/=2) then 
-              write(out,"('Phoenix-Error: illegal Nspecies must be 2 not ',i4)") Nspecies
-              stop 'Phoenix-Error: illegal Nspecies '
-            endif
-            !
-            call do_gf_oscillator_strength_Phoenix(i,ichunk,iso,nswap,nrows,energies,Jrot,ilevelf_ram,ileveli_ram,&
-                                                   acoef_ram,abscoef_ram,jmax,species(1)%gammaQN,&
-                                                   species(1)%nQN,species(2)%gammaQN,species(2)%nQN,output)
-            !
-            call TimerStop('Calc')
-            cycle loop_tran
-            !
         case ('COOLI')
             !
             do iswap = 1,nswap
@@ -6054,11 +6027,6 @@ module spectrum
      endif
      !
      close(tunit,status='keep')
-     !
-   elseif (trim(proftype)=='PHOENIX') then
-     !
-     !write(gfunit,*) int(-1,kind=2),int(-1,kind=4),int(-1,kind=2),int(-1,kind=2),int(-1,kind=2),int(-1,kind=2),int(-1,kind=2)
-     !close(gfunit,status='keep')
      !
    else
      !

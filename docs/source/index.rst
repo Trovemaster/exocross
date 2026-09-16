@@ -27,6 +27,7 @@ Welcome to ExoCross's documentation!
 Recent news
 ===========
 
+16.09.2026: Grid profiles are introduced 
 21.04.2026: Bulk productions of cross-secitons for grids of temperatures and pressures, see temperature-list and pressure-list constructs in :ref:`opacity`.
 
  
