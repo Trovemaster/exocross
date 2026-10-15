@@ -90,7 +90,7 @@ contains
     character(len=wl) :: message
 
     if (.not.allocated(files)) call grid_error('GRID requires a PROFILES block')
-    if (sym%Nirreps == 0) call grid_error('Define SYMMETRY C2v, C3v or Cs for band profiles')
+    if (sym%Nirreps == 0) call grid_error('Define SYMMETRY C2v, C3v, Cs or Td for band profiles')
     do i = 1,size(files)
       irrep = irrep_index(files(i)%label)
       if (irrep == 0) call grid_error('Unknown band irrep '//trim(files(i)%label)//' for '//trim(sym%group))
@@ -146,7 +146,7 @@ contains
 
   subroutine configure_band_weights()
     integer :: up,low,gamma,is,info
-    integer(ik) :: multiplicity(sym%Nirreps)
+    integer(ik) :: multiplicity(sym%Nirreps),active_mult(sym%Nirreps),active_sum
     allocate(profile_weights(n_profile_sym,sym%Nirreps,sym%Nirreps),stat=info)
     call ArrayStart('GRID:profile_weights',info,size(profile_weights),kind(profile_weights))
     allocate(missing_band(sym%Nirreps,sym%Nirreps),stat=info)
@@ -156,17 +156,24 @@ contains
     do low = 1,sym%Nirreps
       do up = 1,sym%Nirreps
         multiplicity = gamma_lookup(up,low)
+        active_mult = 0
         do gamma = 1,sym%Nirreps
           if (multiplicity(gamma) == 0) cycle
-          is = grid_label_index(sym%label(gamma))
-          if (is == 0) then
-            missing_band(up,low) = gamma
-          else
-            ! Provisional equal average over irrep components, NOT over dimensions.
-            ! In C3v, E x E therefore has weights 1/3,1/3,1/3 for A1,A2,E.
-            profile_weights(is,up,low) = real(multiplicity(gamma),rk)/real(sum(multiplicity),rk)
-          endif
+          if (grid_label_index(sym%label(gamma)) /= 0) active_mult(gamma) = multiplicity(gamma)
         enddo
+        active_sum = sum(active_mult)
+        if (active_sum == 0) then
+          do gamma = 1,sym%Nirreps
+            if (multiplicity(gamma) /= 0) missing_band(up,low) = gamma
+          enddo
+        else
+          do gamma = 1,sym%Nirreps
+            if (active_mult(gamma) == 0) cycle
+            is = grid_label_index(sym%label(gamma))
+            ! Provisional equal average over supplied dipole-active irrep components.
+            profile_weights(is,up,low) = real(active_mult(gamma),rk)/real(active_sum,rk)
+          enddo
+        endif
       enddo
     enddo
     if (any(sum(sym%product,dim=1) > 1)) &

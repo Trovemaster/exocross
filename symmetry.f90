@@ -53,8 +53,11 @@ contains
     case ('CS','CS(M)')
       sym%group = 'Cs'
       n = 2
+    case ('TD','TD(M)')
+      sym%group = 'Td'
+      n = 5
     case default
-      call symmetry_error('Unsupported group '//trim(group)//'; expected C2v, C3v or Cs')
+      call symmetry_error('Unsupported group '//trim(group)//'; expected C2v, C3v, Cs or Td')
     end select
     sym%Nirreps = n
     allocate(sym%label(n),sym%degen(n),sym%product(n,n,n))
@@ -87,6 +90,29 @@ contains
           sym%product(cs_table(i,j),i,j) = 1
         enddo
       enddo
+    case ('Td')
+      sym%label = [character(len=20) :: 'A1','A2','E','F1','F2']
+      sym%degen = [1,1,2,3,3]
+      do i = 1,n
+        sym%product(i,1,i) = 1 ! A1 x gamma = gamma
+        sym%product(i,i,1) = 1
+      enddo
+      sym%product(1,2,2) = 1 ! A2 x A2 = A1
+      sym%product(3,2,3) = 1 ! A2 x E = E
+      sym%product(3,3,2) = 1
+      sym%product(5,2,4) = 1 ! A2 x F1 = F2
+      sym%product(5,4,2) = 1
+      sym%product(4,2,5) = 1 ! A2 x F2 = F1
+      sym%product(4,5,2) = 1
+      sym%product(:,3,3) = [1,1,1,0,0] ! E x E = A1 + A2 + E
+      sym%product(:,3,4) = [0,0,0,1,1] ! E x F1 = F1 + F2
+      sym%product(:,4,3) = [0,0,0,1,1]
+      sym%product(:,3,5) = [0,0,0,1,1] ! E x F2 = F1 + F2
+      sym%product(:,5,3) = [0,0,0,1,1]
+      sym%product(:,4,4) = [1,0,1,1,1] ! F1 x F1 = A1 + E + F1 + F2
+      sym%product(:,4,5) = [0,1,1,1,1] ! F1 x F2 = A2 + E + F1 + F2
+      sym%product(:,5,4) = [0,1,1,1,1]
+      sym%product(:,5,5) = [1,0,1,1,1] ! F2 x F2 = A1 + E + F1 + F2
     end select
 
     ! Catch incomplete or dimensionally inconsistent tables when adding groups.
