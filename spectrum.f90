@@ -2875,7 +2875,7 @@ module spectrum
            !
            allocate(species(i)%gammaQN(0:Jmax,-2:2,0:KmaxAll),stat=info)
            call ArrayStart('gammaQN',info,size(species(i)%gammaQN),kind(species(i)%gammaQN))
-           species(i)%gammaQN(:,:,:) = species(i)%gamma
+           species(i)%gammaQN(:,:,:) = -1.0_rk
            !
            allocate(species(i)%nQN(0:Jmax,-2:2,0:KmaxAll),stat=info)
            !
@@ -2926,8 +2926,12 @@ module spectrum
              j = int(Ji)
              Jmax = max(Jmax,J)
              !
-             species(i)%gammaQN(J,:,0) = gamma_
-             species(i)%nQN(J,:,0) = n_
+             do k = -2,2
+               if (species(i)%gammaQN(J,k,0) < 0.0_rk) then
+                 species(i)%gammaQN(J,k,0) = gamma_
+                 species(i)%nQN(J,k,0) = n_
+               endif
+             enddo
              !
            case ('a1','A1')
              !
@@ -3108,6 +3112,8 @@ module spectrum
            forall(k=-2:2) species(i)%nQN(Jmax+1:,k,k_) = species(i)%nQN(Jmax,k,k_)
            !
          enddo
+         !
+         where (species(i)%gammaQN < 0.0_rk) species(i)%gammaQN = species(i)%gamma
          !
          close(bunit)
          !
@@ -4245,7 +4251,7 @@ module spectrum
                    !
                    if (predissociation_do) then 
                      !
-                     gamma_ram(iswap) = gamma_radiative(ilevelf)*gamma_ram(iswap)/(gamma_radiative(ilevelf)+gamma_ram(iswap))
+                     gamma_ram(iswap) = gamma_radiative(ilevelf)+gamma_ram(iswap)
                      !max(gamma_radiative(ilevelf),gamma_ram(iswap))
                      !
                    endif
@@ -5441,7 +5447,7 @@ module spectrum
                     hwhm_gauss=dpwcoef0*tranfreq*sqrt(temp0)
                     !
                     if (super_lines_with_J_do) then
-                        halfwidth0 = gamma_nu_T(ipoint,i)*pressure_/species(i)%P0
+                        halfwidth0 = gamma_nu_T(i,itemp)*pressure_/species(1)%P0
                     endif
                     !
                     call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth0,cutoff,freql,hwhm_gauss,crosssections_T(:,itemp))
@@ -5485,11 +5491,24 @@ module spectrum
             !
             line_intensity = 0
             !
+            halfwidth0 = halfwidth
+            !
+            if (.not.super_lines_with_J_do) then
+              if (Nspecies>0) then 
+                !
+                halfwidth0 = 0 
+                do i=1,Nspecies
+                  halfwidth0 =  halfwidth0 + species(i)%ratio*species(i)%gamma*(species(i)%T0/temp)**species(i)%N*pressure_/species(i)%P0
+                enddo
+                !
+              endif
+            endif
+            !
             select case (profile_calc_type)
                !
             case ("SAMPLING")
                !
-               !$omp parallel do private(i,abscoef,tranfreq,hwhm_gauss) shared(intens) schedule(dynamic)
+               !$omp parallel do private(i,abscoef,tranfreq,hwhm_gauss) firstprivate(halfwidth0) shared(intens) reduction(+:line_intensity) schedule(dynamic)
                do i = 1,npoints0
                  !
                  abscoef = intens(i)
@@ -5498,14 +5517,18 @@ module spectrum
                  !
                  if (abscoef<abscoef_thresh) cycle
                  !
-                 call do_Voigt(tranfreq,abscoef,freq,halfwidth,hwhm_gauss,cutoff,freql,line_intensity)
+                 if (super_lines_with_J_do) then
+                     halfwidth0 = gamma_nu(i)*pressure_/species(1)%P0
+                 endif
+                 !
+                 call do_Voigt(tranfreq,abscoef,freq,halfwidth0,hwhm_gauss,cutoff,freql,line_intensity)
                  !
                enddo
                !$omp end parallel do
                !
             case ("BINNING")
                !
-               !$omp parallel do private(i,abscoef,tranfreq,hwhm_gauss) shared(intens) schedule(dynamic)
+               !$omp parallel do private(i,abscoef,tranfreq,hwhm_gauss) firstprivate(halfwidth0) shared(intens) reduction(+:line_intensity) schedule(dynamic)
                do i = 1,npoints0
                  !
                  abscoef = intens(i)
@@ -5513,6 +5536,10 @@ module spectrum
                  hwhm_gauss=dpwcoef*tranfreq
                  !
                  if (abscoef<abscoef_thresh) cycle
+                 !
+                 if (super_lines_with_J_do) then
+                     halfwidth0 = gamma_nu(i)*pressure_/species(1)%P0
+                 endif
                  !
                  !call do_Voigt(tranfreq,abscoef,freq,halfwidth,hwhm_gauss,cutoff,freql,line_intensity)
                  call do_Voi_Q(tranfreq,abscoef,dfreq,freq,abciss,weight,halfwidth0,cutoff,freql,hwhm_gauss,line_intensity)
