@@ -166,34 +166,20 @@ contains
     integer(ik) function search_gamma(this,gammaL)
         class(VoigtKampffCollection) :: this
         real(rk),intent(in) :: gammaL
+        integer(ik) :: i
 
+        ! The grids are kept in the order they were added (their position is the index handed out),
+        ! not sorted by gamma, so a binary search would miss existing grids and add duplicates
         search_gamma = 0
 
-        if(this%n == 0) return
-        search_gamma = binarySearch_R(this%fast_voigts(1:this%n),gammaL)
-
+        do i = 1,this%n
+            if (is_close(this%fast_voigts(i)%get_gammaL(),gammaL,1e-5_rk)) then
+                search_gamma = i
+                return
+            endif
+        enddo
 
     end function
-
-recursive function binarySearch_R (a, value) result (bsresult)
-    type(VoigtKampffT), intent(in) :: a(:)
-    real(rk)  ::  value
-    integer          :: bsresult, mid
- 
-    mid = size(a)/2 + 1
-    if (size(a) == 0) then
-        bsresult = 0        ! not found
-    else if(is_close(a(mid)%get_gammaL(),value,1e-5_rk)) then
-        bsresult = mid      ! SUCCESS!!
-    else if (a(mid)%get_gammaL() > value) then
-        bsresult= binarySearch_R(a(:mid-1), value)
-    else if (a(mid)%get_gammaL() < value) then
-        bsresult = binarySearch_R(a(mid+1:), value)
-        if (bsresult /= 0) then
-            bsresult = mid + bsresult
-        end if
-   endif
-end function binarySearch_R
 
 
 
