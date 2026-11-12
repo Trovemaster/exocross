@@ -3655,7 +3655,7 @@ module spectrum
    !
    if (N_to_RAM<0) then
      !
-     mem_t = real(6*rk+5*ik,rk)*1024_rk**3
+     mem_t = real(6*rk+5*ik,rk)/1024_rk**3
      !
      N_to_RAM = max(100,min( max_transitions_to_ram,int((memory_limit-memory_now)/mem_t,hik),hik))
      !
