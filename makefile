@@ -9,14 +9,16 @@ checkin:
 
 FPATH = 
 
-PLAT = 
+PLAT = 0707_static_v2
 
 FOR  = ifort
-FFLAGS =  -O3 -qopenmp -traceback  -ip 
+FFLAGS =  -O3 -qopenmp -traceback  -ipo -static
+#FFLAGS = -C -check bounds -g  -gen-interfaces -warn interfaces  -check arg_temp_created -prof-value-profiling=all -warn all
+  
 
 #FOR = gfortran
 
-#+FFLAGS = -Wall -march=native -g -O3 -fopenmp -std=f2008 -ffree-line-length-512 -fall-intrinsics
+#FFLAGS = -Wall -march=native -g -O3 -fopenmp -std=f2008 -ffree-line-length-512 -fall-intrinsics
 
 
 #FFLAGS = -O0 -g -fpe0  -fltconsistency -stand f03 -check all -warn all -traceback -fp-stack-check  # debugging options
@@ -34,7 +36,7 @@ FFLAGS2  =  #-vec-report3
 
 ###############################################################################
 
-OBJ =  accuracy.o  timer.o input.o symmetry.o grid_profiles.o spectrum.o VoigtKampff.o  phoenix.o
+OBJ =  accuracy.o  timer.o input.o symmetry.o grid_profiles.o spectrum.o VoigtKampff.o
 
 xcross.exe:	$(OBJ) crosssections.o 
 	$(FOR) -o xcross.exe $(OBJ) $(FFLAGS) crosssections.o $(LIB) -static
@@ -48,7 +50,7 @@ symmetry.o: symmetry.f90 accuracy.o
 grid_profiles.o: grid_profiles.f90 accuracy.o input.o timer.o symmetry.o
 	$(FOR) -c grid_profiles.f90 $(FFLAGS)
 
-spectrum.o:	spectrum.f90 accuracy.o input.o symmetry.o grid_profiles.o VoigtKampff.o phoenix.o
+spectrum.o:	spectrum.f90 accuracy.o input.o symmetry.o grid_profiles.o VoigtKampff.o 
 	$(FOR) -c spectrum.f90 $(FFLAGS)
 
 accuracy.o:  accuracy.f90
@@ -59,9 +61,6 @@ timer.o:  timer.f90
 
 input.o:  input.f90
 	$(FOR) -c input.f90 $(FFLAGS)
-
-phoenix.o:  phoenix.f90 accuracy.o
-	$(FOR) -c phoenix.f90 $(FFLAGS)
 
 VoigtKampff.o:  VoigtKampff.f90 accuracy.o
 	$(FOR) -c VoigtKampff.f90 $(FFLAGS)
