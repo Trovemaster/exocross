@@ -1,7 +1,8 @@
 module accuracy
   implicit none
   private
-  public sik, ik, hik, rk, ark, out, inp, safe_max,safe_min,max_exp, pi, twopi, cl, wl, c2, R_,uma
+  public sik, ik, hik, rk, ark, out, inp, safe_max,safe_min,max_exp, pi, & 
+         twopi, cl, wl, c2, R_,uma
   public accuracyInitialize
   public planck,avogno,vellgt,boltz,bohr,todebye
   public epsil,small_,sqrt2,sqrt3,rad,fititermax,aston,hartree,ev,my_fmt

@@ -115,11 +115,10 @@ contains
     end function
 
 
-    subroutine generate_indices(this,gammaL,gamma_idx,Jmax)
+    subroutine generate_indices(this,gammaL,gamma_idx)
         class(VoigtKampffCollection) :: this
         real(rk),intent(in) :: gammaL
         integer(ik),intent(inout) :: gamma_idx
-        integer(ik),intent(in) :: Jmax
 
         real(rk)    :: val
         integer     :: idx

@@ -1859,6 +1859,7 @@ module spectrum
    use, intrinsic :: ieee_arithmetic !only: IEEE_Value, IEEE_QUIET_NAN
    use, intrinsic :: iso_fortran_env, only: real32
    !
+   implicit none 
    !
    real(rk)    :: hitran_Tref = 296_rk
    integer(ik) :: info,ipoint,ipoint_,nlevels,i,itemp,enunit,tunit,sunit,wunit,bunit,pfunit,j,j0,ilevelf,ileveli,indexi,indexf
@@ -2985,7 +2986,7 @@ module spectrum
              !
              ! use integer value of J
              !
-             Jpp = int(Ji)
+             Jpp = nint(Ji)
              Jmax = max(Jmax,Jpp)
              !
              species(i)%gammaQN(Jpp,:,0,0) = gamma_
@@ -3002,8 +3003,8 @@ module spectrum
              !
              ! use integer value of J
              !
-             Jp  = int(Jf)
-             Jpp = int(Ji)
+             Jp  = nint(Jf)
+             Jpp = nint(Ji)
              !
              Jmax = max(Jmax,min(Jp,Jpp))
              !
@@ -3029,7 +3030,7 @@ module spectrum
              !
              ! P branch
              !
-             Jpp = int(m0)
+             Jpp = nint(m0)
              Jp  = Jpp-1
              !
              species(i)%gammaQN(Jpp,Jp-Jpp,0,0) = gamma_
@@ -3037,7 +3038,7 @@ module spectrum
              !
              ! Q branch
              !
-             Jpp = int(m0,ik)
+             Jpp = nint(m0,ik)
              Jp = Jpp
              !
              species(i)%gammaQN(Jpp,Jp-Jpp,0,0) = gamma_
@@ -3045,7 +3046,7 @@ module spectrum
              !
              ! R branch
              !
-             Jpp = int(m0)-1
+             Jpp = nint(m0)-1
              Jp = Jpp+1
              !
              species(i)%gammaQN(Jpp,Jp-Jpp,0,0) = gamma_
@@ -3070,7 +3071,7 @@ module spectrum
                !
                ! P branch
                !
-               Jpp = int(abs(m0))
+               Jpp = nint(abs(m0))
                Jp  = Jpp-1
                !
                species(i)%gammaQN(Jpp,Jp-Jpp,0,0) = gamma_
@@ -3080,7 +3081,7 @@ module spectrum
                !
                ! Q branch
                !
-               Jpp = m0
+               Jpp = nint(m0)
                Jp = Jpp
                !
                species(i)%gammaQN(Jpp,Jp-Jpp,0,0) = gamma_
@@ -3372,7 +3373,7 @@ module spectrum
       do j= max(0,i-2),min(JmaxAll,i+2) 
        do kp=0,KmaxAll
         do kpp=0,KmaxAll
-         call fast_voigt%generate_indices(gamma_comb(j,i-j,kpp,kp),gamma_idx(j,i-j,kpp,kp),JmaxAll)
+         call fast_voigt%generate_indices(gamma_comb(j,i-j,kpp,kp),gamma_idx(j,i-j,kpp,kp))
         enddo
        enddo
       enddo
@@ -4638,7 +4639,7 @@ module spectrum
                    if (all(line_intensity(:)<abscoef_thresh)) cycle
                    !
                    call do_Voigt_array(npoints,n_T_points,tranfreq,freq,gamma_array_ram(:,iswap),hwhm_gauss,&
-                        Temperature_list,cutoff,freql,line_intensity,intens_T_omp(:,:,iomp))
+                        Temperature_list,cutoff,line_intensity,intens_T_omp(:,:,iomp))
                    !
                  enddo
                  !
@@ -4660,7 +4661,7 @@ module spectrum
                    halfwidth = gamma_ram(iswap)
                    hwhm_gauss=dpwcoef*tranfreq
                    !
-                   call do_Voigt(tranfreq,abscoef,freq,halfwidth,hwhm_gauss,cutoff,freql,intens_omp(:,iomp))
+                   call do_Voigt(tranfreq,abscoef,freq,halfwidth,hwhm_gauss,cutoff,intens_omp(:,iomp))
                    !
                  enddo
                  !
@@ -4827,7 +4828,7 @@ module spectrum
                 !
                 hwhm_gauss = sqrt( sigma2_ram(iswap)*2.0_rk*log(2.0_rk)+(dpwcoef*tranfreq)**2 )
                 !
-                call do_Voigt(tranfreq,abscoef,freq,halfwidth,hwhm_gauss,cutoff,freql,intens_omp(:,iomp))
+                call do_Voigt(tranfreq,abscoef,freq,halfwidth,hwhm_gauss,cutoff,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -4871,8 +4872,8 @@ module spectrum
                    !
                    if (all(line_intensity(:)<abscoef_thresh)) cycle
                    !
-                   call do_gauss_sampling_array(npoints,n_T_points,tranfreq,freq,dfreq,&
-                        halfwidth,Temperature_list,cutoff,freql,line_intensity,intens_T_omp(:,:,iomp))
+                   call do_gauss_sampling_array(npoints,n_T_points,tranfreq,freq,&
+                        halfwidth,Temperature_list,cutoff,line_intensity,intens_T_omp(:,:,iomp))
                    !
                  enddo
                  !
@@ -4893,7 +4894,7 @@ module spectrum
                    tranfreq = nu_ram(iswap)
                    halfwidth = gamma_ram(iswap)
                    !
-                   call do_gauss_sampling(tranfreq,abscoef,dfreq,freq,halfwidth,freql,intens_omp(:,iomp))
+                   call do_gauss_sampling(tranfreq,abscoef,freq,halfwidth,intens_omp(:,iomp))
                    !
                  enddo
                  !
@@ -4939,7 +4940,7 @@ module spectrum
                    if (all(line_intensity(:)<abscoef_thresh)) cycle
                    !
                    call do_gauss_binning_array(npoints,n_T_points,tranfreq,freq,dfreq,&
-                        halfwidth,Temperature_list,cutoff,freql,line_intensity,doppler_flag,intens_T_omp(:,:,iomp))
+                        halfwidth,Temperature_list,cutoff,line_intensity,doppler_flag,intens_T_omp(:,:,iomp))
                    !
                  enddo
                  !
@@ -4961,7 +4962,7 @@ module spectrum
                    halfwidth0=dpwcoef*tranfreq
                    if (halfwidth0<100.0_rk*small_) cycle
                    !
-                   call do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth0,cutoff,freql,intens_omp(:,iomp))
+                   call do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth0,cutoff,intens_omp(:,iomp))
                    !
                  enddo
                  !
@@ -4982,7 +4983,7 @@ module spectrum
                 halfwidth0=dpwcoef*tranfreq
                 if (halfwidth0<100.0_rk*small_) cycle
                 !
-                call do_gauss_sampling(tranfreq,abscoef,dfreq,freq,halfwidth0,freql,intens_omp(:,iomp))
+                call do_gauss_sampling(tranfreq,abscoef,freq,halfwidth0,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -5027,7 +5028,7 @@ module spectrum
                    halfwidth = gamma_ram(iswap)
                    !
                    call do_gauss_binning_array(npoints,n_T_points,tranfreq,freq,dfreq,&
-                        halfwidth,Temperature_list,cutoff,freql,line_intensity,doppler_flag,intens_T_omp(:,:,iomp))
+                        halfwidth,Temperature_list,cutoff,line_intensity,doppler_flag,intens_T_omp(:,:,iomp))
                    !
                  enddo
                  !
@@ -5048,7 +5049,7 @@ module spectrum
                   tranfreq = nu_ram(iswap)
                   halfwidth = gamma_ram(iswap)
                   !
-                  call do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,intens_omp(:,iomp))
+                  call do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,intens_omp(:,iomp))
                   !
                 enddo
                 !
@@ -5329,7 +5330,7 @@ module spectrum
                 tranfreq = nu_ram(iswap)
                 halfwidth = gamma_ram(iswap)
                 !
-                call do_rect(tranfreq,abscoef,halfwidth,dfreq,freq,cutoff,freql,intens_omp(:,iomp))
+                call do_rect(tranfreq,abscoef,halfwidth,dfreq,freq,freql,intens_omp(:,iomp))
                 !
               enddo
               !
@@ -5645,7 +5646,7 @@ module spectrum
                     ! lifetime HWHM is added after the pressure scaling
                     if (predissociation_do) gamma_rad0 = gamma_rad_nu_T(i,itemp)
                     !
-                    call do_Voigt(tranfreq,abscoef,freq,halfwidth0+gamma_rad0,hwhm_gauss,cutoff,freql,crosssections_T(:,itemp))
+                    call do_Voigt(tranfreq,abscoef,freq,halfwidth0+gamma_rad0,hwhm_gauss,cutoff,crosssections_T(:,itemp))
                     !
                   enddo
                   !
@@ -5741,7 +5742,7 @@ module spectrum
                  ! lifetime HWHM is added after the pressure scaling
                  if (predissociation_do) gamma_rad0 = gamma_rad_nu_T(i,1)
                  !
-                 call do_Voigt(tranfreq,abscoef,freq,halfwidth0+gamma_rad0,hwhm_gauss,cutoff,freql,line_intensity)
+                 call do_Voigt(tranfreq,abscoef,freq,halfwidth0+gamma_rad0,hwhm_gauss,cutoff,line_intensity)
                  !
                enddo
                !$omp end parallel do
@@ -5823,7 +5824,7 @@ module spectrum
                      !
                      if (hwhm_gauss<100.0_rk*small_) cycle
                      !
-                     call do_gauss_binning(tranfreq,abscoef,dfreq,freq,hwhm_gauss,cutoff,freql,crosssections_T(:,itemp))
+                     call do_gauss_binning(tranfreq,abscoef,dfreq,freq,hwhm_gauss,cutoff,crosssections_T(:,itemp))
                      !
                    enddo
                    !
@@ -5839,7 +5840,7 @@ module spectrum
                      !
                      if (hwhm_gauss<100.0_rk*small_) cycle
                      !
-                     call do_gauss_sampling(tranfreq,abscoef,dfreq,freq,hwhm_gauss,freql,crosssections_T(:,itemp))
+                     call do_gauss_sampling(tranfreq,abscoef,freq,hwhm_gauss,crosssections_T(:,itemp))
                      !
                    enddo
                    !
@@ -5856,7 +5857,7 @@ module spectrum
                      !
                      if (hwhm_gauss<100.0_rk*small_) cycle
                      !
-                     call do_gauss_binning(tranfreq,abscoef,dfreq,freq,hwhm_gauss,cutoff,freql,crosssections_T(:,itemp))
+                     call do_gauss_binning(tranfreq,abscoef,dfreq,freq,hwhm_gauss,cutoff,crosssections_T(:,itemp))
                      !
                    enddo
                    !
@@ -5873,7 +5874,7 @@ module spectrum
                      !
                      if (hwhm_gauss<100.0_rk*small_) cycle
                      !
-                     call do_gauss_sampling(tranfreq,abscoef,dfreq,freq,hwhm_gauss,freql,crosssections_T(:,itemp))
+                     call do_gauss_sampling(tranfreq,abscoef,freq,hwhm_gauss,crosssections_T(:,itemp))
                      !
                    enddo
                    !
@@ -5906,7 +5907,7 @@ module spectrum
                   !
                   if (hwhm_gauss<100.0_rk*small_) cycle
                   !
-                  call do_gauss_binning(tranfreq,abscoef,dfreq,freq,hwhm_gauss,cutoff,freql,line_intensity)
+                  call do_gauss_binning(tranfreq,abscoef,dfreq,freq,hwhm_gauss,cutoff,line_intensity)
                   !
                 enddo
                 !
@@ -5922,7 +5923,7 @@ module spectrum
                   !
                   if (hwhm_gauss<100.0_rk*small_) cycle
                   !
-                  call do_gauss_sampling(tranfreq,abscoef,dfreq,freq,hwhm_gauss,freql,line_intensity)
+                  call do_gauss_sampling(tranfreq,abscoef,freq,hwhm_gauss,line_intensity)
                   !
                 enddo
                 !
@@ -5939,7 +5940,7 @@ module spectrum
                   !
                   if (hwhm_gauss<100.0_rk*small_) cycle
                   !
-                  call do_gauss_binning(tranfreq,abscoef,dfreq,freq,hwhm_gauss,cutoff,freql,line_intensity)
+                  call do_gauss_binning(tranfreq,abscoef,dfreq,freq,hwhm_gauss,cutoff,line_intensity)
                   !
                 enddo
                 !
@@ -5956,7 +5957,7 @@ module spectrum
                   !
                   if (hwhm_gauss<100.0_rk*small_) cycle
                   !
-                  call do_gauss_sampling(tranfreq,abscoef,dfreq,freq,hwhm_gauss,freql,line_intensity)
+                  call do_gauss_sampling(tranfreq,abscoef,freq,hwhm_gauss,line_intensity)
                   !
                 enddo
                 !
@@ -6646,11 +6647,11 @@ module spectrum
    end subroutine do_log_intensity
 
 
-  subroutine do_gauss_sampling(tranfreq,abscoef0,dfreq,freq,halfwidth,freql,intens)
+  subroutine do_gauss_sampling(tranfreq,abscoef0,freq,halfwidth,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef0,dfreq,halfwidth,freql
+     real(rk),intent(in) :: tranfreq,abscoef0,halfwidth
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
      real(rk) :: alpha,abscoef,dfreq_,de,ln2,cutoff_
@@ -6682,13 +6683,13 @@ module spectrum
   !
   !
   subroutine do_gauss_sampling_array(npoints,n_T_points,tranfreq,freq,&
-                      dfreq,halfwidth,temperature_array,cutoff,freql,line_intensity,intensity)
+                      halfwidth,temperature_array,cutoff,line_intensity,intensity)
      !
      implicit none
      !
      integer(ik),intent(in) :: npoints,n_T_points
      !
-     real(rk),intent(in) :: tranfreq,halfwidth,cutoff,freql,dfreq
+     real(rk),intent(in) :: tranfreq,halfwidth,cutoff
      real(rk),intent(in) :: freq(npoints),line_intensity(n_T_points),temperature_array(n_T_points)
      real(rk),intent(inout) :: intensity(npoints,n_T_points)
      real(rk) :: T,halfwidth_doppler,halfwidth_gauss
@@ -6837,11 +6838,11 @@ module spectrum
   end subroutine get_grid_ipoint
   !
   !
-  subroutine do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,freql,intens)
+  subroutine do_gauss_binning(tranfreq,abscoef,dfreq,freq,halfwidth,cutoff,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,cutoff,freql
+     real(rk),intent(in) :: tranfreq,abscoef,dfreq,halfwidth,cutoff
      real(rk),intent(in) :: freq(npoints)
      real(rk),intent(inout) :: intens(npoints)
      real(rk) :: dfreq_,de,xp,xm,ln2,x0,cutoff_
@@ -6880,13 +6881,13 @@ module spectrum
   !
   !
   subroutine do_gauss_binning_array(npoints,n_T_points,tranfreq,freq,&
-                      dfreq,halfwidth,temperature_array,cutoff,freql,line_intensity,doppler,intensity)
+                      dfreq,halfwidth,temperature_array,cutoff,line_intensity,doppler,intensity)
      !
      implicit none
      !
      integer(ik),intent(in) :: npoints,n_T_points
      !
-     real(rk),intent(in) :: tranfreq,halfwidth,cutoff,freql,dfreq
+     real(rk),intent(in) :: tranfreq,halfwidth,cutoff,dfreq
      real(rk),intent(in) :: freq(npoints),line_intensity(n_T_points),temperature_array(n_T_points)
      logical,intent(in) :: doppler
      real(rk),intent(inout) :: intensity(npoints,n_T_points)
@@ -7359,11 +7360,11 @@ module spectrum
      !
   end subroutine  do_Voi_Q
   !
-  subroutine  do_Voigt(tranfreq,abscoef,freq,halfwidth_Lorentz,halfwidth_doppler,cutoff,freql,intens)
+  subroutine  do_Voigt(tranfreq,abscoef,freq,halfwidth_Lorentz,halfwidth_doppler,cutoff,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,halfwidth_Lorentz,cutoff,freql,halfwidth_doppler
+     real(rk),intent(in) :: tranfreq,abscoef,halfwidth_Lorentz,cutoff,halfwidth_doppler
      real(rk),intent(in) :: freq(:)
      real(rk),intent(inout) :: intens(:)
      real(rk) :: tranfreq_i,cutoff_
@@ -7394,13 +7395,13 @@ module spectrum
   end subroutine  do_Voigt
   !
   subroutine do_Voigt_array(npoints,n_T_points,tranfreq,freq,&
-                            halfwidth_Lorentz,halfwidth_gauss,temperature_array,cutoff,freql,line_intensity,intensity)
+                            halfwidth_Lorentz,halfwidth_gauss,temperature_array,cutoff,line_intensity,intensity)
      !
      implicit none
      !
      integer(ik),intent(in) :: n_T_points,npoints
      
-     real(rk),intent(in) :: tranfreq,halfwidth_Lorentz(n_T_points),halfwidth_gauss,cutoff,freql
+     real(rk),intent(in) :: tranfreq,halfwidth_Lorentz(n_T_points),halfwidth_gauss,cutoff
      real(rk),intent(in) :: freq(npoints),line_intensity(n_T_points),temperature_array(n_T_points)
      real(rk),intent(inout) :: intensity(npoints,n_T_points)
      real(rk) :: tranfreq_i,cutoff_,voigt,halfwidth_doppler,T
@@ -7501,11 +7502,11 @@ module spectrum
   end subroutine  do_Voigt_916
   !
 
-  subroutine  do_rect(tranfreq,abscoef,halfwidth,dfreq,freq,cutoff,freql,intens)
+  subroutine  do_rect(tranfreq,abscoef,halfwidth,dfreq,freq,freql,intens)
      !
      implicit none
      !
-     real(rk),intent(in) :: tranfreq,abscoef,halfwidth,cutoff,freql,dfreq
+     real(rk),intent(in) :: tranfreq,abscoef,halfwidth,freql,dfreq
      real(rk),intent(in) :: freq(:)
      real(rk),intent(inout) :: intens(:)
      real(rk) :: tranfreq_i,a,b,delta,abscoef_,scale
@@ -7973,7 +7974,7 @@ module spectrum
      character(len=cl) :: h_fmt
      real(rk)    ::lambda,E_low_eV,loggf,n,s,lambda_vac,gtot_f
      !
-     integer(ark),parameter :: toeV = 8065.54429_ark 
+     real(rk),parameter :: toeV = 8065.54429_rk 
      !
      write(h_fmt,"(a)") "(ef14.3,2x,f6.3,2x,f7.3,2x,f7.3,2x,i4,2x,f7.3)"
      !
@@ -8087,7 +8088,7 @@ module spectrum
      !
      integer(ik),intent(in) :: Nspecies
      real(rk),intent(in) :: Jf,Ji,Kf,Ki
-     real(rk) :: halfwidth,gamma_,n_,f
+     real(rk) :: gamma_,n_,f
      integer(ik) :: ispecies,Jpp,Jp,Kpp,Kp,KmaxAll
      integer(ik),optional,intent(inout) :: idx
      Jpp = nint(Ji)
@@ -8333,7 +8334,7 @@ module spectrum
            do j=1,n
              p3=p2
              p2=p1
-             p1=z*sqrt(2.0_rk/j)*p2-sqrt(real(j-1,ark)/real(j,ark))*p3
+             p1=z*sqrt(2.0_rk/j)*p2-sqrt(real(j-1,rk)/real(j,rk))*p3
            enddo
            pp=sqrt(2.0_rk*n)*p2
            z1=z
@@ -8412,7 +8413,7 @@ module spectrum
            do j=1,n
              p3=p2
              p2=p1
-             p1=z*sqrt(2.0_rk/j)*p2-sqrt(real(j-1,ark)/real(j,ark))*p3
+             p1=z*sqrt(2.0_rk/j)*p2-sqrt(real(j-1,rk)/real(j,rk))*p3
            enddo
            pp=sqrt(2.0_rk*n)*p2
            z1=z
