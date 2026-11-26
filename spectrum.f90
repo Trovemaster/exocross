@@ -3091,7 +3091,7 @@ module spectrum
                !
                ! Q branch
                !
-               Jpp = m0
+               Jpp = nint(m0)
                Jp = Jpp
                !
                species(i)%gammaQN(Jpp,Jp-Jpp,0,0) = gamma_

@@ -11,14 +11,15 @@ FPATH =
 
 PLAT = 0707_static_v2
 
-FOR  = ifort
-FFLAGS =  -O3 -qopenmp -traceback  -ipo -static
+#FOR  = ifort
+#FFLAGS =  -O3 -qopenmp -traceback  -ipo -static
+
 #FFLAGS = -C -check bounds -g  -gen-interfaces -warn interfaces  -check arg_temp_created -prof-value-profiling=all -warn all
   
 
-#FOR = gfortran
+FOR = gfortran
 
-#FFLAGS = -Wall -march=native -g -O3 -fopenmp -std=f2008 -ffree-line-length-512 -fall-intrinsics
+FFLAGS = -Wall -march=native -g -O3 -fopenmp -std=f2008 -ffree-line-length-512 -fall-intrinsics
 
 
 #FFLAGS = -O0 -g -fpe0  -fltconsistency -stand f03 -check all -warn all -traceback -fp-stack-check  # debugging options
@@ -56,7 +57,7 @@ spectrum.o:	spectrum.f90 accuracy.o input.o symmetry.o grid_profiles.o VoigtKamp
 accuracy.o:  accuracy.f90
 	$(FOR) -c accuracy.f90 $(FFLAGS)
 
-timer.o:  timer.f90
+timer.o:  timer.f90 accuracy.o
 	$(FOR) -c timer.f90 $(FFLAGS)
 
 input.o:  input.f90
