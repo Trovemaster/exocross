@@ -259,10 +259,10 @@ contains
       real(rk)            ::    gammaD,hum_res,mag,nu
       real(rk),allocatable        ::    temp_humlicek(:)
       !
-      center_point = (nu0-start_nu)/this%m_res + 1
+      center_point = int((nu0-start_nu)/this%m_res) + 1
       middle_shift = (center_point - this%m_middle_point) + 1
       !
-      dist = max(DISTANCE_MAGIC_NUMBER/this%m_res,3.0_rk)
+      dist = int(max(DISTANCE_MAGIC_NUMBER/this%m_res,3.0_rk))
       !
       Npoints = ie - ib + 1
       !
@@ -374,7 +374,7 @@ contains
     complex(rk) :: t,humlic1,u
     real(rk) :: s
     !
-    T = cmplx(y,-x)
+    T = cmplx(y, -x, kind=rk)
     S = abs(x) + y
     !
     if (S >= 15) then

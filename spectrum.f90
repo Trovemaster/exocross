@@ -2003,7 +2003,7 @@ module spectrum
       write(ioname, '(a)') 'Energy file'
       call IOstart(trim(ioname),enunit)
       open(unit=enunit,file=trim(enrfilename),action='read',status='old')
-      imin = huge(1)/2
+      imin = int(real(huge(1),rk)/2.0_rk,kind=ik)
       i = -imin
       iline = 0
       maxitems = 5
@@ -3029,15 +3029,15 @@ module spectrum
              !
              ! P branch
              !
-             Jpp = m0
-             Jp  = Jpp-1.0_rk
+             Jpp = int(m0)
+             Jp  = Jpp-1
              !
              species(i)%gammaQN(Jpp,Jp-Jpp,0,0) = gamma_
              species(i)%nQN(Jpp,Jp-Jpp,0,0) = n_
              !
              ! Q branch
              !
-             Jpp = m0
+             Jpp = int(m0,ik)
              Jp = Jpp
              !
              species(i)%gammaQN(Jpp,Jp-Jpp,0,0) = gamma_
@@ -3045,8 +3045,8 @@ module spectrum
              !
              ! R branch
              !
-             Jpp = m0-1.0_rk
-             Jp = Jpp+1.0_rk
+             Jpp = int(m0)-1
+             Jp = Jpp+1
              !
              species(i)%gammaQN(Jpp,Jp-Jpp,0,0) = gamma_
              species(i)%nQN(Jpp,Jp-Jpp,0,0) = n_
@@ -3070,8 +3070,8 @@ module spectrum
                !
                ! P branch
                !
-               Jpp = abs(m0)
-               Jp  = Jpp-1.0_rk
+               Jpp = int(abs(m0))
+               Jp  = Jpp-1
                !
                species(i)%gammaQN(Jpp,Jp-Jpp,0,0) = gamma_
                species(i)%nQN(Jpp,Jp-Jpp,0,0) = n_
@@ -3098,8 +3098,8 @@ module spectrum
                !
                ! R branch
                !
-               Jpp = m0-1.0_rk
-               Jp = Jpp+1.0_rk
+               Jpp = int(m0)-1
+               Jp = Jpp+1
                !
                species(i)%gammaQN(Jpp,Jp-Jpp,0,0) = gamma_
                species(i)%nQN(Jpp,Jp-Jpp,0,0) = n_
@@ -3328,10 +3328,8 @@ module spectrum
        !
        halfwidth = species(i)%gamma*planck/(8.0_rk*vellgt*species(i)%mass*uma*species(i)%Lbox**2)
        !
-       do k0 = 0,Kmax
-         !
-         forall(k=-2:2) species(i)%gammaQN(:,k,:,k0) = halfwidth*(2.0_rk*k0+1.0_rk)
-         !
+       do kp = 0, Kmax
+         species(i)%gammaQN(:,:,:,kp) = halfwidth*(2.0_rk*real(kp,rk) + 1.0_rk)
        enddo
        !
        ! unresolved K (Kmax+1): the mean of (2K+1) over K=0..Kmax is Kmax+1
@@ -3657,7 +3655,12 @@ module spectrum
      !
      mem_t = real(6*rk+5*ik,rk)/1024_rk**3
      !
-     N_to_RAM = max(100,min( max_transitions_to_ram,int((memory_limit-memory_now)/mem_t,hik),hik))
+     N_to_RAM = max(100_hik, min(max_transitions_to_ram,int((memory_limit-memory_now)/mem_t, kind=hik)))
+     !
+     if (N_to_RAM>huge(1)) then
+        write(out,"('Error: N_to_RAM is too large for int(4) and is likely to creat memory leaks = ',f12.0)") real(N_to_RAM,rk)
+        stop 'N_to_RAM is too large for int(4) and is likely to creat memory leaks'
+     endif
      !
      if (verbose>=4) print('("We can cache ",i12," transitions into RAM")'),N_to_RAM
      !
@@ -3751,7 +3754,8 @@ module spectrum
         !
         if (eof) exit loop_tran
         !
-        nswap_ = N_to_RAM
+        nswap_ = int(N_to_RAM,kind=ik)
+        !
         ichunk = ichunk + 1 ! counting the courent swap
         !
         if (histogram) then
@@ -6633,7 +6637,7 @@ module spectrum
      integer(ik),intent(out) :: Nintens(:)
      integer(ik) :: ilog
        !
-       ilog=log10(abscoef)
+       ilog=int(log10(abscoef),kind=ik)
        !
        ilog = max(min(ubound(Nintens,dim=1),ilog),lbound(Nintens,dim=1))
        !
@@ -7969,7 +7973,7 @@ module spectrum
      character(len=cl) :: h_fmt
      real(rk)    ::lambda,E_low_eV,loggf,n,s,lambda_vac,gtot_f
      !
-     integer(ik),parameter :: toeV = 8065.54429_ark 
+     integer(ark),parameter :: toeV = 8065.54429_ark 
      !
      write(h_fmt,"(a)") "(ef14.3,2x,f6.3,2x,f7.3,2x,f7.3,2x,i4,2x,f7.3)"
      !
@@ -8230,7 +8234,7 @@ module spectrum
     complex(rk) :: t,humlic1,u
     real(rk) :: s
     !
-    T = cmplx(y,-x)
+    T = cmplx(y, -x, kind=rk)
     S = abs(x) + y
     !
     if (S >= 15) then
@@ -8492,106 +8496,5 @@ module spectrum
       return
   end subroutine gauher_ark
   !C  (C) Copr. 1986-92 Numerical Recipes Software
-
-
-   subroutine read_file(filename,N,indexf,indexi,acoef,Nlines)
-
-    use timer
-    use accuracy
-
-    implicit none
-    !
-    character(len=*),intent(in) :: filename
-    integer(ik),intent(in) :: N
-    integer(ik),intent(out) :: indexf(N),indexi(N),Nlines
-    real(rk),intent(out) :: acoef(N)
-    !
-    !local variables:
-    character(len=:),allocatable :: str
-    integer(ik) :: iunit,istat,info,len,i,ipos,ipos_
-    character(len=1) :: c
-    character(len=wl) :: line
-    integer(ik) :: nchunk = 38
-    integer(hik) :: filesize
-    !
-    open(newunit=iunit,file=filename,status='OLD',&
-            form='UNFORMATTED',access='STREAM',iostat=istat)
-    if (istat/=0) then
-        print*,"Error opening .trans file (istat is not 0, ",istat,")  ",filename
-        stop 'Error opening .trans file'
-    endif
-    !
-    !how many characters are in the file:
-    inquire(file=filename,err=101,size=filesize)
-    !
-    if (filesize>0) then
-        !
-        ! allocate tge string             
-        allocate( character(len=filesize) :: str,stat=info )
-        call ArrayStart('read_file',info,1_ik,1_ik,filesize)
-        !
-        !read the file all at once:
-        read(iunit,pos=1,iostat=istat) str
-        !
-        if (istat==0) then
-            !make sure it was all read by trying to read more:
-            read(iunit,pos=filesize+1,iostat=istat) c
-            if (.not. IS_IOSTAT_END(istat)) &
-                write(out,*) 'read_file: file was not completely read.'
-        else
-            write(*,*) 'read_file: Error reading file.'
-            stop 'read_file: Error reading file.'
-        end if
-        !
-        close(iunit, iostat=istat)
-        !
-    else
-        write(*,*) 'read_file: Error getting file size.'
-        stop 'read_file: Error getting file size.'
-    end if
-    !
-    !nfilesize = filesize
-    !
-    ! open it again to read and count charcaters in the 1st line 
-    !
-    open(newunit=iunit,file=filename,status='OLD',form='FORMATTED',iostat=istat)
-    !
-    if (istat/=0) then
-      write(*,*) 'read_file: Error opening file.'
-      stop 'read_file: Error opening file.'
-    endif
-    !
-    read(iunit,"(Q,A)") len,line
-    !
-    nchunk = len+1
-    !
-    Nlines = filesize/nchunk
-    !
-    if (Nlines>N) then
-      write(out,"('Error read_file: The number of lines ',i12,' in ',a,' is larger than NCache',i12)") &
-                   Nlines,filename,N
-      !stop 'Error read_file: The number of lines in .trans  is larger than NCache'
-    endif
-    !
-    ipos =  1
-    ipos_ = nchunk-1
-    !
-    do i = 1,Nlines
-       read(str(ipos:ipos_),*) indexf(i),indexi(i),acoef(i)
-       ipos  = ipos  + nchunk
-       ipos_ = ipos_ + nchunk
-    enddo
-    !
-    call ArrayStop('read_file')
-    !
-    close(iunit)
-    !
-    101 continue
-    !
-    write(out,"(a,a)") 'read_file: error getting file size of ',trim(filename)
-    stop 'read_file: error getting file size.'
-    !
-    end subroutine read_file
-    !
-    !
+  !
   end module spectrum
